@@ -1,0 +1,112 @@
+# ---- OS ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.env
+# ---- Editors / IDEs ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- Secrets / env ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials.json
+
+# ---- Logs ----
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.virtualenv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ---- Jupyter / notebooks ----
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# ---- ML / data artifacts ----
+datasets/
+models/
+checkpoints/
+runs/
+wandb/
+mlruns/
+*.ckpt
+*.pt
+*.pth
+*.h5
+*.onnx
+*.tflite
+*.pkl
+*.joblib
+*.parquet
+*.feather
+
+# ---- Node / JS ----
+node_modules/
+.next/
+out/
+.nuxt/
+.svelte-kit/
+.cache/
+.parcel-cache/
+.turbo/
+coverage/
+
+# ---- Misc ----
+tmp/
+
+# ---- Marten ----
+temp/
+*.bak
+*.tmp
+
+# ---- Build / framework artifacts ----
+.astro/
+
+# ---- Claude ----
+.agents/
+.claude/
+skills-lock.json
+
+# ---- Local prototype + lockfile ----
+package-lock.json
+preview.html
+pitch.html
+src/pages/preview.astro
+
+*.db
+*.db-wal
+*.db-shm

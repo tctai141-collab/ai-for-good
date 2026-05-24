@@ -1,0 +1,351 @@
+# Sprint S26 Weekly Flow
+# Source: Sprint_S26_Weekly_Flow_Clean.docx
+
+Sprint S26 — Weekly Flow
+Trend Research Sprint (W1–W5)
+"Thesis of the Future" — a data-driven belief about how the world is changing and where value will accrue. This mirrors the intellectual rigor required by venture capitalists when evaluating markets. Students will learn that a startup is an experiment designed to validate a view of the future.
+Milestone: Trend report published
+Week 1 — Orientation & Kick-off
+Cohort onboarding, team norms, tools, schedule
+Intro to trend research, assignment given
+Booking user interviews
+Team bonding weekend: activities together
+Working with me document
+Milestones
+Define research framework
+Define max 3 sub-sectors within automation & robotics to focus on
+Clarify roles and tasks
+Date
+Session
+Notes
+Tue W1 · 9:30–11:30
+Team meeting — Intro to Sprint, onboarding
+Tue W1 · 11:30–13:00
+Team lunch
+Wed W1 · 13:00–15:00
+Intro to research topic (1 hr) + workshop (1 hr)
+Chief Economist at Startup Foundation
+Thu W1 · 16:00–18:00
+Fun activity & cohort photos
+Fri–Sun W1
+Roles & Responsibilities — divide tasks for Trend Report
+Fri–Sun W1
+Team cottage weekend
+Space for 20 people
+Week 2 — Deep Dive Research & Report Structure
+"Plan the work, work the plan"
+Roles clarified, report structure drafted
+Intense data gathering
+Heavy secondary research (desk research)
+Booking and conducting primary research (interviews), planning interview questions
+Starting to identify report focus areas
+Milestones
+Identify and schedule potential interview targets (companies, researchers, investors, experts)
+Draft interview guide with 15–20 core questions
+Start researching chosen trends
+Market size and opportunity analysis
+Submit: Draft structure
+Date
+Session
+Notes
+Tue W2 · 10:00–11:30
+Team meeting
+Tue W2 · 10:00–11:00
+How to run an interview
+Wed W2 · 13:00–15:00
+Sales experience — interviewing customers vs. road to $1M
+Founder-CEO session
+Thu W2 · 16:00–18:00
+VC language & investment thesis
+VC guest session
+Week 3 — Fieldwork & Interviews
+User / expert interviews in full swing
+Main signals and trends identified
+Updated report structure
+Milestones
+Complete most interviews
+Develop future scenarios / startup opportunities
+Create initial data visualizations (market maps, trend timelines)
+Document initial findings in shared research repository
+Outline full report structure (table of contents)
+Draft 50–60% of report content (~40 pages)
+Receive and incorporate feedback
+Date
+Session
+Notes
+Tue W3 · 10:00–11:30
+Team meeting
+Wed W3 · 13:00–15:00
+Guest speaker session
+Thu W3 · 16:00–18:00
+Investor session — VC perspective
+Week 4 — Ideation & Opportunity Mapping
+Scenario-building: 2–3 plausible futures
+Construct plausible, mutually exclusive futures based on research
+Identify opportunities within these scenarios
+Generate startup ideas inside identified opportunity spaces
+Draft of final report
+Milestones
+Complete final interviews
+Validate insights with 3–5 stakeholders
+Complete startup opportunities section
+90% of report done by end of this week
+Finalize all data visualizations and infographics
+Receive and incorporate feedback
+Executive summary
+Presentation deck
+Date
+Session
+Notes
+Tue W4 · 10:00–11:30
+Team meeting — How to give feedback session
+Tue W4 · 17:00–18:00
+Coaching hour
+Wed W4 · 13:00–15:00
+Communications strategy — positioning, investor relations, media & revenue
+CMO / Co-founder guest session
+Thu W4 · 16:00–18:00
+VC investment thesis + workshop
+VC guest session
+Week 5 — Report Synthesis & Presentation
+Finalize report and visual design
+Present to critique panel
+Deliverables: published report + clearly articulated startup opportunities within identified scenarios
+Milestones
+100% complete
+Final report published
+Presentation deck complete (15–20 slides)
+Rehearse presentation multiple times
+Practice run completed with feedback incorporated
+Q&A draft prepared
+Deliver final presentation
+Date
+Session
+Notes
+Tue W5 · 10:00–11:30
+Team meeting
+Tue W5 · 17:00–18:00
+Pitch Finland — 10 startups pitching to angels
+Wed W5 · 13:00–15:00
+Final Presentation
+Jury
+Wed W5 · 13:00–15:00
+Intro to Sprint 2
+Thu W5 · 16:00–18:00
+Founder Talks
+Product Sprint (W6–W10)
+The objective is not to build a product, but to build evidence. Students often mistake "building code" for progress. This sprint corrects that fallacy by enforcing "validation before creation." The goal is to answer: "Are we building the Right It?" before worrying about "building it right."
+This phase is intense. It requires students to leave the comfort of the university and interact with the real world, confronting the possibility that their cherished ideas might be rejected by the market.
+Week 6 — Validation Before Creation (Focus on Problem)
+Intro to Sprint 2: goals, purpose, ground rules (no premature coding)
+Split cohort into teams — continue from Sprint 1 themes or pick a new one
+Set up user interviews with a clear problem statement to test
+Low-fidelity mockups
+Date
+Session
+Notes
+Tue W6 · 10:00–11:30
+Team meeting
+Wed W6 · 13:00–15:00
+From Guess to Evidence
+Guest session
+Thu W6 · 16:00–18:00
+Idea validation
+Partner organization session
+Week 7 — "Design Something to Show"
+Visualize a potential solution and user journey — "magic moment"
+High-fidelity mockups, click-through prototypes, storyboards
+Getting landing page & UI mockups in front of real users
+Setting up and conducting user interviews
+Design landing page
+Date
+Session
+Notes
+Tue W7 · 10:00–11:30
+Pitching workshop
+Guest session
+Tue W7 · 11:30–12:30
+Coaching hour
+Thu W7 · 16:00–18:00
+Design & UX session
+Guest session
+Week 8 — User Interviews
+Feedback from users
+Iterating, pivoting, testing different designs
+Date
+Session
+Notes
+Mon W8 · 11:30–12:30
+Founder lunch & chat
+Tue W8 · 10:00–11:30
+Quality check session (Antler)
+Wed W8 · 13:00–15:00
+ASUC Demo Day — cohort demos
+Thu W8 · 16:00–18:00
+User interview session with VC guests
+Week 9 — MVP Definition
+Based on user interviews: what could the team build that people want?
+Decide what the MVP would be if we built it
+Date
+Session
+Notes
+Tue W9 · 10:00–10:45
+Session block A
+Tue W9 · 10:45–11:30
+Team meeting
+Tue W9 · 17:00–18:00
+Coaching hour
+Wed W9 · 13:00–15:00
+Founders House session — Wave Ventures CEO
+Thu W9 · 16:00–18:00
+Technical / product development session
+Guest session
+Week 10 — MVP Definition: Pivot or Persevere?
+Final week of Sprint 2
+Date
+Session
+Notes
+Tue W10 · 10:00–11:30
+Mental resilience in high-pressure environments
+Guest session
+Wed W10 · 13:00–15:00
+Founder mentality session
+Guest session
+Thu W10 · 16:00–18:00
+Founder Talks
+Guest founder speaker
+Study Trip Abroad (W11)
+Ecosystem excursion to Munich: visit startups, VCs, and CDTM.
+Week 11 — Ecosystem Excursion to Munich
+Visit local startups, VCs, CDTM
+Learn from the local ecosystem
+Team bonding
+Date
+Session
+Notes
+Mon W11
+Flights to Munich
+Tue W11 · 10:00–11:30
+Team meeting
+Tue W11 · 17:00–18:00
+Coaching / networking session
+Wed W11 · 13:00–15:00
+Ecosystem visits
+Thu W11
+Flights back to Helsinki
+Business & Strategy Sprint (W12–W15)
+This sprint is about "thinking like a founder" and shifts focus from the product to the company. A great product does not make a great business.
+Week 12 — Fundraising
+Intro to Sprint 3: agenda and goals
+Angel, VC, and public funding landscape
+Go-to-market (GTM) overview
+Date
+Session
+Notes
+Tue W12 · 10:00–11:30
+Team meeting
+Wed W12 · 13:00–14:00
+Tips for talking to investors
+Guest session
+Wed W12 · 14:00–15:00
+VC sandbox
+Thu W12 · 16:00–18:00
+Industry guest session
+TBC
+Week 13 — Team, Culture & Storytelling
+How to build a team and company culture
+Storytelling for founders
+Develop people plan; build investor/customer story; pitch practice
+Date
+Session
+Notes
+Tue W13 · 10:00–11:30
+Team meeting
+Tue W13 · 10:00–11:30
+Go-to-market session
+Guest session
+Tue W13 · 17:00–18:00
+Coaching hour
+Wed W13 · 13:00–15:00
+⅓ final pitching session
+At VC office
+Thu W13 · 16:00–18:00
+BabyVC session
+Week 14 — Finding a Co-Founder
+Founder mindset deep dive
+What investors look for — frameworks and red/green flags in fundraising
+Team culture workshop
+Date
+Session
+Notes
+Tue W14 · 10:00–12:00
+Founder mindset — ByFounders framework: green and red flags in fundraising
+VC guest session
+Wed W14 · 13:00–15:00
+Team culture session
+Guest CEO session
+Thu W14 · 16:00–18:00
+Founder Talks
+Week 15 — Final Week
+Rewrite working with me document
+Working Genius (or similar) team assessment and reflection
+Date
+Session
+Notes
+Tue W15 · 10:00–11:30
+Team meeting
+Tue W15 · 17:00–18:00
+Coaching hour
+Tue W15 · 16:00–18:00
+Guest founder session
+Wed W15 · 15:00–17:00
+Final Presentation — Lifeline Ventures
+Thu W15 · 16:00–18:00
+Private Graduation
+Founder Sprint — Weekly Self-Development
+For each week of the full Sprint, participants work on a self-development goal. Growing as a person is central to the success of Founder School. Two themes per week are suggested: one for personal growth and one for leadership.
+Potential self-development themes:
+Personal Growth
+Practicing vulnerability and openness to build trust
+Being part of a new team and committing to the team's success
+Admitting fault, ignorance, or insufficiency
+Seeing something positive in every team member
+Understanding the motivations of a person you don't respect
+Doing something new and scary
+Learning a new skill far outside one's existing domain
+Taking the Jung Myers-Briggs test and reflecting on the results
+Taking the Working Genius test and reflecting on the results
+Killing a darling — letting go of an idea, a conviction, control, or a role
+Removing a blind spot in one's professional profile
+Overcoming fear of rejection
+Regulating emotional reactions
+Learning not to blame people or circumstances
+Turning cynicism and negativity into something productive
+Celebrating success — small and large
+Being present in the moment and seeing the person first, the matter second
+Personal grounding: staying sane amid the madness
+Managing stress and avoiding burnout
+Rising again after failure
+Finding purpose behind the grind
+Selflessness
+Leadership Skills
+Learning to listen to understand, not to respond
+Making sure everyone gets their voice heard in a team
+Delivering uncomfortable feedback to a team member
+Delivering genuine and substantive praise to a team member
+Learning to run productive meetings
+Learning to move faster
+GSD — never missing a task deadline
+The humility–confidence contrast: maximizing humility without losing drive
+The decisive–non-judgmental contrast: making quick decisions without judging people
+Learning to delegate tasks effectively
+Learning to say no
+Learning to set priorities
+Learning the method of asking seven Whys
+Selling an idea to another person
+Bringing positive energy to every interaction
+Holding someone accountable
+Seeing problems around the corner before they happen
+Solving a conflict with another person
+Learning to express oneself clearly and kindly
+Note: Participants may also select their own self-development goals, provided they choose essential and genuinely challenging ones. Self-development themes are reviewed as a group in the weekly Tuesday morning Sprint meeting.

@@ -1,0 +1,21 @@
+services:
+  web:
+    build:
+      context: .
+      network: host
+    ports:
+      - "3000:3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      NODE_ENV: production
+      DB_PATH: /app/data/sprint-buddy.db
+      SPRINT_WEEK: ${SPRINT_WEEK:-1}
+      OPENCLAW_URL: ${OPENCLAW_URL:-http://135.181.71.10:18789/v1/chat/completions}
+      OPENCLAW_TOKEN: ${OPENCLAW_TOKEN:-founder-os-dev-2026}
+      OPENCLAW_URL_FOUNDER2: ${OPENCLAW_URL_FOUNDER2:-}
+    volumes:
+      - sprint-buddy-data:/app/data
+
+volumes:
+  sprint-buddy-data:
