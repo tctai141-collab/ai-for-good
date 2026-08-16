@@ -13,6 +13,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "@astrojs/node": "^10.1.1",
     "@astrojs/react": "^5.0.5",
     "@types/react": "^19.2.15",

@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { getSprintContext } from "../../../lib/sprint-context";
 import { buildCheckinPrompt } from "../../../lib/prompts/checkin";
 import { getLastCheckin, upsertCheckin } from "../../../db";
+import { advisorReply, advisorReplyStream } from "../../../lib/ai";
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
@@ -67,10 +68,6 @@ function normalizeSignalStatus(status: string | undefined, score: number): strin
   if (score >= 40) return "monitor";
   return "stable";
 }
-
-const OPENCLAW_URL = process.env.OPENCLAW_URL || "http://localhost:8080/v1/chat/completions";
-const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || "mock-token-replace-in-production";
-const FOUNDER_OPENCLAW_URLS: Record<string, string | undefined> = {};
 
 const FOUNDER_VOICE_SYSTEM = `You are a seasoned founder speaking to a younger founder. You have been through multiple companies, a near-death runway crisis, a cofounder breakup, one real exit. You are NOT a chatbot, NOT a therapist. You are the calm, scarred, generous founder a younger founder turns to.
 
@@ -149,12 +146,6 @@ Rules:
 - No motivational fluff, no "believe in yourself." Give them something to do.
 - Never introduce yourself as an AI or assistant. You are Mårten, a coach who's been through it.`;
 
-const PERSONALITY_MODELS: Record<string, string> = {
-  none: "openclaw/founder",
-  marten: "openclaw/marten",
-  paul: "openclaw/paul",
-};
-
 type SessionUser = {
   email: string;
   role: "founder" | "organizer";
@@ -170,11 +161,6 @@ function readSession(cookies: Parameters<APIRoute>[0]["cookies"]): SessionUser |
   } catch {
     return null;
   }
-}
-
-function openClawUrlFor(userEmail?: string): string {
-  const url = userEmail ? FOUNDER_OPENCLAW_URLS[userEmail.toLowerCase()] : undefined;
-  return url || OPENCLAW_URL;
 }
 
 function buildSystem(body: {
@@ -236,59 +222,17 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       return Response.json({ error: "messages array required" }, { status: 400 });
     }
 
-    const messages = [
-      { role: "system", content: buildSystem(body) },
-      ...body.messages
-        .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "system")
-        .map((m) => ({ role: m.role as "user" | "assistant" | "system", content: m.content })),
-    ];
-
     const personality = body.personality || "none";
-    const temperature = personality === "paul" ? 0.55 : personality === "marten" ? 0.30 : 0.35;
+    // More headroom than the OpenClaw caps: the current model writes longer by
+    // default. Brevity is enforced by the style guardrails in the system prompt,
+    // so this only needs to be high enough to avoid truncating mid-sentence.
+    const maxTokens = personality === "paul" ? 700 : personality === "marten" ? 500 : 550;
 
-    const payload = {
-      model: PERSONALITY_MODELS[personality] || PERSONALITY_MODELS.none,
-      messages,
-      stream: body.stream || false,
-      temperature,
-      max_tokens: personality === "paul" ? 320 : personality === "marten" ? 200 : 220,
-      reasoning: false,
-      reasoning_effort: "none",
+    const advisorRequest = {
+      system: buildSystem(body),
+      messages: body.messages,
+      maxTokens,
     };
-
-    const openClawUrl = openClawUrlFor(body.userEmail);
-
-    let response = await fetch(openClawUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENCLAW_TOKEN}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      if (response.status === 400 && /reasoning/i.test(err)) {
-        const { reasoning, reasoning_effort, ...fallbackPayload } = payload;
-        response = await fetch(openClawUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${OPENCLAW_TOKEN}`,
-          },
-          body: JSON.stringify(fallbackPayload),
-        });
-        if (response.ok) {
-          // Continue into normal response handling below.
-        } else {
-          const retryErr = await response.text();
-          return Response.json({ error: `DeepSeek error: ${response.status} ${retryErr}` }, { status: 502 });
-        }
-      } else {
-      return Response.json({ error: `DeepSeek error: ${response.status} ${err}` }, { status: 502 });
-      }
-    }
 
     if (body.stream) {
       const streamHeaders = {
@@ -298,42 +242,30 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         "X-Accel-Buffering": "no",
       };
 
-      if (body.kind === "checkin" && body.userEmail && response.body) {
+      if (body.kind === "checkin" && body.userEmail) {
         const userEmail = body.userEmail;
-        const decoder = new TextDecoder();
-        let lineBuf = "";
         let accumulated = "";
+        const stream = advisorReplyStream(advisorRequest, (text) => {
+          accumulated += text;
+        });
 
-        const transform = new TransformStream<Uint8Array, Uint8Array>({
+        // Pass tokens straight through; persist the check-in once the reply ends.
+        const persistOnFlush = new TransformStream<Uint8Array, Uint8Array>({
           transform(chunk, controller) {
             controller.enqueue(chunk);
-            lineBuf += decoder.decode(chunk, { stream: true });
-            let nl;
-            while ((nl = lineBuf.indexOf("\n")) >= 0) {
-              const line = lineBuf.slice(0, nl);
-              lineBuf = lineBuf.slice(nl + 1);
-              if (!line.startsWith("data: ")) continue;
-              const json = line.slice(6).trim();
-              if (!json || json === "[DONE]") continue;
-              try {
-                const parsed = JSON.parse(json) as { choices?: { delta?: { content?: string } }[] };
-                accumulated += parsed.choices?.[0]?.delta?.content || "";
-              } catch { /* ignore malformed chunks */ }
-            }
           },
           flush() {
             persistCheckinSummary(userEmail, accumulated);
           },
         });
 
-        return new Response(response.body.pipeThrough(transform), { headers: streamHeaders });
+        return new Response(stream.pipeThrough(persistOnFlush), { headers: streamHeaders });
       }
 
-      return new Response(response.body, { headers: streamHeaders });
+      return new Response(advisorReplyStream(advisorRequest), { headers: streamHeaders });
     }
 
-    const data = await response.json() as { choices: { message: { content: string } }[] };
-    let content = data.choices?.[0]?.message?.content || "";
+    let content = await advisorReply(advisorRequest);
 
     if (body.kind === "checkin" && body.userEmail) {
       persistCheckinSummary(body.userEmail, content);
