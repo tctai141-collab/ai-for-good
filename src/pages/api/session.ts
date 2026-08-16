@@ -1,55 +1,78 @@
 import type { APIRoute } from "astro";
+import { getUserRow } from "../../db/index";
+import {
+  clearLoginFailures,
+  endSession,
+  getSessionUser,
+  isLockedOut,
+  normalizeEmail,
+  recordLoginFailure,
+  startSession,
+  verifyPassword,
+} from "../../lib/auth";
 
-const DEMO_USERS = [
-  { email: "founder1@sprint.test", password: "demo-password", role: "founder", name: "Aino" },
-  { email: "founder2@sprint.test", password: "demo-password", role: "founder", name: "Elias" },
-  { email: "founder3@sprint.test", password: "demo-password", role: "founder", name: "Mika" },
-  { email: "founder4@sprint.test", password: "demo-password", role: "founder", name: "Sara" },
-  { email: "founder5@sprint.test", password: "demo-password", role: "founder", name: "Leena" },
-  { email: "founder6@sprint.test", password: "demo-password", role: "founder", name: "Oskari" },
-  { email: "founder7@sprint.test", password: "demo-password", role: "founder", name: "Nora" },
-  { email: "founder8@sprint.test", password: "demo-password", role: "founder", name: "Joonas" },
-  { email: "organizer1@sprint.test", password: "organizer-demo-password", role: "organizer", name: "Organizer" },
-  { email: "organizer2@sprint.test", password: "organizer-demo-password", role: "organizer", name: "Lead Coach" },
-] as const;
+/**
+ * Login, session check, and logout.
+ *
+ * Accounts live in the database and passwords are verified server-side. The
+ * previous version compared against a hardcoded list and issued a cookie that
+ * simply asserted the caller's role.
+ */
 
-function isHttps(request: Request): boolean {
-  return new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
-}
+// Deliberately identical for unknown email, wrong password, and not-yet-
+// activated accounts, so the endpoint cannot be used to discover who has one.
+const INVALID_CREDENTIALS = "Invalid email or password.";
 
 export const POST: APIRoute = async ({ cookies, request }) => {
-  const body = await request.json() as { email: string; password: string };
-  if (!body.email) return Response.json({ error: "email required" }, { status: 400 });
-  if (!body.password) return Response.json({ error: "password required" }, { status: 400 });
+  let body: { email?: unknown; password?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return Response.json({ error: "Malformed request." }, { status: 400 });
+  }
 
-  const email = body.email.trim().toLowerCase();
-  const demoUser = DEMO_USERS.find((user) => user.email === email && user.password === body.password);
-  if (!demoUser) return Response.json({ error: "invalid credentials" }, { status: 401 });
+  const email = normalizeEmail(body.email);
+  const password = typeof body.password === "string" ? body.password : "";
 
-  cookies.set("session_user", JSON.stringify({ email: demoUser.email, name: demoUser.name, role: demoUser.role }), {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-    secure: isHttps(request),
+  if (!email || !password) {
+    return Response.json({ error: INVALID_CREDENTIALS }, { status: 401 });
+  }
+
+  if (isLockedOut(email)) {
+    return Response.json(
+      { error: "Too many failed attempts. Try again in 15 minutes." },
+      { status: 429 },
+    );
+  }
+
+  const user = getUserRow(email);
+
+  // An invited user who has not set a password yet has no hash to verify
+  // against; they must finish setup via their invite link first.
+  if (!user || !user.password_hash) {
+    recordLoginFailure(email);
+    return Response.json({ error: INVALID_CREDENTIALS }, { status: 401 });
+  }
+
+  if (!(await verifyPassword(password, user.password_hash))) {
+    recordLoginFailure(email);
+    return Response.json({ error: INVALID_CREDENTIALS }, { status: 401 });
+  }
+
+  clearLoginFailures(email);
+  startSession(cookies, request, user.email);
+
+  return Response.json({
+    ok: true,
+    user: { email: user.email, name: user.name, role: user.role },
   });
-
-  return Response.json({ ok: true });
 };
 
 export const GET: APIRoute = async ({ cookies }) => {
-  const raw = cookies.get("session_user");
-  if (!raw || !raw.value) return Response.json({ user: null });
-
-  try {
-    const user = JSON.parse(raw.value) as { email: string; name: string; role: string };
-    return Response.json({ user });
-  } catch {
-    return Response.json({ user: null });
-  }
+  return Response.json({ user: getSessionUser(cookies) });
 };
 
 export const DELETE: APIRoute = async ({ cookies }) => {
-  cookies.delete("session_user", { path: "/" });
+  endSession(cookies);
   return Response.json({ ok: true });
 };

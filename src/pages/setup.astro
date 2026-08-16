@@ -1,0 +1,206 @@
+---
+// Where a founder or organizer turns a one-time invite link into an account.
+// Deliberately standalone rather than part of the main app shell: it is the one
+// page a signed-out person needs to reach, and it must work even if the app
+// bundle changes.
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- A setup link is a credential; keep it out of referrers and indexes. -->
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Set your password · Sprint Buddy</title>
+    <style>
+      :root {
+        --bg: #0b0c0f;
+        --panel: rgba(20, 22, 27, 0.9);
+        --text: #f4f4f5;
+        --muted: #9ca3af;
+        --accent: #7aa2f7;
+        --danger: #f4746a;
+        --border: rgba(255, 255, 255, 0.12);
+        --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --serif: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: var(--bg); }
+      body {
+        font-family: var(--font);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        padding: 24px;
+      }
+      main { width: 100%; max-width: 420px; }
+      h1 {
+        font-family: var(--serif);
+        font-size: 2rem;
+        line-height: 1.15;
+        margin: 0 0 8px;
+      }
+      .lede { color: var(--muted); font-size: 0.9375rem; margin: 0 0 28px; line-height: 1.5; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 28px;
+      }
+      label { display: block; margin-bottom: 18px; }
+      .label-text {
+        display: block;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      input {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 1rem;
+      }
+      input:focus { outline: none; border-color: var(--accent); }
+      button {
+        width: 100%;
+        padding: 13px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #0b0c0f;
+        font-family: var(--font);
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.55; cursor: default; }
+      .hint { color: var(--muted); font-size: 0.8125rem; margin: -8px 0 18px; }
+      .message { margin-top: 18px; font-size: 0.875rem; line-height: 1.5; }
+      .message.error { color: var(--danger); }
+      .message.ok { color: var(--accent); }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="heading">Set your password</h1>
+      <p class="lede" id="lede">Checking your link…</p>
+
+      <div class="panel" id="panel" hidden>
+        <form id="form">
+          <label>
+            <span class="label-text">New password</span>
+            <input
+              type="password"
+              id="password"
+              autocomplete="new-password"
+              minlength="10"
+              required
+            />
+          </label>
+          <p class="hint">At least 10 characters. Longer is better than complicated.</p>
+          <label>
+            <span class="label-text">Confirm password</span>
+            <input
+              type="password"
+              id="confirm"
+              autocomplete="new-password"
+              minlength="10"
+              required
+            />
+          </label>
+          <button type="submit" id="submit">Set password and sign in</button>
+        </form>
+        <p class="message" id="message" hidden></p>
+      </div>
+
+      <p class="message error" id="fatal" hidden></p>
+    </main>
+
+    <script is:inline>
+      const token = new URLSearchParams(location.search).get("token");
+      const heading = document.getElementById("heading");
+      const lede = document.getElementById("lede");
+      const panel = document.getElementById("panel");
+      const fatal = document.getElementById("fatal");
+      const form = document.getElementById("form");
+      const submit = document.getElementById("submit");
+      const message = document.getElementById("message");
+
+      function fail(text) {
+        lede.hidden = true;
+        panel.hidden = true;
+        fatal.textContent = text;
+        fatal.hidden = false;
+      }
+
+      function show(text, isError) {
+        message.textContent = text;
+        message.className = "message " + (isError ? "error" : "ok");
+        message.hidden = false;
+      }
+
+      async function init() {
+        if (!token) {
+          heading.textContent = "No setup link";
+          return fail("Open the link the Sprint team sent you.");
+        }
+        try {
+          const res = await fetch("/api/invite?token=" + encodeURIComponent(token));
+          const data = await res.json();
+          if (!res.ok) {
+            heading.textContent = "Link expired";
+            return fail(data.error || "This link is no longer valid.");
+          }
+          heading.textContent = "Welcome, " + data.name.split(" ")[0];
+          lede.textContent = "Choose a password for " + data.email + ".";
+          panel.hidden = false;
+        } catch {
+          heading.textContent = "Something went wrong";
+          fail("Could not reach the server. Check your connection and reload.");
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const password = document.getElementById("password").value;
+        const confirm = document.getElementById("confirm").value;
+
+        if (password !== confirm) return show("The two passwords do not match.", true);
+        if (password.length < 10) return show("Use at least 10 characters.", true);
+
+        submit.disabled = true;
+        show("Saving…", false);
+
+        try {
+          const res = await fetch("/api/invite", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, password }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            submit.disabled = false;
+            return show(data.error || "Could not set your password.", true);
+          }
+          show("Done. Taking you in…", false);
+          // Replace so the setup link is not left in browser history.
+          location.replace("/");
+        } catch {
+          submit.disabled = false;
+          show("Could not reach the server. Try again.", true);
+        }
+      });
+
+      init();
+    </script>
+  </body>
+</html>

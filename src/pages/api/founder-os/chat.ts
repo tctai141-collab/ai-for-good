@@ -3,6 +3,7 @@ import { getSprintContext } from "../../../lib/sprint-context";
 import { buildCheckinPrompt } from "../../../lib/prompts/checkin";
 import { getLastCheckin, upsertCheckin } from "../../../db";
 import { advisorReply, advisorReplyStream } from "../../../lib/ai";
+import { getSessionUser } from "../../../lib/auth";
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
@@ -146,23 +147,6 @@ Rules:
 - No motivational fluff, no "believe in yourself." Give them something to do.
 - Never introduce yourself as an AI or assistant. You are Mårten, a coach who's been through it.`;
 
-type SessionUser = {
-  email: string;
-  role: "founder" | "organizer";
-};
-
-function readSession(cookies: Parameters<APIRoute>[0]["cookies"]): SessionUser | null {
-  const raw = cookies.get("session_user")?.value;
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as SessionUser;
-    if (!parsed.email || !parsed.role) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 function buildSystem(body: {
   posture?: string;
   personality?: string;
@@ -200,7 +184,7 @@ function buildSystem(body: {
 
 export const POST: APIRoute = async ({ cookies, request }) => {
   try {
-    const session = readSession(cookies);
+    const session = getSessionUser(cookies);
     if (!session) return Response.json({ error: "not authenticated" }, { status: 401 });
 
     const body = await request.json() as {
@@ -214,7 +198,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       stream?: boolean;
     };
 
-    if (body.userEmail && session.role !== "organizer" && session.email !== body.userEmail) {
+    // You may only ever converse as yourself. Organizers used to be exempt,
+    // which let a coach hold a conversation inside a founder's account.
+    if (body.userEmail && session.email !== body.userEmail) {
       return Response.json({ error: "forbidden" }, { status: 403 });
     }
 

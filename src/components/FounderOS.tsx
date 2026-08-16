@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { saveThread, saveDecision, bumpVisits, saveWorkingGenius } from "../lib/persistence";
+import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared } from "../lib/persistence";
 import type { Checkin, UserData } from "../lib/persistence";
 
 function formatMarkdown(text: string): string {
@@ -264,6 +264,8 @@ type Thread = {
   messages: Msg[];
   personality?: Personality;
   kind?: "checkin";
+  /** Founder has opted this one conversation in to coach visibility. */
+  sharedWithCoach?: boolean;
 };
 
 type ThemeArc = { name: string; arc: number[] };
@@ -617,6 +619,64 @@ const wordmarkType: React.CSSProperties = {
   fontVariationSettings: '"opsz" 36',
 };
 
+/* ---------------- Sharing a single conversation with a coach ----------------
+   Conversations are private by default. This is the only way anything a
+   founder writes reaches the operating team verbatim, and it is reversible at
+   any moment — so the control states plainly which of the two is currently
+   true rather than being a bare switch. */
+function ShareToggle({ shared, onChange }: { shared: boolean; onChange: (next: boolean) => void }) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (confirming) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: C.sub }}>
+        <span>Let your coach read this one?</span>
+        <button
+          type="button"
+          onClick={() => { onChange(true); setConfirming(false); }}
+          style={{ ...shareButtonStyle, borderColor: C.blue, color: C.blue }}
+        >
+          Share it
+        </button>
+        <button type="button" onClick={() => setConfirming(false)} style={shareButtonStyle}>
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => (shared ? onChange(false) : setConfirming(true))}
+      title={
+        shared
+          ? "Your coach can read this conversation. Click to make it private again."
+          : "Only you can read this. Click to share it with your coach."
+      }
+      style={{
+        ...shareButtonStyle,
+        whiteSpace: "nowrap",
+        borderColor: shared ? C.blue : "var(--line-strong)",
+        color: shared ? C.blue : C.sub,
+      }}
+    >
+      {shared ? "Shared with your coach" : "Private"}
+    </button>
+  );
+}
+
+const shareButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--line-strong)",
+  borderRadius: 999,
+  padding: "4px 11px",
+  fontSize: 12,
+  color: C.sub,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
 /* ---------------- Center chat ---------------- */
 type ChatProps = {
   active: ActiveTarget;
@@ -650,6 +710,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const counted = useRef(false);
   const checkinInitiated = useRef(false);
 
+  const threadId = existing?.id || null;
   const accent = isCheckin ? C.blue : STATES[mode].color;
   const postureLabel = isCheckin ? "Check-in" : STATES[mode].label.split(" ")[0];
 
@@ -755,7 +816,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       }
     } catch {
       setMsgs((prev) => prev.map((m, i) => i === prev.length - 1
-        ? { role: "assistant" as const, content: "Founder OS could not reach OpenClaw. Check the OpenClaw gateway and environment variables, then try again." }
+        ? { role: "assistant" as const, content: "Could not reach your advisor just now. Check your connection and try again." }
         : m));
     }
     setBusy(false);
@@ -763,11 +824,24 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
   return (
     <>
-      {/* context strip: italic serif line */}
-      <div style={{ flexShrink: 0, padding: "14px 24px 14px var(--col-pad-left, 24px)", borderBottom: `1px solid ${C.line}` }}>
-        <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, lineHeight: 1.5, color: C.sub, fontVariationSettings: '"opsz" 22' }}>
+      {/* context strip: italic serif line, plus the sharing control */}
+      {/* Right padding keeps the sharing control clear of the docked mascot. */}
+      <div style={{ flexShrink: 0, padding: "14px 132px 14px var(--col-pad-left, 24px)", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 16 }}>
+        <p style={{ margin: 0, flex: 1, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, lineHeight: 1.5, color: C.sub, fontVariationSettings: '"opsz" 22' }}>
           {ctx.clock ? `It's ${ctx.clock}. ` : ""}{ctx.line}
         </p>
+        {threadId && userEmail && (
+          <ShareToggle
+            shared={Boolean(existing?.sharedWithCoach)}
+            onChange={(next) => {
+              // Update immediately so the control feels honest, then persist.
+              setThreads((prev) => prev.map((t) => t.id === threadId ? { ...t, sharedWithCoach: next } : t));
+              setThreadShared(userEmail, threadId, next).catch(() => {
+                setThreads((prev) => prev.map((t) => t.id === threadId ? { ...t, sharedWithCoach: !next } : t));
+              });
+            }}
+          />
+        )}
       </div>
 
       <div ref={scroller} style={{ flex: 1, overflowY: "auto" }}>

@@ -5,25 +5,16 @@ import { loadUserData, initUser, type UserData } from "../lib/persistence";
 
 type Role = "founder" | "organizer";
 
-type DemoUser = {
+/**
+ * Who the server says you are. The browser no longer holds any account list or
+ * checks any password — it did both before, which meant the credentials shipped
+ * to everyone who loaded the page.
+ */
+type SessionUser = {
   email: string;
-  password: string;
-  role: Role;
   name: string;
+  role: Role;
 };
-
-const DEMO_USERS: DemoUser[] = [
-  { email: "founder1@sprint.test", password: "demo-password", role: "founder", name: "Aino" },
-  { email: "founder2@sprint.test", password: "demo-password", role: "founder", name: "Elias" },
-  { email: "founder3@sprint.test", password: "demo-password", role: "founder", name: "Mika" },
-  { email: "founder4@sprint.test", password: "demo-password", role: "founder", name: "Sara" },
-  { email: "founder5@sprint.test", password: "demo-password", role: "founder", name: "Leena" },
-  { email: "founder6@sprint.test", password: "demo-password", role: "founder", name: "Oskari" },
-  { email: "founder7@sprint.test", password: "demo-password", role: "founder", name: "Nora" },
-  { email: "founder8@sprint.test", password: "demo-password", role: "founder", name: "Joonas" },
-  { email: "organizer1@sprint.test", password: "organizer-demo-password", role: "organizer", name: "Organizer" },
-  { email: "organizer2@sprint.test", password: "organizer-demo-password", role: "organizer", name: "Lead Coach" },
-];
 
 const STARTUP_TIPS = [
   "If your roadmap needs a legend, it is not a roadmap. It is a treasure map with burn rate.",
@@ -67,40 +58,38 @@ const STARTUP_TIPS = [
 ];
 
 export default function App() {
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [buddyStage, setBuddyStage] = useState<"login" | "docked">("login");
-  const [email, setEmail] = useState("founder1@sprint.test");
-  const [password, setPassword] = useState("demo-password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
+  /** Loads a signed-in user's data and drops them into the app. */
+  const enter = useCallback(async (signedIn: SessionUser) => {
+    try {
+      await initUser();
+      if (signedIn.role === "founder") {
+        setUserData(await loadUserData(signedIn.email));
+      }
+    } catch {
+      // Their data can be re-fetched; don't block sign-in on it.
+    }
+    setUser(signedIn);
+    setBuddyStage("docked");
+  }, []);
+
   useEffect(() => {
     fetch("/api/session")
       .then((r) => r.json())
-      .then(async (data: { user: { email: string; name: string; role: string } | null }) => {
-        if (data.user) {
-          const demoUser = DEMO_USERS.find((u) => u.email === data.user!.email);
-          if (demoUser) {
-            try {
-              await initUser(demoUser.email, demoUser.name, demoUser.role);
-              if (demoUser.role === "founder") {
-                const loaded = await loadUserData(demoUser.email);
-                setUserData(loaded);
-              }
-              setUser(demoUser);
-              setBuddyStage("docked");
-            } catch {
-              setUser(demoUser);
-              setBuddyStage("docked");
-            }
-          }
-        }
+      .then(async (data: { user: SessionUser | null }) => {
+        if (data.user) await enter(data.user);
         setChecking(false);
       })
       .catch(() => setChecking(false));
-  }, []);
+  }, [enter]);
 
   const handleSignOut = useCallback(async () => {
     setUser(null);
@@ -111,45 +100,33 @@ export default function App() {
 
   const handleLogin = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
-    const matchedUser = DEMO_USERS.find(
-      (demoUser) =>
-        demoUser.email === normalizedEmail &&
-        demoUser.password === password,
-    );
-
-    if (!matchedUser) {
-      setLoginError("Use one of the hardcoded demo accounts for this prototype.");
-      return;
-    }
-
     setLoading(true);
     setLoginError(null);
 
     try {
-      const sessionResponse = await fetch("/api/session", {
+      const response = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: matchedUser.email, password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
-      if (!sessionResponse.ok) {
-        throw new Error("Could not start session.");
+      const data = await response.json() as { user?: SessionUser; error?: string };
+
+      // The server decides. A rejected login must never fall through to the
+      // app — the previous version signed you in anyway when this failed.
+      if (!response.ok || !data.user) {
+        setLoginError(data.error || "Could not sign you in. Try again.");
+        setLoading(false);
+        return;
       }
 
-      await initUser(matchedUser.email, matchedUser.name, matchedUser.role);
-      if (matchedUser.role === "founder") {
-        const data = await loadUserData(matchedUser.email);
-        setUserData(data);
-      }
-      setUser(matchedUser);
-      setBuddyStage("docked");
+      setPassword("");
+      await enter(data.user);
     } catch {
-      setUser(matchedUser);
-      setBuddyStage("docked");
+      setLoginError("Could not reach the server. Check your connection.");
     }
 
     setLoading(false);
-  }, [email, password]);
+  }, [email, password, enter]);
 
   if (checking) {
     return (
@@ -205,7 +182,7 @@ export default function App() {
                   <button
                     className="login-forgot"
                     type="button"
-                    onClick={() => setLoginError("Password reset is not available in this demo yet.")}
+                    onClick={() => setLoginError("Ask the Sprint team to send you a new setup link.")}
                   >
                     Forgot password?
                   </button>
@@ -227,6 +204,25 @@ export default function App() {
     return (
       <>
         <FounderOS persona="coach" userEmail={user.email} onSignOut={handleSignOut} />
+        <a
+          href="/admin"
+          style={{
+            position: "fixed",
+            top: 18,
+            // Clear of the docked mascot, which sits in the top-right corner.
+            right: 130,
+            zIndex: 40,
+            fontSize: 13,
+            padding: "6px 12px",
+            borderRadius: 9,
+            border: "1px solid rgba(255,255,255,0.14)",
+            color: "var(--ink-sub)",
+            background: "rgba(14,15,18,0.85)",
+            textDecoration: "none",
+          }}
+        >
+          Cohort admin
+        </a>
         <PersistentBuddy stage={buddyStage} />
       </>
     );

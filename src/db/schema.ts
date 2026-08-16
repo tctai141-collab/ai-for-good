@@ -1,5 +1,17 @@
 import type { Database } from "bun:sqlite";
 
+/**
+ * Adds a column only if it is missing, so schema upgrades are safe to re-run
+ * on every boot. SQLite has no `ADD COLUMN IF NOT EXISTS`, and its ALTER TABLE
+ * rejects non-constant defaults — hence `created_at` is filled in on insert
+ * rather than defaulted here.
+ */
+function addColumn(db: Database, table: string, column: string, definition: string) {
+  const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (columns.some((c) => c.name === column)) return;
+  db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
 export function initSchema(db: Database) {
   db.run("PRAGMA journal_mode=WAL");
   db.run("PRAGMA foreign_keys=ON");
@@ -82,8 +94,50 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // --- Authentication, added when the demo logins were replaced ---
+  //
+  // These run as ALTER/CREATE-IF-NOT-EXISTS rather than being folded into the
+  // definitions above so that databases created before real accounts existed
+  // upgrade in place instead of needing to be rebuilt.
+
+  // A user with no password_hash has been invited but has not set one yet.
+  addColumn(db, "users", "password_hash", "TEXT");
+  addColumn(db, "users", "created_at", "TEXT");
+  // Founders opt in per conversation; organizers can never read the rest.
+  addColumn(db, "threads", "shared_with_coach", "INTEGER NOT NULL DEFAULT 0");
+
+  // Server-side sessions. The cookie holds an opaque random token and nothing
+  // else, so a client cannot forge a role the way it could with the previous
+  // plain-JSON cookie. Deleting a row revokes access immediately.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    )
+  `);
+
+  // Single-use links that let a founder set their own password. The operating
+  // team never sees or handles the password itself.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS invites (
+      token TEXT PRIMARY KEY,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL,
+      used_at TEXT
+    )
+  `);
+
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_threads_user ON threads(user_email, updated_at DESC);
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_email);
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_invites_user ON invites(user_email);
   `);
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id, created_at);

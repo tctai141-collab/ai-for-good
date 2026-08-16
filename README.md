@@ -6,40 +6,64 @@
 
 An AI companion for Aalto Founder Sprint participants — a coach in their pocket available 24/7 throughout their 15-week journey. First advisor: Mårten Mickos (Head of Aalto Founder School, ex-CEO MySQL & HackerOne).
 
-## Demo Logins
+## Accounts
 
-Use these accounts for the hackathon demo:
+There are no shared or default logins. Every account is created by an organizer
+and activated by its owner through a single-use setup link.
 
-| Role | Email | Password | Notes |
-|---|---|---|---|
-| Founder | `founder1@sprint.test` | `founder123` | Default shared OpenClaw route |
-| Founder | `founder2@sprint.test` | `founder123` | Founder-specific OpenClaw route when `OPENCLAW_URL_FOUNDER2` is set |
-| Organizer | `organizer1@sprint.test` | `organizer123` | Coach/cohort view |
+**First run on a fresh database** — create the first organizer from the command
+line, because the admin page needs an organizer to sign in:
 
-This is password-checked demo auth, not production authentication.
+```sh
+bun scripts/create-organizer.ts you@example.com "Your Name" https://your-domain
+```
+
+That prints a `/setup?token=…` link. Open it, choose a password, then sign in
+and use **/admin** to add the rest of the operating team and the cohort. Each
+person added there gets their own single-use link, valid for 14 days, which you
+send them over whatever channel you already use. The same button issues a fresh
+link if someone forgets their password.
+
+Passwords are hashed with Argon2id and never leave the server. Sessions are
+random opaque tokens checked against the database, so a client cannot forge a
+role, and removing someone revokes their access immediately.
+
+## Privacy
+
+Founders' conversations are private. Organizers see themes, attention signals
+and decisions — never the transcript — unless a founder explicitly shares a
+specific conversation, which they can withdraw at any time. This is enforced in
+`src/pages/api/persistence.ts`, not merely stated.
 
 ## Environment
 
-Required for real AI replies:
+Required for AI replies — get a key at
+[console.anthropic.com](https://console.anthropic.com):
 
 ```sh
-OPENCLAW_URL=http://135.181.71.10:18789/v1/chat/completions
-OPENCLAW_TOKEN=<openclaw-gateway-token>
+ANTHROPIC_API_KEY=<your-anthropic-api-key>
 ```
 
-Optional founder-specific routing:
+Required in any deployment behind a domain or proxy, so setup links point at
+the right host rather than localhost:
 
 ```sh
-OPENCLAW_URL_FOUNDER2=http://<founder2-openclaw-ip>:18789/v1/chat/completions
+PUBLIC_BASE_URL=https://your-domain
 ```
 
-Optional persistence location:
+Optional:
 
 ```sh
-DB_PATH=./data/sprint-buddy.db
+DB_PATH=./data/sprint-buddy.db   # where SQLite stores everything
+SPRINT_WEEK=1                    # 1-15, drives the schedule context in prompts
+ANTHROPIC_MODEL=claude-opus-5    # advisor model
+ANTHROPIC_EFFORT=low             # low | medium | high
 ```
 
-The browser app does not silently fall back to canned AI replies. If OpenClaw is unavailable, chat shows an error so the demo does not accidentally pretend the live advisor is working.
+See `.env.example` for the full list.
+
+The app never falls back to canned AI replies. If the advisor cannot be
+reached, chat says so rather than pretending to work.
 
 ## Project Structure
 

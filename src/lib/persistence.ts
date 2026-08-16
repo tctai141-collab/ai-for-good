@@ -9,6 +9,8 @@ export type Thread = {
   lastAt: string;
   messages: Msg[];
   personality?: Personality;
+  /** Founder has opted this one conversation in to coach visibility. */
+  sharedWithCoach?: boolean;
 };
 
 export type Decision = {
@@ -75,6 +77,7 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
   const rawThreads = (tData.threads || []) as Array<{
     id: string; title: string; theme: string; state: string;
     last_at: string; personality: string; messages: Msg[];
+    shared_with_coach?: number;
   }>;
 
   const rawDecisions = (dData.decisions || []) as Array<{
@@ -96,6 +99,7 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       lastAt: t.last_at,
       personality: (t.personality || "none") as Personality,
       messages: t.messages || [],
+      sharedWithCoach: Boolean(t.shared_with_coach),
     })),
     decisions: rawDecisions.map((d) => ({
       id: d.id,
@@ -125,8 +129,14 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
   };
 }
 
-export async function initUser(email: string, name: string, role: string) {
-  await post({ action: "init-user", user: `${email}|${name}|${role}` });
+/** Identity comes from the session cookie; the client no longer asserts it. */
+export async function initUser() {
+  await post({ action: "init-user" });
+}
+
+/** Opt a single conversation in to — or back out of — coach visibility. */
+export async function setThreadShared(userEmail: string, threadId: string, shared: boolean) {
+  await post({ action: "set-thread-shared", userEmail, threadId, shared });
 }
 
 export async function saveThread(userEmail: string, thread: Thread) {

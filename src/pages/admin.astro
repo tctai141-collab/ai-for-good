@@ -1,0 +1,426 @@
+---
+// Cohort administration for the operating team: add founders, issue setup
+// links, reset a forgotten password, remove someone who has left.
+//
+// Access is enforced server-side by /api/admin/users; the checks here only
+// decide what to render.
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Cohort admin · Sprint Buddy</title>
+    <!--
+      Global rather than scoped: the people table is built in JavaScript, and
+      Astro's scoped styles only reach elements present in the template.
+    -->
+    <style is:global>
+      :root {
+        --bg: #0b0c0f;
+        --panel: rgba(20, 22, 27, 0.9);
+        --text: #f4f4f5;
+        --muted: #9ca3af;
+        --accent: #7aa2f7;
+        --ok: #6fcf97;
+        --danger: #f4746a;
+        --border: rgba(255, 255, 255, 0.12);
+        --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        --serif: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: var(--bg); }
+      body {
+        font-family: var(--font);
+        color: var(--text);
+        padding: 40px 24px 80px;
+      }
+      main { max-width: 900px; margin: 0 auto; }
+      h1 { font-family: var(--serif); font-size: 2.25rem; margin: 0 0 6px; }
+      h2 { font-family: var(--serif); font-size: 1.375rem; margin: 0 0 14px; }
+      .lede { color: var(--muted); margin: 0 0 32px; font-size: 0.9375rem; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+      table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+      th {
+        text-align: left;
+        font-size: 0.6875rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 600;
+        padding: 0 10px 10px 0;
+      }
+      td { padding: 11px 10px 11px 0; border-top: 1px solid var(--border); vertical-align: middle; }
+      .pill {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .pill.active { color: var(--ok); border-color: rgba(111, 207, 151, 0.4); }
+      .pill.pending { color: #e2b93b; border-color: rgba(226, 185, 59, 0.4); }
+      .pill.organizer { color: var(--accent); border-color: rgba(122, 162, 247, 0.4); }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+      label { display: block; }
+      .label-text {
+        display: block;
+        font-size: 0.6875rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      input, select, textarea {
+        padding: 10px 12px;
+        border-radius: 9px;
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.35);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 0.9375rem;
+      }
+      textarea { width: 100%; min-height: 120px; resize: vertical; line-height: 1.5; }
+      input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+      button {
+        padding: 10px 16px;
+        border: 0;
+        border-radius: 9px;
+        background: var(--accent);
+        color: #0b0c0f;
+        font-family: var(--font);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.ghost {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        padding: 6px 11px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+      }
+      button.ghost:hover { color: var(--text); border-color: var(--accent); }
+      button.ghost.danger:hover { color: var(--danger); border-color: rgba(244, 116, 106, 0.5); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .links { margin-top: 20px; }
+      .link-item {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .link-item code {
+        font-size: 0.75rem;
+        color: var(--muted);
+        word-break: break-all;
+        flex: 1 1 320px;
+      }
+      .note { color: var(--muted); font-size: 0.8125rem; line-height: 1.6; margin: 14px 0 0; }
+      .message { font-size: 0.875rem; margin-top: 14px; }
+      .message.error { color: var(--danger); }
+      .message.ok { color: var(--ok); }
+      [hidden] { display: none !important; }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Cohort admin</h1>
+      <p class="lede" id="lede">Loading…</p>
+
+      <div id="denied" hidden>
+        <div class="panel">
+          <h2>Organizers only</h2>
+          <p class="note">
+            This page is for the Sprint operating team. <a href="/">Go back to Sprint Buddy</a>.
+          </p>
+        </div>
+      </div>
+
+      <div id="app" hidden>
+        <section class="panel">
+          <h2>People</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="users"></tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <h2>Add one person</h2>
+          <form id="add-one" class="row">
+            <label>
+              <span class="label-text">Full name</span>
+              <input id="add-name" required placeholder="Aino Virtanen" />
+            </label>
+            <label>
+              <span class="label-text">Email</span>
+              <input id="add-email" type="email" required placeholder="aino@example.com" />
+            </label>
+            <label>
+              <span class="label-text">Role</span>
+              <select id="add-role">
+                <option value="founder">Founder</option>
+                <option value="organizer">Organizer</option>
+              </select>
+            </label>
+            <button type="submit">Add and create link</button>
+          </form>
+          <p class="message" id="add-message" hidden></p>
+        </section>
+
+        <section class="panel">
+          <h2>Add the whole cohort</h2>
+          <p class="note" style="margin-top:0">
+            One person per line, as <strong>Name, email</strong>. Everyone added here is a
+            founder — add the operating team individually above.
+          </p>
+          <form id="add-bulk">
+            <textarea
+              id="bulk-text"
+              placeholder="Aino Virtanen, aino@example.com&#10;Elias Koskinen, elias@example.com"
+            ></textarea>
+            <div style="margin-top:12px"><button type="submit">Add everyone</button></div>
+          </form>
+          <p class="message" id="bulk-message" hidden></p>
+        </section>
+
+        <section class="panel" id="links-panel" hidden>
+          <h2>Setup links</h2>
+          <p class="note" style="margin-top:0">
+            Send each person their own link — over Slack, email, wherever you already reach
+            them. Each one works once and expires after 14 days. Treat a link like a
+            password: anyone holding it can claim that account.
+          </p>
+          <div class="links" id="links"></div>
+        </section>
+      </div>
+    </main>
+
+    <script is:inline>
+      const lede = document.getElementById("lede");
+      const app = document.getElementById("app");
+      const denied = document.getElementById("denied");
+      const usersBody = document.getElementById("users");
+      const linksPanel = document.getElementById("links-panel");
+      const linksBox = document.getElementById("links");
+      let me = null;
+
+      function say(el, text, isError) {
+        el.textContent = text;
+        el.className = "message " + (isError ? "error" : "ok");
+        el.hidden = false;
+      }
+
+      async function api(body) {
+        const res = await fetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return { ok: res.ok, data: await res.json() };
+      }
+
+      function addLink(name, email, link) {
+        linksPanel.hidden = false;
+        const item = document.createElement("div");
+        item.className = "link-item";
+
+        const who = document.createElement("strong");
+        who.textContent = name ? name + " · " + email : email;
+        who.style.flex = "1 1 180px";
+
+        const code = document.createElement("code");
+        code.textContent = link;
+
+        const copy = document.createElement("button");
+        copy.className = "ghost";
+        copy.textContent = "Copy";
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(link);
+            copy.textContent = "Copied";
+            setTimeout(() => (copy.textContent = "Copy"), 1500);
+          } catch {
+            copy.textContent = "Select it manually";
+          }
+        });
+
+        item.append(who, code, copy);
+        linksBox.prepend(item);
+      }
+
+      function renderUsers(users) {
+        usersBody.textContent = "";
+        for (const user of users) {
+          const tr = document.createElement("tr");
+
+          const name = document.createElement("td");
+          name.textContent = user.name;
+
+          const email = document.createElement("td");
+          email.textContent = user.email;
+
+          const role = document.createElement("td");
+          const rolePill = document.createElement("span");
+          rolePill.className = "pill" + (user.role === "organizer" ? " organizer" : "");
+          rolePill.textContent = user.role;
+          role.append(rolePill);
+
+          const status = document.createElement("td");
+          const statusPill = document.createElement("span");
+          statusPill.className = "pill " + (user.activated ? "active" : "pending");
+          statusPill.textContent = user.activated ? "active" : "not set up";
+          status.append(statusPill);
+
+          const actions = document.createElement("td");
+          actions.style.textAlign = "right";
+
+          const reinvite = document.createElement("button");
+          reinvite.className = "ghost";
+          reinvite.textContent = user.activated ? "Reset password" : "New link";
+          reinvite.addEventListener("click", async () => {
+            reinvite.disabled = true;
+            const { ok, data } = await api({ action: "reinvite", email: user.email });
+            reinvite.disabled = false;
+            if (!ok) return alert(data.error || "Could not create a link.");
+            addLink(user.name, user.email, data.link);
+            linksPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          });
+          actions.append(reinvite);
+
+          if (user.email !== me) {
+            const remove = document.createElement("button");
+            remove.className = "ghost danger";
+            remove.textContent = "Remove";
+            remove.style.marginLeft = "8px";
+            remove.addEventListener("click", async () => {
+              const warning =
+                "Remove " + user.name + " (" + user.email + ")?\n\n" +
+                "This permanently deletes their account and everything in it — " +
+                "conversations, check-ins and decisions. It cannot be undone.";
+              if (!confirm(warning)) return;
+              remove.disabled = true;
+              const { ok, data } = await api({ action: "remove", email: user.email });
+              if (!ok) {
+                remove.disabled = false;
+                return alert(data.error || "Could not remove this account.");
+              }
+              load();
+            });
+            actions.append(remove);
+          }
+
+          tr.append(name, email, role, status, actions);
+          usersBody.append(tr);
+        }
+      }
+
+      async function load() {
+        try {
+          const res = await fetch("/api/admin/users");
+          if (res.status === 401) {
+            lede.hidden = true;
+            denied.hidden = false;
+            location.href = "/";
+            return;
+          }
+          if (res.status === 403) {
+            lede.hidden = true;
+            denied.hidden = false;
+            return;
+          }
+          const data = await res.json();
+          me = data.you;
+          const pending = data.users.filter((u) => !u.activated).length;
+          lede.textContent =
+            data.users.length +
+            (data.users.length === 1 ? " account" : " accounts") +
+            (pending ? " · " + pending + " still to set up" : " · everyone is set up");
+          app.hidden = false;
+          renderUsers(data.users);
+        } catch {
+          lede.textContent = "Could not reach the server.";
+        }
+      }
+
+      document.getElementById("add-one").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const message = document.getElementById("add-message");
+        const name = document.getElementById("add-name");
+        const email = document.getElementById("add-email");
+        const role = document.getElementById("add-role");
+
+        const { ok, data } = await api({
+          action: "add",
+          name: name.value,
+          email: email.value,
+          role: role.value,
+        });
+        if (!ok) return say(message, data.error || "Could not add this person.", true);
+
+        addLink(name.value.trim(), data.email, data.link);
+        say(message, "Added " + name.value.trim() + ". Their link is below.", false);
+        name.value = "";
+        email.value = "";
+        load();
+      });
+
+      document.getElementById("add-bulk").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const message = document.getElementById("bulk-message");
+        const textarea = document.getElementById("bulk-text");
+
+        const entries = textarea.value
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            // "Name, email" — split on the last comma so names may contain one.
+            const cut = line.lastIndexOf(",");
+            if (cut === -1) return { name: "", email: line };
+            return { name: line.slice(0, cut).trim(), email: line.slice(cut + 1).trim() };
+          });
+
+        if (!entries.length) return say(message, "Nothing to add.", true);
+
+        const { ok, data } = await api({ action: "add-bulk", entries });
+        if (!ok) return say(message, data.error || "Could not add these people.", true);
+
+        const added = data.results.filter((r) => r.link);
+        const failed = data.results.filter((r) => r.error);
+        for (const row of added) addLink(row.name, row.email, row.link);
+
+        const summary =
+          "Added " + added.length + " of " + data.results.length + "." +
+          (failed.length
+            ? " Skipped: " + failed.map((f) => (f.email || "(blank)") + " — " + f.error).join("; ")
+            : "");
+        say(message, summary, failed.length > 0);
+        if (added.length) textarea.value = "";
+        load();
+      });
+
+      load();
+    </script>
+  </body>
+</html>

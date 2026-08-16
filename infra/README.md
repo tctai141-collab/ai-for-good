@@ -1,5 +1,11 @@
 # Sprint Buddy Infrastructure
 
+> **⚠️ Obsolete — kept for reference only.**
+>
+> This Terraform provisions OpenClaw advisor VMs, which the app no longer uses:
+> the advisor calls the Anthropic API directly (`src/lib/ai.ts`). Nothing here
+> needs to be applied to run Sprint Buddy. See the README at the repository root.
+
 Terraform here provisions OpenClaw VMs through the Verda CLI. The default
 configuration creates a shared instance plus a second instance tied to
 `founder2@sprint.test`.

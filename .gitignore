@@ -110,3 +110,5 @@ src/pages/preview.astro
 *.db
 *.db-wal
 *.db-shm
+# Local database snapshots taken before a schema change
+*.db.*backup

@@ -1,8 +1,9 @@
 import type { APIRoute } from "astro";
 import {
-  getDb,
   upsertThread,
   getThreads,
+  getSharedThreads,
+  setThreadShared,
   upsertDecision,
   getDecisions,
   upsertCheckin,
@@ -14,39 +15,46 @@ import {
   getWorkingGenius,
   upsertWorkingGenius,
 } from "../../db/index";
+import { getSessionUser, type SessionUser } from "../../lib/auth";
 
-type SessionUser = {
-  email: string;
-  name: string;
-  role: "founder" | "organizer";
-};
+/**
+ * Reading and writing founder data, under the cohort's privacy rule:
+ *
+ *   Founders' raw conversations are private. The operating team sees themes,
+ *   attention signals and decisions — never the transcript — unless the
+ *   founder explicitly shares a specific conversation.
+ *
+ * This used to be advisory: any organizer session could read any founder's
+ * threads verbatim. It is now enforced here, because a promise the code
+ * doesn't keep is worse than no promise — founders who suspect they're being
+ * read write for the audience, and the signal disappears.
+ */
 
-function readSession(cookies: Parameters<APIRoute>[0]["cookies"]): SessionUser | null {
-  const raw = cookies.get("session_user")?.value;
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as SessionUser;
-    if (!parsed.email || !parsed.role) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function requireSessionForUser(session: SessionUser | null, userEmail?: string) {
+/** Writes are always first-person. Nobody edits anyone else's data. */
+function requireSelf(session: SessionUser | null, userEmail?: string): string | null {
   if (!session) return "not authenticated";
   if (!userEmail) return "userEmail required";
-  if (session.role !== "organizer" && session.email !== userEmail) return "forbidden";
+  if (session.email !== userEmail) return "forbidden";
   return null;
+}
+
+/** Reads are allowed for yourself, or for an organizer subject to redaction below. */
+function requireSelfOrOrganizer(session: SessionUser | null, userEmail: string): string | null {
+  if (!session) return "not authenticated";
+  if (session.email === userEmail) return null;
+  if (session.role === "organizer") return null;
+  return "forbidden";
 }
 
 export const POST: APIRoute = async ({ cookies, request }) => {
   try {
-    const session = readSession(cookies);
+    const session = getSessionUser(cookies);
     const body = await request.json() as {
       action: string;
       user?: string;
       userEmail?: string;
+      threadId?: string;
+      shared?: boolean;
       thread?: { id: string; title: string; theme: string; state: string; lastAt: string; personality?: string; messages: { role: string; content: string }[] };
       decision?: { id: string; summary: string; door: string; theme: string; status?: string; outcome?: string; threadId?: string; at?: string };
       checkin?: { id: string; theme?: string; prompt: string; mood?: number; refDecisionId?: string };
@@ -54,20 +62,16 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       checkinId?: string;
     };
 
-    const db = getDb();
-
     switch (body.action) {
       case "init-user": {
         if (!session) return err("not authenticated", 401);
-        if (!body.user) return err("user required");
-        const [email, name, role] = body.user.split("|");
-        if (session.email !== email || session.role !== role) return err("forbidden", 403);
-        ensureUser(email, name, role as "founder" | "organizer");
+        // Identity comes from the session, not from anything the client sends.
+        ensureUser(session.email, session.name, session.role);
         return json({ ok: true });
       }
 
       case "save-thread": {
-        const authError = requireSessionForUser(session, body.userEmail);
+        const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.thread || !body.userEmail) return err("thread + userEmail required");
         const t = body.thread;
@@ -86,8 +90,18 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         return json({ ok: true });
       }
 
+      // A founder deliberately opening one conversation to their coach, or
+      // taking that back again.
+      case "set-thread-shared": {
+        const authError = requireSelf(session, body.userEmail);
+        if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
+        if (!body.threadId || !body.userEmail) return err("threadId + userEmail required");
+        setThreadShared(body.threadId, body.userEmail, Boolean(body.shared));
+        return json({ ok: true, shared: Boolean(body.shared) });
+      }
+
       case "save-decision": {
-        const authError = requireSessionForUser(session, body.userEmail);
+        const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.decision || !body.userEmail) return err("decision + userEmail required");
         const d = body.decision;
@@ -106,7 +120,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       }
 
       case "save-checkin": {
-        const authError = requireSessionForUser(session, body.userEmail);
+        const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.checkin || !body.userEmail) return err("checkin + userEmail required");
         upsertCheckin({
@@ -121,7 +135,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       }
 
       case "delete-checkin": {
-        const authError = requireSessionForUser(session, body.userEmail);
+        const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.checkinId) return err("checkinId required");
         deleteCheckin(body.checkinId);
@@ -129,15 +143,14 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       }
 
       case "increment-visits": {
-        const authError = requireSessionForUser(session, body.userEmail);
+        const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.userEmail) return err("userEmail required");
-        const count = incrementVisits(body.userEmail);
-        return json({ count });
+        return json({ count: incrementVisits(body.userEmail) });
       }
 
       case "save-working-genius": {
-        const authError = requireSessionForUser(session, body.userEmail);
+        const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.userEmail || !body.workingGenius) return err("workingGenius + userEmail required");
         upsertWorkingGenius({
@@ -160,28 +173,54 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
 export const GET: APIRoute = async ({ cookies, request }) => {
   try {
-    const session = readSession(cookies);
+    const session = getSessionUser(cookies);
     const url = new URL(request.url);
     const resource = url.searchParams.get("resource");
     const userEmail = url.searchParams.get("user");
 
     if (!userEmail) return err("user param required");
-    const authError = requireSessionForUser(session, userEmail);
+    const authError = requireSelfOrOrganizer(session, userEmail);
     if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
+
+    const isOwner = session!.email === userEmail;
 
     switch (resource) {
       case "threads":
-        return json({ threads: getThreads(userEmail) });
+        // The privacy line. Organizers see only what was handed to them.
+        return json({
+          threads: isOwner ? getThreads(userEmail) : getSharedThreads(userEmail),
+          redacted: !isOwner,
+        });
+
+      case "checkins": {
+        const checkins = getCheckins(userEmail);
+        if (isOwner) return json({ checkins });
+        // Organizers get the signal, not the founder's words: theme, the
+        // attention score, and when it happened.
+        return json({
+          checkins: checkins.map((c) => ({
+            id: c.id,
+            user_email: c.user_email,
+            theme: c.theme,
+            mood: c.mood,
+            created_at: c.created_at,
+            prompt: null,
+          })),
+          redacted: true,
+        });
+      }
+
+      // Already summary-level by construction — a one-line decision, whether
+      // it's reversible, and whether it's still open.
       case "decisions":
         return json({ decisions: getDecisions(userEmail) });
-      case "checkins":
-        return json({ checkins: getCheckins(userEmail) });
+
       case "visits":
         return json({ visits: getVisits(userEmail) });
-      case "working-genius": {
-        const row = getWorkingGenius(userEmail);
-        return json({ workingGenius: row });
-      }
+
+      case "working-genius":
+        return json({ workingGenius: getWorkingGenius(userEmail) });
+
       default:
         return err("unknown resource: " + resource);
     }

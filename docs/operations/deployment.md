@@ -1,5 +1,16 @@
 # Deployment
 
+> **⚠️ This document describes the retired hackathon infrastructure and is kept
+> for reference only. Do not follow it.**
+>
+> The OpenClaw advisor gateway it depends on no longer exists; the advisor now
+> calls the Anthropic API directly (`src/lib/ai.ts`). The demo logins below have
+> also been removed — accounts are created by an organizer and activated through
+> a single-use setup link.
+>
+> See the README for how accounts and environment variables actually work. A
+> replacement deployment guide is still to be written.
+
 This repo deploys as a small distributed system:
 
 - one **app VM** for the Astro/Bun web app
