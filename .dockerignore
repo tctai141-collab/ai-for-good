@@ -3,3 +3,21 @@ node_modules
 .DS_Store
 *.local
 dist
+
+# Secrets — the build does `COPY . .`, so without these the API key would be
+# baked into an image layer and travel wherever the image goes.
+.env
+.env.*
+!.env.example
+
+# Local database. Copying it in would ship one machine's accounts and
+# conversations into the image, and mask the mounted volume at /app/data.
+data
+*.db
+*.db-wal
+*.db-shm
+
+# Build caches and tooling
+.astro
+.claude
+.agents

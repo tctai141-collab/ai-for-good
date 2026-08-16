@@ -1,0 +1,39 @@
+# Render blueprint — point Render at this repo and it reads this file.
+#
+# EU region (Frankfurt) is deliberate: founders are students at a Finnish
+# university writing private reflections, so the data stays in the EU.
+#
+# The disk is what makes SQLite viable here. Without it the database lives on
+# the container filesystem and every deploy silently wipes every account,
+# conversation and check-in.
+services:
+  - type: web
+    name: sprint-buddy
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    # Returns 200 with {"user": null} when signed out, so it needs no auth.
+    healthCheckPath: /api/session
+    disk:
+      name: sprint-buddy-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      # Set in the Render dashboard, never committed.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # The public URL, e.g. https://sprint-buddy.onrender.com — setup links
+      # are built from this. Fill it in after the first deploy assigns a URL.
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /app/data/sprint-buddy.db
+      - key: HOST
+        value: 0.0.0.0
+      # Which week of the 15-week sprint the cohort is in. Bump as it runs.
+      - key: SPRINT_WEEK
+        value: "1"
+      - key: ANTHROPIC_EFFORT
+        value: low

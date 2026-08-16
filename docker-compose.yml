@@ -11,9 +11,13 @@ services:
       NODE_ENV: production
       DB_PATH: /app/data/sprint-buddy.db
       SPRINT_WEEK: ${SPRINT_WEEK:-1}
-      OPENCLAW_URL: ${OPENCLAW_URL:-http://135.181.71.10:18789/v1/chat/completions}
-      OPENCLAW_TOKEN: ${OPENCLAW_TOKEN:-founder-os-dev-2026}
-      OPENCLAW_URL_FOUNDER2: ${OPENCLAW_URL_FOUNDER2:-}
+      # Required — the advisor cannot answer without it.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in .env}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
+      ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-low}
+      # Setup links are built from this; without it they point at localhost.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+    # Named volume, not a bind mount: the database must outlive the container.
     volumes:
       - sprint-buddy-data:/app/data
 
