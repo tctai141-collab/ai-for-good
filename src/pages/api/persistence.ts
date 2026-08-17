@@ -224,10 +224,31 @@ export const GET: APIRoute = async ({ cookies, request }) => {
         });
       }
 
-      // Already summary-level by construction — a one-line decision, whether
-      // it's reversible, and whether it's still open.
-      case "decisions":
-        return json({ decisions: getDecisions(userEmail) });
+      // NOT summary-level by construction, whatever this comment used to
+      // claim. detectDecision() in the client stores the founder's own first
+      // nine words verbatim, so `summary` and `outcome` are transcript, and an
+      // organizer reading them was reading the founder's words without any
+      // opt-in. Same redaction as check-ins above: the coach gets the shape of
+      // the decision — theme, reversible or one-way, still open or not — and
+      // none of the prose.
+      case "decisions": {
+        const decisions = getDecisions(userEmail);
+        if (isOwner) return json({ decisions });
+        return json({
+          decisions: decisions.map((d) => ({
+            id: d.id,
+            user_email: d.user_email,
+            thread_id: d.thread_id,
+            door: d.door,
+            status: d.status,
+            theme: d.theme,
+            at: d.at,
+            summary: null,
+            outcome: null,
+          })),
+          redacted: true,
+        });
+      }
 
       case "visits":
         return json({ visits: getVisits(userEmail) });

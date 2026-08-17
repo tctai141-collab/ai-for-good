@@ -275,7 +275,6 @@ type Team = {
   name: string;
   email?: string;
   company?: string;
-  live?: boolean;
   temp: number[];
   trend: "tenser" | "calmer" | "steady" | "quiet";
   theme: string;
@@ -490,7 +489,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
         {persona === "coach" && (
           <Scroll>
             {coachTeam
-              ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} liveDecisions={decisions} liveCheckins={checkins} />
+              ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} />
               : <Cohort onPick={setCoachTeam} cohort={cohort} loading={cohortLoading} />}
           </Scroll>
         )}
@@ -1530,12 +1529,16 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
 }
 
 /* ---------------- Coach: per-founder card ---------------- */
-function FounderCard({ team, onBack, liveDecisions, liveCheckins }: { team: Team; onBack: () => void; liveDecisions: Decision[]; liveCheckins: Checkin[] }) {
+/*
+ * Everything shown here comes from the aggregate cohort payload. It used to
+ * also receive the signed-in organizer's OWN decisions and check-ins and
+ * render them under "Still open for them" whenever team.live was set — the
+ * coach's private material, attributed to a founder. /api/cohort never sends
+ * `live`, so it was inert, but it only stayed inert by accident.
+ */
+function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
   const arrow = ({ tenser: "↗", calmer: "↘", steady: "→", quiet: "•" } as const)[team.trend] || "→";
   const arrowColor = ({ tenser: C.red, calmer: C.blue, steady: C.sub, quiet: C.faint } as const)[team.trend] || C.sub;
-  const openLoops = team.live ? liveDecisions.filter((d) => d.status === "open") : [];
-  const latestCheckin = team.live ? liveCheckins[0] : null;
-  const latestCheckinParts = latestCheckin ? splitCheckinPrompt(latestCheckin.prompt) : null;
 
   return (
     <div className="rise" style={{ maxWidth: 640, margin: "0 auto", padding: "26px 28px 90px" }}>
@@ -1578,7 +1581,6 @@ function FounderCard({ team, onBack, liveDecisions, liveCheckins }: { team: Team
 
       <h1 style={{ margin: "0 0 4px", fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", color: C.ink, fontVariationSettings: '"opsz" 60' }}>
         {team.name}
-        {team.live && <span style={{ marginLeft: 14, fontSize: 11, fontWeight: 800, letterSpacing: 1.6, color: "oklch(13% 0.008 250)", background: C.ink, borderRadius: 4, padding: "3px 8px", verticalAlign: "0.45em" }}>LIVE</span>}
       </h1>
       <p style={{ margin: "0 0 32px", color: C.faint, fontSize: 13.5 }}>{team.company}</p>
 
@@ -1601,33 +1603,6 @@ function FounderCard({ team, onBack, liveDecisions, liveCheckins }: { team: Team
         <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint, marginBottom: 10 }}>Open with</span>
         <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>{team.openWith}</p>
       </div>
-
-      {latestCheckin && (
-        <div style={{ marginTop: 28, padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
-          <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint, marginBottom: 8 }}>Latest check-in</span>
-          <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>{latestCheckinParts?.summary}</p>
-          {latestCheckin.mood != null && (
-            <p style={{ margin: "10px 0 0", color: signalColor(latestCheckin.mood), fontSize: 13, fontWeight: 800 }}>
-              {signalLabel(latestCheckin.mood)} · {latestCheckin.mood}/100{latestCheckinParts?.signal ? ` — ${latestCheckinParts.signal}` : ""}
-            </p>
-          )}
-        </div>
-      )}
-
-      {team.live && openLoops.length > 0 && (
-        <>
-          <p style={{ ...kicker, marginTop: 36, marginBottom: 14 }}>Still open for them</p>
-          <ol style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
-            {openLoops.map((d) => (
-              <li key={d.id} style={{ display: "grid", gridTemplateColumns: "5rem 1fr auto", alignItems: "baseline", gap: 16, padding: "13px 0", borderBottom: `1px solid ${C.line}`, fontSize: 14.5, lineHeight: 1.5 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.6, textTransform: "uppercase", color: C.yellow }}>Open</span>
-                <span style={{ color: C.ink }}>{d.summary}</span>
-                <span style={{ fontSize: 12, color: C.faint }}>{d.door}</span>
-              </li>
-            ))}
-          </ol>
-        </>
-      )}
 
       <p style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, marginTop: 36, paddingTop: 18, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 8, fontVariationSettings: '"opsz" 18' }}>
         <span style={{ width: 6, height: 6, borderRadius: 9, background: C.blue, flexShrink: 0 }} />
