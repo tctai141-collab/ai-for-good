@@ -10,16 +10,18 @@ have not yet been folded into `sprint-buddy.db`. Copying the `.db` alone
 captures a database missing everything since the last checkpoint — and in a
 busy moment that is nearly all of it.
 
-This is not theoretical. In the restore drill below, a live database holding
-2 users, 7 threads, 21 messages, 5 check-ins and 3 decisions had a `.db` file
-of 4 KB and a `-wal` of 642 KB. Copying the `.db`:
+This is not theoretical. A database holding 500 rows, written and left with the
+connection open, has a `.db` of **4 KB** and a `-wal` of **2 MB** — every row is
+in the WAL. Copying the `.db` on its own and opening the copy:
 
 ```
-SQLiteError: unable to open database file (SQLITE_CANTOPEN)
+readonly  -> SQLITE_CANTOPEN
+read-write -> SQLITE_MISUSE
 ```
 
-The previously documented procedure — `cat` the `.db` file — would have
-produced an unopenable backup.
+It does not open at all, in either mode. The previously documented procedure —
+`cat` the `.db` file — would have produced an unopenable backup, and you would
+only have found that out at the moment you needed it.
 
 `VACUUM INTO` is the correct primitive. SQLite takes a read lock and writes a
 fully checkpointed, self-contained copy that opens standalone with no `-wal` or

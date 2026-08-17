@@ -104,7 +104,10 @@ export const POST: APIRoute = async ({ cookies, request }) => {
             // request can still write.
             title: cap(t.title, MAX_TITLE_CHARS),
             theme: cap(t.theme, MAX_TITLE_CHARS),
-            state: cap(t.state, 40),
+            // Matches the CHECK constraint on the column.
+            state: (["panic", "thinking", "venting"] as const).includes(t.state as never)
+              ? t.state
+              : "thinking",
             last_at: cap(t.lastAt, 80),
             personality: cap(t.personality, 40) || "none",
           },
