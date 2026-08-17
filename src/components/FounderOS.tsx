@@ -294,17 +294,6 @@ type CohortData = {
   startDateConfigured: boolean;
 };
 
-/* ---------- Fictional demo seed data — no real PII ---------- */
-const seedThreads: Thread[] = [];
-
-const seedDecisions: Decision[] = [];
-
-const seedThemes: ThemeArc[] = [
-  { name: "Research", arc: Array(15).fill(0) },
-  { name: "Team", arc: Array(15).fill(0) },
-  { name: "Direction", arc: Array(15).fill(0) },
-];
-
 const WEEKS = Array.from({ length: 15 }, (_, i) => `W${i + 1}`);
 /* The cohort is loaded from /api/cohort. The hackathon build shipped eight
    hardcoded fictional founders here, complete with invented coaching notes —
@@ -359,10 +348,13 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
     return () => { cancelled = true; };
   }, [persona]);
 
-  const [threads, setThreads] = useState<Thread[]>(initialData?.threads || seedThreads);
-  const [decisions, setDecisions] = useState<Decision[]>(initialData?.decisions || seedDecisions);
+  const [threads, setThreads] = useState<Thread[]>(initialData?.threads || []);
+  const [decisions, setDecisions] = useState<Decision[]>(initialData?.decisions || []);
   const [checkins, setCheckins] = useState<Checkin[]>(initialData?.checkins || []);
-  const [themes, setThemes] = useState<ThemeArc[]>(seedThemes);
+  // Derived server-side from this founder's real threads, decisions and
+  // check-ins. This used to be three hardcoded names with zero-filled arcs,
+  // identical for everyone and never saved anywhere.
+  const [themes, setThemes] = useState<ThemeArc[]>(initialData?.themes || []);
   const [visits, setVisits] = useState(initialData?.visits ?? 4);
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -405,11 +397,20 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   };
   const markCheckinDone = () => setCheckinDoneToday(true);
 
+  // An optimistic in-session bump so a theme appears as soon as it is talked
+  // about; the server recomputes it properly on the next load. The increment
+  // lands on the *current* sprint week — it used to always hit arc[5],
+  // attributing everything to week six regardless of the date.
+  const currentWeekIndex = Math.max(0, Math.min(14, (initialData?.week ?? 1) - 1));
   const bumpTheme = (name: string) => setThemes((prev) => {
     const i = prev.findIndex((t) => t.name === name);
-    if (i === -1) return [...prev, { name, arc: [...Array(14).fill(0), 1] }];
+    if (i === -1) {
+      const arc = Array(15).fill(0);
+      arc[currentWeekIndex] = 1;
+      return [...prev, { name, arc }];
+    }
     const next = prev.map((t) => ({ ...t, arc: [...t.arc] }));
-    next[i].arc[5] += 1;
+    next[i]!.arc[currentWeekIndex] = (next[i]!.arc[currentWeekIndex] ?? 0) + 1;
     return next;
   });
   const addDecision = (d: { summary: string; door: "reversible" | "one-way"; theme: string }) => {
@@ -1202,10 +1203,10 @@ function Reflections({
         <PatternLine
           label="You keep returning to"
           value={themes
-            .filter((t) => (t.arc[t.arc.length - 1] ?? 0) > 0 || ["Research", "Team", "Direction"].includes(t.name))
+            .filter((t) => t.arc.reduce((sum, n) => sum + n, 0) > 0)
             .slice(0, 3)
             .map((t) => t.name)
-            .join(" / ") || topTheme}
+            .join(" / ") || "Nothing yet — this fills in as you talk."}
         />
         <PatternLine
           label="Latest check-in signal"
@@ -1238,9 +1239,15 @@ function Reflections({
       </div>
 
       <p style={{ ...kicker, margin: "0 0 14px" }}>On your mind</p>
-      <ul style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
-        {themes.map((t) => <ThemeRow key={t.name} t={t} />)}
-      </ul>
+      {themes.length === 0 ? (
+        <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint, fontVariationSettings: '"opsz" 18' }}>
+          Nothing tracked yet. Themes appear here once you've talked a few things through.
+        </p>
+      ) : (
+        <ul style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
+          {themes.map((t) => <ThemeRow key={t.name} t={t} />)}
+        </ul>
+      )}
 
       <p style={{ ...kicker, marginTop: 44, marginBottom: 14 }}>Decisions</p>
       {decisions.length === 0 ? (

@@ -14,8 +14,10 @@ import {
   ensureUser,
   getWorkingGenius,
   upsertWorkingGenius,
+  getThemeSignals,
   NotOwnerError,
 } from "../../db/index";
+import { TOTAL_WEEKS, currentSprintWeek, weekForDateClamped } from "../../lib/sprint-calendar";
 import { getSessionUser, type SessionUser } from "../../lib/auth";
 import {
   cap, MAX_MESSAGES_PER_THREAD, MAX_MESSAGE_CHARS,
@@ -278,6 +280,33 @@ export const GET: APIRoute = async ({ cookies, request }) => {
 
       case "working-genius":
         return json({ workingGenius: getWorkingGenius(userEmail) });
+
+      // Derived here rather than in the browser because placing a date into a
+      // sprint week needs SPRINT_START_DATE, which is server-side only.
+      case "themes": {
+        // Only the founder sees their own themes. An organizer gets the
+        // aggregate theme on the cohort dashboard, not this breakdown.
+        if (!isOwner) return err("forbidden", 403);
+
+        const counts = new Map<string, number[]>();
+        for (const signal of getThemeSignals(userEmail)) {
+          const label = (signal.theme || "").trim();
+          if (!label || label === "—" || label === "checkin") continue;
+          const at = new Date(signal.created_at.replace(" ", "T") + "Z");
+          const week = weekForDateClamped(at);
+          if (week === null) continue;
+          const arc = counts.get(label) ?? Array(TOTAL_WEEKS).fill(0);
+          arc[week - 1] += 1;
+          counts.set(label, arc);
+        }
+
+        const themes = [...counts.entries()]
+          .map(([name, arc]) => ({ name, arc }))
+          .sort((a, b) => b.arc.reduce((x, y) => x + y, 0) - a.arc.reduce((x, y) => x + y, 0))
+          .slice(0, 6);
+
+        return json({ themes, week: currentSprintWeek() });
+      }
 
       default:
         return err("unknown resource: " + resource);

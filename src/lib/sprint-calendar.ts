@@ -40,6 +40,23 @@ export function isSprintDated(): boolean {
   return startDate() !== null;
 }
 
+/**
+ * Like weekForDate, but clamped into the programme instead of returning null.
+ *
+ * Founders use the app before the sprint formally begins — accounts are issued
+ * ahead of the start date — and anything written then has no sprint week at
+ * all. Dropping those signals meant a founder's themes were empty until the
+ * start date passed, which reads as "nothing tracked" rather than "not started
+ * yet". Anything before week 1 counts as week 1; anything after the end counts
+ * as the final week.
+ */
+export function weekForDateClamped(date: Date): number | null {
+  const start = startDate();
+  if (!start) return null;
+  const week = Math.floor((date.getTime() - start.getTime()) / MS_PER_WEEK) + 1;
+  return Math.min(TOTAL_WEEKS, Math.max(1, week));
+}
+
 /** The cohort's current week, clamped to the programme's bounds. */
 export function currentSprintWeek(): number {
   const start = startDate();

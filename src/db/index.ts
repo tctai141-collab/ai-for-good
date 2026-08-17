@@ -609,6 +609,25 @@ export function getSharedThreads(userEmail: string) {
 // to individual records.
 // ---------------------------------------------------------------------------
 
+/**
+ * Every dated theme signal for one founder: what they talked about and when.
+ *
+ * Feeds the "On your mind" arcs, which used to be three hardcoded names with
+ * zero-filled bars, identical for every founder and never persisted.
+ */
+export function getThemeSignals(userEmail: string): { theme: string; created_at: string }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT theme, created_at FROM threads   WHERE user_email = $email AND theme IS NOT NULL
+       UNION ALL
+       SELECT theme, created_at FROM decisions WHERE user_email = $email AND theme IS NOT NULL
+       UNION ALL
+       SELECT theme, created_at FROM checkins  WHERE user_email = $email AND theme IS NOT NULL`,
+    )
+    .all({ $email: userEmail }) as { theme: string; created_at: string }[];
+}
+
 export type FounderRow = { email: string; name: string; created_at: string | null };
 
 export function listFounders(): FounderRow[] {
