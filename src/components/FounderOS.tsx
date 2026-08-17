@@ -273,12 +273,26 @@ type ThemeArc = { name: string; arc: number[] };
 type Team = {
   id: string;
   name: string;
-  company: string;
+  email?: string;
+  company?: string;
   live?: boolean;
   temp: number[];
   trend: "tenser" | "calmer" | "steady" | "quiet";
   theme: string;
   openWith: string;
+  checkinCount?: number;
+  lastCheckinDaysAgo?: number | null;
+  openDecisions?: number;
+};
+
+/** What /api/cohort returns: real founders, aggregate signals only. */
+type CohortData = {
+  week: number;
+  totalWeeks: number;
+  teams: Team[];
+  needAttention: number;
+  cohortSize: number;
+  startDateConfigured: boolean;
 };
 
 /* ---------- Fictional demo seed data — no real PII ---------- */
@@ -293,16 +307,9 @@ const seedThemes: ThemeArc[] = [
 ];
 
 const WEEKS = Array.from({ length: 15 }, (_, i) => `W${i + 1}`);
-const seedTeams: Team[] = [
-  { id: "you", name: "Aino M.", company: "(your founder)", live: true, temp: [1, 1, 1, 2, 2, 2, 3, 3, 2, 2, 1, 1, 2, 2, 3], trend: "tenser", theme: "Runway", openWith: "Open with runway — it is escalating and there are open decisions she has not closed." },
-  { id: "tm2", name: "Eero V.", company: "Polar Mobility", temp: [1, 1, 2, 2, 2, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1], trend: "calmer", theme: "Product", openWith: "Doing well — growth unlocked. Ask what he'd do with one more engineer." },
-  { id: "tm3", name: "Sofia L.", company: "Kaiku Health", temp: [0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 2, 2, 2, 3, 3], trend: "tenser", theme: "Cofounder", openWith: "Cofounder strain rising. Worth a gentle, direct check before it hardens." },
-  { id: "tm4", name: "Mikael R.", company: "Saana AI", temp: [1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], trend: "steady", theme: "Hiring", openWith: "Steady. Hiring questions — connect him with a recruiter in the network." },
-  { id: "tm5", name: "Liisa K.", company: "Verso", temp: [3, 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1], trend: "calmer", theme: "Fundraise", openWith: "Came through the raise. Celebrate it, then talk about pacing the next 6 months." },
-  { id: "tm6", name: "Tomi H.", company: "Nordic Loop", temp: [0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0], trend: "quiet", theme: "—", openWith: "Gone quiet again. That silence is the signal — reach out first." },
-  { id: "tm7", name: "Reetta S.", company: "Marindo", temp: [1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2], trend: "steady", theme: "Growth", openWith: "Grinding on growth. Pressure-test the channel assumptions with her." },
-  { id: "tm8", name: "Janne P.", company: "Hetki", temp: [2, 3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], trend: "calmer", theme: "Self-doubt", openWith: "Confidence recovering. Reinforce what worked; name the progress out loud." },
-];
+/* The cohort is loaded from /api/cohort. The hackathon build shipped eight
+   hardcoded fictional founders here, complete with invented coaching notes —
+   fine for a demo, misleading in front of a real operating team. */
 
 /* Temperature scale: 0 = quiet → needs-attention · 1 = Stable · 2 = Monitor · 3 = Needs-attention */
 const TEMP_STABLE = "oklch(44% 0.012 255)";
@@ -336,6 +343,22 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   const [view, setView] = useState<View>("chat");
   const [active, setActive] = useState<ActiveTarget>({ fresh: true });
   const [coachTeam, setCoachTeam] = useState<Team | null>(null);
+  const [cohort, setCohort] = useState<CohortData | null>(null);
+  const [cohortLoading, setCohortLoading] = useState(persona === "coach");
+
+  useEffect(() => {
+    if (persona !== "coach") return;
+    let cancelled = false;
+    fetch("/api/cohort")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: CohortData | null) => {
+        if (cancelled) return;
+        setCohort(data);
+        setCohortLoading(false);
+      })
+      .catch(() => { if (!cancelled) setCohortLoading(false); });
+    return () => { cancelled = true; };
+  }, [persona]);
 
   const [threads, setThreads] = useState<Thread[]>(initialData?.threads || seedThreads);
   const [decisions, setDecisions] = useState<Decision[]>(initialData?.decisions || seedDecisions);
@@ -409,6 +432,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
       <Sidebar
         persona={persona} view={view} active={active} threads={threads}
         coachTeam={coachTeam}
+        teams={cohort?.teams ?? []}
         open={sidebarOpen} onToggle={toggleSidebar}
         checkinDone={checkinDoneToday}
         onStartCheckin={startCheckin}
@@ -467,7 +491,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
           <Scroll>
             {coachTeam
               ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} liveDecisions={decisions} liveCheckins={checkins} />
-              : <Cohort onPick={setCoachTeam} liveThemes={themes} liveCheckins={checkins} />}
+              : <Cohort onPick={setCoachTeam} cohort={cohort} loading={cohortLoading} />}
           </Scroll>
         )}
       </main>
@@ -484,6 +508,7 @@ type SidebarProps = {
   active: ActiveTarget;
   threads: Thread[];
   coachTeam: Team | null;
+  teams: Team[];
   open: boolean;
   onToggle: () => void;
   checkinDone: boolean;
@@ -496,7 +521,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, open, onToggle, checkinDone, onStartCheckin, onNew, onThread, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, onStartCheckin, onNew, onThread, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   return (
     <aside
       aria-hidden={!open}
@@ -581,7 +606,12 @@ function Sidebar({ persona, view, active, threads, coachTeam, open, onToggle, ch
           </button>
           <p style={{ ...navLabel, marginTop: 0 }}>Your cohort</p>
           <div style={{ flex: 1, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
-            {seedTeams.map((t) => {
+            {teams.length === 0 && (
+              <p style={{ margin: "4px 8px", fontSize: 13, color: C.faint, lineHeight: 1.5 }}>
+                No founders yet.
+              </p>
+            )}
+            {teams.map((t) => {
               const on = coachTeam && coachTeam.id === t.id;
               return (
                 <button key={t.id} onClick={() => onPickTeam(t)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 12px", fontSize: 14 }}>
@@ -1416,29 +1446,46 @@ function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision
 }
 
 /* ---------------- Coach: cohort heatmap ---------------- */
-function Cohort({ onPick, liveThemes, liveCheckins }: { onPick: (t: Team) => void; liveThemes: ThemeArc[]; liveCheckins: Checkin[] }) {
-  const liveTop = useMemo(() => [...liveThemes].sort((a, b) => (b.arc[14] ?? 0) - (a.arc[14] ?? 0))[0], [liveThemes]);
-  const latestCheckin = liveCheckins[0];
-  const latestCheckinParts = latestCheckin ? splitCheckinPrompt(latestCheckin.prompt) : null;
-  const teams: Team[] = seedTeams.map((t) => t.live
-    ? {
-      ...t,
-      theme: latestCheckin?.theme || liveTop?.name || t.theme,
-      temp: [...t.temp.slice(0, 14), latestCheckin ? signalTemp(latestCheckin.mood) : 0],
-      openWith: latestCheckin
-        ? `Open with latest check-in signal: ${latestCheckinParts?.summary || latestCheckin.prompt}`
-        : t.openWith,
-    }
-    : t);
-  const needAttention = teams.filter((t) => (t.temp[5] ?? 0) >= 2 || t.temp[5] === 0);
+function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort: CohortData | null; loading: boolean }) {
+  const teams = cohort?.teams ?? [];
+  const week = cohort?.week ?? 1;
+
+  if (loading) {
+    return (
+      <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
+        <p style={kicker}>The cohort, this week</p>
+        <p style={{ margin: "18px 0 0", color: C.sub, fontSize: 15 }}>Loading the cohort…</p>
+      </div>
+    );
+  }
+
+  // An honest empty state. The dashboard used to fill this gap with invented
+  // founders, which reads as real data to anyone who wasn't told otherwise.
+  if (!teams.length) {
+    return (
+      <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
+        <p style={kicker}>The cohort, this week</p>
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", margin: "10px 0 16px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>No founders yet.</h1>
+        <p style={{ margin: "0 0 26px", fontFamily: "var(--font-serif)", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 28' }}>
+          Add the cohort in <a href="/admin" style={{ color: C.blue }}>Cohort admin</a> and send each founder their setup link. Their signals appear here once they start checking in.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
-      <p style={kicker}>The cohort, this week</p>
+      <p style={kicker}>The cohort, week {week}</p>
       <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", margin: "10px 0 16px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>Where to put your attention.</h1>
       <p style={{ margin: "0 0 32px", fontFamily: "var(--font-serif)", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 28' }}>
-        Emotional temperature by team. <Stat c={C.red}>{needAttention.length}</Stat> of <Stat>{teams.length}</Stat> need attention this week.
+        Attention signal by founder. <Stat c={C.red}>{cohort?.needAttention ?? 0}</Stat> of <Stat>{teams.length}</Stat> need attention this week.
       </p>
+
+      {cohort && !cohort.startDateConfigured && (
+        <div style={{ margin: "0 0 26px", padding: "13px 16px", borderRadius: 8, border: `1px solid ${C.yellow}`, color: C.ink, fontSize: 14, lineHeight: 1.5 }}>
+          Set <code>SPRINT_START_DATE</code> in the server environment to place check-ins into the right weeks. Until then this grid cannot show week-by-week history.
+        </div>
+      )}
 
       <div style={{ overflowX: "auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "11rem repeat(15, 24px)", alignItems: "center", gap: 3, minWidth: 540 }}>
@@ -1470,11 +1517,11 @@ function Cohort({ onPick, liveThemes, liveCheckins }: { onPick: (t: Team) => voi
         <span style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, fontVariationSettings: '"opsz" 18' }}>Quiet rows count as needs-attention. Silence is a signal.</span>
       </div>
 
-      {needAttention.length >= 2 && (
+      {(cohort?.needAttention ?? 0) >= 2 && (
         <div style={{ marginTop: 28, background: C.yellow, color: "oklch(13% 0.008 250)", borderRadius: 8, padding: "16px 20px" }}>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 2.2, textTransform: "uppercase" }}>Pattern</p>
           <p style={{ margin: "6px 0 0", fontSize: 15.5, lineHeight: 1.5, fontWeight: 600 }}>
-            {needAttention.length} of {teams.length} founders need attention this week. Consider a group session before the 1:1s.
+            {cohort?.needAttention} of {teams.length} founders need attention this week. Consider a group session before the 1:1s.
           </p>
         </div>
       )}

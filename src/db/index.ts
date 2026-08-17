@@ -443,3 +443,57 @@ export function getSharedThreads(userEmail: string) {
     return { ...t, messages: msgs.map((m) => ({ role: m.role, content: m.content })) };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Cohort signals for the organizer dashboard
+//
+// Deliberately returns no free text. Organizers get themes, attention scores
+// and timing — the material for deciding who to talk to — never what anyone
+// actually wrote. See src/pages/api/persistence.ts for the same rule applied
+// to individual records.
+// ---------------------------------------------------------------------------
+
+export type FounderRow = { email: string; name: string; created_at: string | null };
+
+export function listFounders(): FounderRow[] {
+  const db = getDb();
+  return db
+    .query("SELECT email, name, created_at FROM users WHERE role = 'founder' ORDER BY name ASC")
+    .all() as FounderRow[];
+}
+
+export type CohortCheckinRow = {
+  user_email: string;
+  created_at: string;
+  theme: string | null;
+  mood: number | null;
+};
+
+/** Every founder check-in, oldest first. `mood` is the 0-100 attention score. */
+export function getCohortCheckins(): CohortCheckinRow[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT c.user_email, c.created_at, c.theme, c.mood
+       FROM checkins c
+       JOIN users u ON u.email = c.user_email
+       WHERE u.role = 'founder'
+       ORDER BY c.created_at ASC`,
+    )
+    .all() as CohortCheckinRow[];
+}
+
+/** Count of unresolved decisions per founder, keyed by email. */
+export function getOpenDecisionCounts(): Record<string, number> {
+  const db = getDb();
+  const rows = db
+    .query(
+      `SELECT d.user_email AS email, COUNT(*) AS n
+       FROM decisions d
+       JOIN users u ON u.email = d.user_email
+       WHERE u.role = 'founder' AND d.status = 'open'
+       GROUP BY d.user_email`,
+    )
+    .all() as { email: string; n: number }[];
+  return Object.fromEntries(rows.map((r) => [r.email, r.n]));
+}

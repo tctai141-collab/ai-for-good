@@ -1,3 +1,5 @@
+import { currentSprintWeek } from "./sprint-calendar";
+
 export type SprintEvent = {
   day: string;
   time: string;
@@ -313,7 +315,7 @@ export const SELF_DEV_THEMES: SelfDevTheme = {
 
 export function getSprintContext(): string {
   const now = new Date();
-  const currentWeek = Number(Bun.env.SPRINT_WEEK || "1");
+  const currentWeek = currentSprintWeek();
 
   const week = SPRINT_WEEKS.find((w) => w.week === currentWeek);
   if (!week) return "";
