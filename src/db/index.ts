@@ -382,10 +382,89 @@ export function updateUser(email: string, name: string, role: Role): void {
   });
 }
 
-/** Cascades to that user's sessions and invites via foreign keys. */
+/**
+ * Removes an account and everything belonging to it.
+ *
+ * The five original tables reference users(email) with ON DELETE NO ACTION,
+ * while foreign_keys is ON — so a plain DELETE FROM users threw a constraint
+ * error for any founder who had ever used the app, and the caller turned that
+ * into an empty HTTP 500. The account survived; the sessions, already deleted
+ * by then, did not.
+ *
+ * The children are deleted explicitly, in one transaction, in FK order. That
+ * is lower-risk than recreating seven tables to change their cascade policy,
+ * and it makes the erasure claim in the README true — which matters, because
+ * this is the GDPR right-to-erasure path.
+ */
 export function deleteUser(email: string): void {
   const db = getDb();
-  db.run("DELETE FROM users WHERE email = $email", { $email: email });
+  db.transaction(() => {
+    // Messages hang off threads, which cascade — but only once the threads
+    // themselves go, so delete them via the thread ids first.
+    db.run(
+      "DELETE FROM messages WHERE thread_id IN (SELECT id FROM threads WHERE user_email = $email)",
+      { $email: email },
+    );
+    // checkins.ref_decision_id -> decisions, so check-ins go before decisions.
+    db.run("DELETE FROM checkins WHERE user_email = $email", { $email: email });
+    // decisions.thread_id -> threads, so decisions go before threads.
+    db.run("DELETE FROM decisions WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM threads WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM visits WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM working_genius WHERE user_email = $email", { $email: email });
+    // sessions and invites cascade, but being explicit costs nothing and keeps
+    // the intent readable next to the rest.
+    db.run("DELETE FROM sessions WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM invites WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM users WHERE email = $email", { $email: email });
+  })();
+}
+
+// --- admin audit ---
+
+export type AuditEntry = {
+  id: string;
+  actor_email: string;
+  action: string;
+  subject_email: string | null;
+  detail: string | null;
+  created_at: string;
+};
+
+/**
+ * Records an administrative action. Never throws into the caller: losing an
+ * audit line is bad, but failing the operation the organizer was performing
+ * because the audit write failed is worse.
+ */
+export function recordAdminAction(
+  actorEmail: string,
+  action: string,
+  subjectEmail: string | null = null,
+  detail: string | null = null,
+): void {
+  try {
+    const db = getDb();
+    db.run(
+      `INSERT INTO admin_audit (id, actor_email, action, subject_email, detail)
+       VALUES ($id, $actor, $action, $subject, $detail)`,
+      {
+        $id: crypto.randomUUID(),
+        $actor: actorEmail,
+        $action: action,
+        $subject: subjectEmail,
+        $detail: detail,
+      },
+    );
+  } catch (error) {
+    console.error("[audit] could not record admin action:", error);
+  }
+}
+
+export function listAdminAudit(limit = 200): AuditEntry[] {
+  const db = getDb();
+  return db
+    .query("SELECT * FROM admin_audit ORDER BY created_at DESC, rowid DESC LIMIT $limit")
+    .all({ $limit: limit }) as AuditEntry[];
 }
 
 export function countOrganizers(): number {

@@ -130,8 +130,35 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // Every administrative mutation, attributable to the organizer who made it.
+  //
+  // An organizer can still trigger a password reset on any account, which is
+  // inherent to admin-issued resets and cannot be closed without taking the
+  // ability away. What can be closed is doing it invisibly: the link now goes
+  // to the founder by email, and the attempt is recorded here either way.
+  //
+  // actor_email is NOT a foreign key on purpose — the record has to outlive the
+  // account that made it, including when that organizer is later removed.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS admin_audit (
+      id TEXT PRIMARY KEY,
+      actor_email TEXT NOT NULL,
+      action TEXT NOT NULL,
+      subject_email TEXT,
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_threads_user ON threads(user_email, updated_at DESC);
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_at ON admin_audit(created_at DESC);
+  `);
+  // The cohort dashboard sorts every founder check-in by time on each load.
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_checkins_created ON checkins(created_at);
   `);
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_email);

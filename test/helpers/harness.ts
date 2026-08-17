@@ -17,11 +17,18 @@ import { join } from "node:path";
 
 const ENTRY = "dist/server/entry.mjs";
 
+/** One message captured by the stand-in Resend endpoint. */
+export type SentEmail = { to: string; subject: string; text: string };
+
 export type Harness = {
   url: string;
   dbPath: string;
   /** A fresh read/write connection to the scratch database, for assertions. */
   db(): Database;
+  /** Every email the app tried to send, oldest first. */
+  sent: SentEmail[];
+  /** The most recent message to an address. */
+  lastEmailTo(address: string): SentEmail | undefined;
   stop(): void;
 };
 
@@ -37,7 +44,8 @@ function freePort(): number {
   return port;
 }
 
-export async function startServer(): Promise<Harness> {
+export async function startServer(options: { email?: boolean } = {}): Promise<Harness> {
+  const emailEnabled = options.email !== false;
   if (!(await Bun.file(ENTRY).exists())) {
     throw new Error(`${ENTRY} not found — run \`bun run build\` before \`bun test\`.`);
   }
@@ -46,6 +54,21 @@ export async function startServer(): Promise<Harness> {
   const dbPath = join(dir, "test.db");
   const port = freePort();
   const url = `http://127.0.0.1:${port}`;
+
+  // A stand-in for the Resend API. Tests exercise the real delivery path —
+  // including that the setup link leaves by email and not in a response body —
+  // rather than a bypass that would let the real path rot untested.
+  const sent: SentEmail[] = [];
+  const mail = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const body = (await request.json()) as { to: string[]; subject: string; text: string };
+      sent.push({ to: body.to[0]!, subject: body.subject, text: body.text });
+      return Response.json({ id: crypto.randomUUID() });
+    },
+  });
+  const mailUrl = `http://127.0.0.1:${mail.port}/emails`;
 
   const proc = Bun.spawn(["bun", ENTRY], {
     env: {
@@ -58,6 +81,14 @@ export async function startServer(): Promise<Harness> {
       // Never a real key: no test may reach the live API.
       ANTHROPIC_API_KEY: "test-key-not-real",
       SPRINT_START_DATE: "2026-09-09",
+      // Omitted entirely when a test needs the unconfigured case.
+      ...(emailEnabled
+        ? {
+            RESEND_API_KEY: "test-key-not-real",
+            RESEND_FROM: "Sprint Buddy Test <test@example.test>",
+            RESEND_BASE_URL: mailUrl,
+          }
+        : { RESEND_API_KEY: "", RESEND_FROM: "", RESEND_BASE_URL: "" }),
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -84,9 +115,12 @@ export async function startServer(): Promise<Harness> {
   return {
     url,
     dbPath,
+    sent,
     db: () => new Database(dbPath),
+    lastEmailTo: (address: string) => [...sent].reverse().find((m) => m.to === address),
     stop() {
       proc.kill();
+      mail.stop(true);
       try {
         rmSync(dir, { recursive: true, force: true });
       } catch {
@@ -139,9 +173,16 @@ export function inviteToken(h: Harness, email: string): string {
   }
 }
 
+/** The token from the setup link as the founder actually received it. */
+export function tokenFromEmail(h: Harness, address: string): string | null {
+  const message = h.lastEmailTo(address);
+  const match = message?.text.match(/\/setup\?token=([a-f0-9]+)/);
+  return match ? match[1]! : null;
+}
+
 /** Redeems an invite and returns the resulting signed-in session. */
 export async function activate(h: Harness, email: string, password: string): Promise<Session> {
-  const token = inviteToken(h, email);
+  const token = tokenFromEmail(h, email) ?? inviteToken(h, email);
   const res = await post(h, "/api/invite", { token, password });
   if (!res.ok) throw new Error(`activation failed for ${email}: ${await res.text()}`);
   return { cookie: sessionCookie(res), email };

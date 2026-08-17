@@ -205,11 +205,13 @@
         </section>
 
         <section class="panel" id="links-panel" hidden>
-          <h2>Setup links</h2>
+          <h2>Setup links sent</h2>
           <p class="note" style="margin-top:0">
-            Send each person their own link — over Slack, email, wherever you already reach
-            them. Each one works once and expires after 14 days. Treat a link like a
-            password: anyone holding it can claim that account.
+            Each link is emailed straight to that person's own address. You never see it,
+            and neither does anyone else on the team — a setup link is as good as a
+            password, so whoever holds it can claim the account. Each works once and
+            expires after 14 days. If someone says it never arrived, use
+            <strong>Resend link</strong> on their row.
           </p>
           <div class="links" id="links"></div>
         </section>
@@ -232,15 +234,36 @@
       }
 
       async function api(body) {
-        const res = await fetch("/api/admin/users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        return { ok: res.ok, data: await res.json() };
+        // Never assume a body is JSON. A server error can return an empty
+        // body, and `await res.json()` then throws before the caller can read
+        // an error message — which is why a failed removal used to leave the
+        // button disabled with nothing shown at all.
+        let res;
+        try {
+          res = await fetch("/api/admin/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        } catch {
+          return { ok: false, data: { error: "Could not reach the server. Check your connection." } };
+        }
+        let data = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = { error: `The server returned an error (${res.status}) with no details.` };
+        }
+        return { ok: res.ok, data };
       }
 
-      function addLink(name, email, link) {
+      /*
+       * Records that a link was emailed. The link itself is deliberately not
+       * shown here and is not in the response: it goes to the founder's own
+       * address and nowhere else, so that nobody on the operating team can
+       * redeem it and sign in as them.
+       */
+      function addLink(name, email) {
         linksPanel.hidden = false;
         const item = document.createElement("div");
         item.className = "link-item";
@@ -249,23 +272,12 @@
         who.textContent = name ? name + " · " + email : email;
         who.style.flex = "1 1 180px";
 
-        const code = document.createElement("code");
-        code.textContent = link;
+        const status = document.createElement("span");
+        status.textContent = "Setup link emailed";
+        status.style.color = "var(--ok, #16653c)";
+        status.style.fontSize = "13px";
 
-        const copy = document.createElement("button");
-        copy.className = "ghost";
-        copy.textContent = "Copy";
-        copy.addEventListener("click", async () => {
-          try {
-            await navigator.clipboard.writeText(link);
-            copy.textContent = "Copied";
-            setTimeout(() => (copy.textContent = "Copy"), 1500);
-          } catch {
-            copy.textContent = "Select it manually";
-          }
-        });
-
-        item.append(who, code, copy);
+        item.append(who, status);
         linksBox.prepend(item);
       }
 
@@ -302,8 +314,8 @@
             reinvite.disabled = true;
             const { ok, data } = await api({ action: "reinvite", email: user.email });
             reinvite.disabled = false;
-            if (!ok) return alert(data.error || "Could not create a link.");
-            addLink(user.name, user.email, data.link);
+            if (!ok) return alert(data.error || "Could not send the link.");
+            addLink(user.name, user.email);
             linksPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
           });
           actions.append(reinvite);
@@ -378,8 +390,8 @@
         });
         if (!ok) return say(message, data.error || "Could not add this person.", true);
 
-        addLink(name.value.trim(), data.email, data.link);
-        say(message, "Added " + name.value.trim() + ". Their link is below.", false);
+        addLink(name.value.trim(), data.email);
+        say(message, "Added " + name.value.trim() + ". Their setup link has been emailed to them.", false);
         name.value = "";
         email.value = "";
         load();
@@ -406,9 +418,9 @@
         const { ok, data } = await api({ action: "add-bulk", entries });
         if (!ok) return say(message, data.error || "Could not add these people.", true);
 
-        const added = data.results.filter((r) => r.link);
+        const added = data.results.filter((r) => r.emailed);
         const failed = data.results.filter((r) => r.error);
-        for (const row of added) addLink(row.name, row.email, row.link);
+        for (const row of added) addLink(row.name, row.email);
 
         const summary =
           "Added " + added.length + " of " + data.results.length + "." +
