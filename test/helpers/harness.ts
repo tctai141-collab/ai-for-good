@@ -29,22 +29,62 @@ export type Harness = {
   sent: SentEmail[];
   /** The most recent message to an address. */
   lastEmailTo(address: string): SentEmail | undefined;
+  /** Everything the server has logged, for diagnosing a failing test. */
+  serverOutput(): string;
+  /** What was actually forwarded to the advisor API. */
+  advisorCalls: { messages: { role: string; content: string }[] }[];
   stop(): void;
 };
 
 /** Accounts are addressed by cookie; every helper returns one. */
 export type Session = { cookie: string; email: string };
 
-function freePort(): number {
-  // Bind to 0 to let the OS choose, then release it. A race is possible but
-  // vanishingly unlikely across a handful of test files.
-  const server = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
-  const port = server.port;
-  server.stop(true);
-  return port;
+/**
+ * Continuously drains a piped stream into a buffer.
+ *
+ * This has to keep reading for the life of the process, not just until the
+ * startup line. A piped stream nobody reads fills its OS buffer, and the child
+ * then blocks on its next write — which showed up as the server dying partway
+ * through a test file with ConnectionRefused, once enough was being logged.
+ * Keeping the output also means a failing test can show what the server said.
+ */
+function drain(stream: ReadableStream<Uint8Array>, sink: string[]): void {
+  void (async () => {
+    const decoder = new TextDecoder();
+    try {
+      for await (const chunk of stream) {
+        sink.push(decoder.decode(chunk, { stream: true }));
+        // Bound it: this is diagnostics, not a log store.
+        if (sink.length > 500) sink.splice(0, sink.length - 500);
+      }
+    } catch {
+      // Stream closed with the process.
+    }
+  })();
 }
 
-export async function startServer(options: { email?: boolean } = {}): Promise<Harness> {
+/**
+ * Waits for the port the server actually bound.
+ *
+ * Picking a free port ourselves and passing it in has a race: between closing
+ * the probe socket and the child binding, another test file can take the same
+ * port. Letting the OS assign (PORT=0) and reading the port back removes it.
+ */
+async function waitForPort(output: string[], deadlineMs = 15_000): Promise<number> {
+  const deadline = Date.now() + deadlineMs;
+  for (;;) {
+    const match = output.join("").match(/listening on https?:\/\/[^:]+:(\d+)/i);
+    if (match) return Number(match[1]);
+    if (Date.now() > deadline) {
+      throw new Error(`server never reported a port. Output:\n${output.join("").slice(0, 2000)}`);
+    }
+    await Bun.sleep(25);
+  }
+}
+
+export async function startServer(
+  options: { email?: boolean; advisorFails?: boolean } = {},
+): Promise<Harness> {
   const emailEnabled = options.email !== false;
   if (!(await Bun.file(ENTRY).exists())) {
     throw new Error(`${ENTRY} not found — run \`bun run build\` before \`bun test\`.`);
@@ -52,8 +92,6 @@ export async function startServer(options: { email?: boolean } = {}): Promise<Ha
 
   const dir = mkdtempSync(join(tmpdir(), "sprint-buddy-test-"));
   const dbPath = join(dir, "test.db");
-  const port = freePort();
-  const url = `http://127.0.0.1:${port}`;
 
   // A stand-in for the Resend API. Tests exercise the real delivery path —
   // including that the setup link leaves by email and not in a response body —
@@ -70,16 +108,49 @@ export async function startServer(options: { email?: boolean } = {}): Promise<Ha
   });
   const mailUrl = `http://127.0.0.1:${mail.port}/emails`;
 
+  // A stand-in for the Anthropic API, so the advisor path can be exercised
+  // without reaching the real service. Returns a minimal non-streaming
+  // Messages response; tests that care about the rate limit or the history cap
+  // sit in front of this anyway.
+  const advisorCalls: { messages: { role: string; content: string }[] }[] = [];
+  const advisor = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const body = (await request.json()) as { messages: { role: string; content: string }[] };
+      advisorCalls.push({ messages: body.messages ?? [] });
+      if (options.advisorFails) {
+        // The shape the audit caught being relayed to the browser verbatim.
+        return new Response(
+          "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n" +
+            "<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>cloudflare</center>\r\n</body>\r\n</html>",
+          { status: 502, headers: { "Content-Type": "text/html" } },
+        );
+      }
+      return Response.json({
+        id: "msg_test",
+        type: "message",
+        role: "assistant",
+        model: "test",
+        content: [{ type: "text", text: "A short reply." }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+    },
+  });
+  const advisorUrl = `http://127.0.0.1:${advisor.port}`;
+
   const proc = Bun.spawn(["bun", ENTRY], {
     env: {
       ...process.env,
       DB_PATH: dbPath,
       HOST: "127.0.0.1",
-      PORT: String(port),
+      // 0 = let the OS assign; the real port is read back from the startup line.
+      PORT: "0",
       NODE_ENV: "production",
-      PUBLIC_BASE_URL: url,
       // Never a real key: no test may reach the live API.
       ANTHROPIC_API_KEY: "test-key-not-real",
+      ANTHROPIC_BASE_URL: advisorUrl,
       SPRINT_START_DATE: "2026-09-09",
       // Omitted entirely when a test needs the unconfigured case.
       ...(emailEnabled
@@ -93,6 +164,13 @@ export async function startServer(options: { email?: boolean } = {}): Promise<Ha
     stdout: "pipe",
     stderr: "pipe",
   });
+
+  const output: string[] = [];
+  drain(proc.stdout as ReadableStream<Uint8Array>, output);
+  drain(proc.stderr as ReadableStream<Uint8Array>, output);
+
+  const port = await waitForPort(output);
+  const url = `http://127.0.0.1:${port}`;
 
   const deadline = Date.now() + 15_000;
   for (;;) {
@@ -116,11 +194,14 @@ export async function startServer(options: { email?: boolean } = {}): Promise<Ha
     url,
     dbPath,
     sent,
+    advisorCalls,
+    serverOutput: () => output.join(""),
     db: () => new Database(dbPath),
     lastEmailTo: (address: string) => [...sent].reverse().find((m) => m.to === address),
     stop() {
       proc.kill();
       mail.stop(true);
+      advisor.stop(true);
       try {
         rmSync(dir, { recursive: true, force: true });
       } catch {

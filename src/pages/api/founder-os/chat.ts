@@ -4,6 +4,7 @@ import { buildCheckinPrompt } from "../../../lib/prompts/checkin";
 import { getLastCheckin, upsertCheckin } from "../../../db";
 import { advisorReply, advisorReplyStream } from "../../../lib/ai";
 import { getSessionUser } from "../../../lib/auth";
+import { capHistory, chatLimiter } from "../../../lib/limits";
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
@@ -208,6 +209,16 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       return Response.json({ error: "messages array required" }, { status: 400 });
     }
 
+    // Every call here costs money on a metered API, and any authenticated
+    // founder could previously make them without limit.
+    const limited = chatLimiter.check(session.email);
+    if (limited) {
+      return Response.json(
+        { error: "You are sending messages very quickly. Give it a moment." },
+        { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } },
+      );
+    }
+
     const personality = body.personality || "none";
     // More headroom than the OpenClaw caps: the current model writes longer by
     // default. Brevity is enforced by the style guardrails in the system prompt,
@@ -216,7 +227,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
     const advisorRequest = {
       system: buildSystem(body),
-      messages: body.messages,
+      // Trimmed to the most recent turns under a character budget. A 500
+      // message / ~1 MB history was forwarded upstream verbatim before this.
+      messages: capHistory(body.messages),
       maxTokens,
     };
 
@@ -260,7 +273,13 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
     return Response.json({ content });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Chat request failed.";
-    return Response.json({ error: message }, { status: 500 });
+    // The upstream error used to be relayed verbatim, which returned raw
+    // provider and CDN detail (a full Cloudflare 502 HTML page, in one case)
+    // straight to the browser.
+    console.error("[chat] request failed:", err);
+    return Response.json(
+      { error: "The advisor is unavailable right now. Please try again." },
+      { status: 502 },
+    );
   }
 };

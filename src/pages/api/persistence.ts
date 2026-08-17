@@ -17,6 +17,10 @@ import {
   NotOwnerError,
 } from "../../db/index";
 import { getSessionUser, type SessionUser } from "../../lib/auth";
+import {
+  cap, MAX_MESSAGES_PER_THREAD, MAX_MESSAGE_CHARS,
+  MAX_SUMMARY_CHARS, MAX_TITLE_CHARS,
+} from "../../lib/limits";
 
 /**
  * Reading and writing founder data, under the cohort's privacy rule:
@@ -84,17 +88,28 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.thread || !body.userEmail) return err("thread + userEmail required");
         const t = body.thread;
+        if (typeof t.id !== "string" || !t.id) return err("thread.id required");
+        if (!Array.isArray(t.messages)) return err("thread.messages must be an array");
+        if (t.messages.length > MAX_MESSAGES_PER_THREAD) {
+          return err(`A conversation cannot exceed ${MAX_MESSAGES_PER_THREAD} messages.`, 413);
+        }
         upsertThread(
           {
-            id: t.id,
+            id: t.id.slice(0, 200),
             user_email: session!.email,
-            title: t.title,
-            theme: t.theme,
-            state: t.state,
-            last_at: t.lastAt,
-            personality: t.personality || "none",
+            // Capped so a single oversized field cannot fill the disk. The
+            // middleware rejects giant bodies; these bound what a legitimate
+            // request can still write.
+            title: cap(t.title, MAX_TITLE_CHARS),
+            theme: cap(t.theme, MAX_TITLE_CHARS),
+            state: cap(t.state, 40),
+            last_at: cap(t.lastAt, 80),
+            personality: cap(t.personality, 40) || "none",
           },
-          t.messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+          t.messages.map((m) => ({
+            role: m.role === "assistant" ? "assistant" as const : "user" as const,
+            content: cap(m.content, MAX_MESSAGE_CHARS),
+          })),
         );
         return json({ ok: true });
       }
@@ -116,16 +131,19 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.decision || !body.userEmail) return err("decision + userEmail required");
         const d = body.decision;
+        if (typeof d.id !== "string" || !d.id) return err("decision.id required");
+        if (d.door !== "reversible" && d.door !== "one-way") return err("decision.door invalid");
+        if (d.status && d.status !== "open" && d.status !== "closed") return err("decision.status invalid");
         upsertDecision({
-          id: d.id,
+          id: d.id.slice(0, 200),
           user_email: session!.email,
-          thread_id: d.threadId || null,
-          summary: d.summary,
-          door: d.door as "reversible" | "one-way",
+          thread_id: d.threadId ? d.threadId.slice(0, 200) : null,
+          summary: cap(d.summary, MAX_SUMMARY_CHARS),
+          door: d.door,
           status: (d.status || "open") as "open" | "closed",
-          theme: d.theme,
-          outcome: d.outcome || null,
-          at: d.at || "today",
+          theme: cap(d.theme, MAX_TITLE_CHARS),
+          outcome: d.outcome ? cap(d.outcome, MAX_SUMMARY_CHARS) : null,
+          at: cap(d.at, 80) || "today",
         });
         return json({ ok: true });
       }
@@ -134,13 +152,18 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.checkin || !body.userEmail) return err("checkin + userEmail required");
+        const c = body.checkin;
+        if (typeof c.id !== "string" || !c.id) return err("checkin.id required");
+        const mood = typeof c.mood === "number" && Number.isFinite(c.mood)
+          ? Math.max(0, Math.min(100, Math.round(c.mood)))
+          : null;
         upsertCheckin({
-          id: body.checkin.id,
+          id: c.id.slice(0, 200),
           user_email: session!.email,
-          ref_decision_id: body.checkin.refDecisionId || null,
-          theme: body.checkin.theme || null,
-          prompt: body.checkin.prompt,
-          mood: body.checkin.mood ?? null,
+          ref_decision_id: c.refDecisionId ? c.refDecisionId.slice(0, 200) : null,
+          theme: c.theme ? cap(c.theme, MAX_TITLE_CHARS) : null,
+          prompt: cap(c.prompt, MAX_SUMMARY_CHARS),
+          mood,
         });
         return json({ ok: true });
       }
@@ -166,9 +189,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         if (!body.userEmail || !body.workingGenius) return err("workingGenius + userEmail required");
         upsertWorkingGenius({
           user_email: session!.email,
-          primary_type: body.workingGenius.primary,
-          counts_json: JSON.stringify(body.workingGenius.counts),
-          completed_at: body.workingGenius.completedAt,
+          primary_type: cap(body.workingGenius.primary, 60),
+          counts_json: JSON.stringify(body.workingGenius.counts ?? {}).slice(0, 2_000),
+          completed_at: cap(body.workingGenius.completedAt, 60),
         });
         return json({ ok: true });
       }

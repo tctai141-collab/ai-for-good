@@ -43,7 +43,20 @@ let cachedClient: Anthropic | null = null;
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new AdvisorNotConfiguredError();
-  if (!cachedClient) cachedClient = new Anthropic({ apiKey });
+  if (!cachedClient) {
+    cachedClient = new Anthropic({
+      apiKey,
+      // Overridable so the integration tests can point at a local stand-in and
+      // exercise this path without reaching the real API. Unset in production.
+      ...(process.env.ANTHROPIC_BASE_URL?.trim()
+        ? { baseURL: process.env.ANTHROPIC_BASE_URL.trim() }
+        : {}),
+      // A founder is waiting on this in a chat window. Failing in a few
+      // seconds beats the SDK's default retry ladder holding the request open.
+      maxRetries: 1,
+      timeout: 30_000,
+    });
+  }
   return cachedClient;
 }
 
