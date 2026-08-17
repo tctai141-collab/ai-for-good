@@ -19,6 +19,7 @@ import {
 } from "../../db/index";
 import { TOTAL_WEEKS, currentSprintWeek, weekForDateClamped } from "../../lib/sprint-calendar";
 import { getSessionUser, type SessionUser } from "../../lib/auth";
+import { reportError } from "../../lib/errors";
 import {
   cap, MAX_MESSAGES_PER_THREAD, MAX_MESSAGE_CHARS,
   MAX_SUMMARY_CHARS, MAX_TITLE_CHARS,
@@ -208,7 +209,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     // Writing to a record somebody else owns is a permission failure, not a
     // server fault.
     if (e instanceof NotOwnerError) return err("forbidden", 403);
-    console.error("persistence POST failed:", e);
+    reportError(e, { where: "persistence.POST" });
     return json({ error: "Could not save that. Please try again." }, 500);
   }
 };
@@ -316,7 +317,7 @@ export const GET: APIRoute = async ({ cookies, request }) => {
     }
   } catch (e) {
     if (e instanceof NotOwnerError) return err("forbidden", 403);
-    console.error("persistence GET failed:", e);
+    reportError(e, { where: "persistence.GET" });
     return json({ error: "Could not load that. Please try again." }, 500);
   }
 };

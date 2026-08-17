@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { reportError } from "./errors";
 import { tmpdir } from "node:os";
 
 /**
@@ -201,7 +202,7 @@ export function startBackupScheduler(): void {
       const result = await runBackup();
       console.info(`[backup] wrote ${result.key} (${result.bytes} bytes), pruned ${result.pruned.length}`);
     } catch (error) {
-      console.error("[backup] failed:", error);
+      reportError(error, { where: "backup" });
     }
   };
 

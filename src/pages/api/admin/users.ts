@@ -10,6 +10,7 @@ import {
   updateUser,
   type Role,
 } from "../../../db/index";
+import { reportError } from "../../../lib/errors";
 import {
   EmailNotConfiguredError,
   isEmailConfigured,
@@ -256,7 +257,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       return Response.json({ error: `Unknown action: ${body.action}` }, { status: 400 });
   }
   } catch (error) {
-    console.error("[admin] action failed:", body.action, error);
+    reportError(error, { where: "admin.users", extra: { action: String(body.action) } });
     return Response.json(
       { error: "That did not work. Nothing was changed — check the server logs." },
       { status: 500 },

@@ -498,7 +498,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             title="Collapse sidebar"
             tabIndex={open ? 0 : -1}
             className="navitem sidebar-collapse-button"
-            style={{ marginTop: 8, marginRight: -2, background: "transparent", border: `1px solid var(--line)`, color: C.ink, cursor: "pointer", padding: "3px 10px 5px", fontSize: 22, lineHeight: 1, borderRadius: 8, width: "auto", fontWeight: 900, opacity: 0.35 }}
+            style={{ marginTop: 8, marginRight: -2, background: "transparent", border: `1px solid var(--line)`, color: C.ink, cursor: "pointer", padding: "9px 12px 11px", fontSize: 22, lineHeight: 1, borderRadius: 8, width: "auto", fontWeight: 900, opacity: 0.35 }}
           >
             ‹
           </button>
@@ -874,7 +874,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
               placeholder={mode === "panic" ? "Say it plainly. One thing at a time." : mode === "venting" ? "Let it out, nobody's grading this." : "What are you turning over?"}
-              style={{ flex: 1, background: "transparent", border: "none", padding: "6px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", maxHeight: 160, outline: "none" }} />
+              style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
             <button
               onClick={() => send()}
               disabled={busy || !input.trim()}
@@ -1672,9 +1672,11 @@ const CSS = `
 .newbtn:hover { opacity: .9; }
 .composer-box:focus-within { border-color: var(--brand-blue)!important; }
 .send-button {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  /* 44px is the smallest reliable touch target on iOS and Android, and this
+     is the control founders hit most. It was 36px. */
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   display: grid;
   place-items: center;
   margin-bottom: 0;

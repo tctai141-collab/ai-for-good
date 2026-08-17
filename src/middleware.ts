@@ -1,6 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 import { startBackupScheduler } from "./lib/backup";
 import { MAX_BODY_BYTES } from "./lib/limits";
+import { reportError } from "./lib/errors";
 
 // Module scope runs once when the server boots, which is the only start hook
 // Astro gives us. No-ops outside production and when no backup target is set.
@@ -48,7 +49,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
     );
   }
 
-  const response = await next();
+  // Anything a route did not catch itself ends up here. Without this an
+  // unexpected throw became an empty 500 with no record anywhere.
+  let response: Response;
+  try {
+    response = await next();
+  } catch (error) {
+    reportError(error, {
+      where: "unhandled",
+      extra: { path: new URL(context.request.url).pathname, method: context.request.method },
+    });
+    response = new Response(
+      JSON.stringify({ error: "Something went wrong. Please try again." }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
 
   // Never leak a path — and therefore never a setup token — to another origin.
   response.headers.set("Referrer-Policy", "no-referrer");
@@ -81,8 +96,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com data:",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
       "img-src 'self' data:",
       "connect-src 'self'",
       "frame-ancestors 'none'",

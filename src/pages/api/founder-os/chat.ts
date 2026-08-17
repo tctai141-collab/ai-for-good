@@ -5,6 +5,7 @@ import { getLastCheckin, upsertCheckin } from "../../../db";
 import { advisorReply, advisorReplyStream } from "../../../lib/ai";
 import { getSessionUser } from "../../../lib/auth";
 import { capHistory, chatLimiter } from "../../../lib/limits";
+import { reportError } from "../../../lib/errors";
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
@@ -318,7 +319,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     // The upstream error used to be relayed verbatim, which returned raw
     // provider and CDN detail (a full Cloudflare 502 HTML page, in one case)
     // straight to the browser.
-    console.error("[chat] request failed:", err);
+    reportError(err, { where: "chat" });
     return Response.json(
       { error: "The advisor is unavailable right now. Please try again." },
       { status: 502 },
