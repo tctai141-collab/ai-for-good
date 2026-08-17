@@ -67,8 +67,55 @@ export type WorkingGeniusRow = {
   completed_at: string;
 };
 
+/**
+ * Raised when a caller tries to write a record that belongs to someone else.
+ *
+ * Every record id below is chosen by the client, so identity ("you are who you
+ * say you are") is not the same question as ownership ("this row is yours").
+ * Checking only the first is what allowed one founder to overwrite another's
+ * conversation. The check lives here rather than in the API layer so it cannot
+ * be bypassed by a future caller that forgets it.
+ */
+export class NotOwnerError extends Error {
+  constructor(kind: string) {
+    super(`not the owner of this ${kind}`);
+    this.name = "NotOwnerError";
+  }
+}
+
+export type OwnedRecord = "thread" | "decision" | "checkin";
+
+/** The owner of an existing record, or null when the id is not yet taken. */
+export function ownerOf(kind: OwnedRecord, id: string): string | null {
+  const db = getDb();
+  // Literal SQL per branch — no identifier interpolation.
+  const sql =
+    kind === "thread"
+      ? "SELECT user_email FROM threads WHERE id = $id"
+      : kind === "decision"
+        ? "SELECT user_email FROM decisions WHERE id = $id"
+        : "SELECT user_email FROM checkins WHERE id = $id";
+  const row = db.query(sql).get({ $id: id }) as { user_email: string } | null;
+  return row?.user_email ?? null;
+}
+
+/**
+ * Throws unless `email` may write to `id`. An id nobody holds yet is claimable;
+ * an id somebody else holds is refused rather than silently ignored, so the
+ * caller can return 403 instead of reporting a success that did nothing.
+ */
+function assertOwner(kind: OwnedRecord, id: string, email: string): void {
+  const existing = ownerOf(kind, id);
+  if (existing !== null && existing !== email) throw new NotOwnerError(kind);
+}
+
 export function upsertThread(thread: ThreadRow, messages: { role: "user" | "assistant"; content: string }[]) {
   const db = getDb();
+
+  // Before anything else: this thread must be unclaimed or already ours.
+  // Without this, the DELETE FROM messages below would wipe another founder's
+  // conversation even when the INSERT itself was correctly scoped.
+  assertOwner("thread", thread.id, thread.user_email);
 
   const insert = db.prepare(`
     INSERT INTO threads (id, user_email, title, theme, state, last_at, personality, updated_at)
@@ -76,6 +123,7 @@ export function upsertThread(thread: ThreadRow, messages: { role: "user" | "assi
     ON CONFLICT(id) DO UPDATE SET
       title = $title, theme = $theme, state = $state, last_at = $last_at,
       personality = $personality, updated_at = datetime('now')
+    WHERE threads.user_email = $user_email
   `);
 
   const deleteMsgs = db.prepare("DELETE FROM messages WHERE thread_id = $thread_id");
@@ -126,16 +174,24 @@ export function getDecisions(userEmail: string) {
 
 export function upsertDecision(d: Omit<DecisionRow, "at"> & { at?: string }) {
   const db = getDb();
+  assertOwner("decision", d.id, d.user_email);
+
+  // A decision may only point at a thread the same person owns. Otherwise one
+  // founder could hang their decision off another's conversation.
+  const threadId =
+    d.thread_id && ownerOf("thread", d.thread_id) === d.user_email ? d.thread_id : null;
+
   db.run(
     `INSERT INTO decisions (id, user_email, thread_id, summary, door, status, theme, outcome, at, updated_at)
      VALUES ($id, $user_email, $thread_id, $summary, $door, $status, $theme, $outcome, $at, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        status = $status, outcome = $outcome, updated_at = datetime('now'),
-       thread_id = COALESCE($thread_id, thread_id)`,
+       thread_id = COALESCE($thread_id, thread_id)
+     WHERE decisions.user_email = $user_email`,
     {
       $id: d.id,
       $user_email: d.user_email,
-      $thread_id: d.thread_id ?? null,
+      $thread_id: threadId,
       $summary: d.summary,
       $door: d.door,
       $status: d.status,
@@ -163,15 +219,24 @@ export function getLastCheckin(userEmail: string): CheckinRow | null {
 
 export function upsertCheckin(c: CheckinRow) {
   const db = getDb();
+  assertOwner("checkin", c.id, c.user_email);
+
+  // Same rule as decisions: only reference a decision you own.
+  const refDecisionId =
+    c.ref_decision_id && ownerOf("decision", c.ref_decision_id) === c.user_email
+      ? c.ref_decision_id
+      : null;
+
   db.run(
     `INSERT INTO checkins (id, user_email, ref_decision_id, theme, prompt, mood)
      VALUES ($id, $user_email, $ref_decision_id, $theme, $prompt, $mood)
      ON CONFLICT(id) DO UPDATE SET
-       mood = COALESCE($mood, mood)`,
+       mood = COALESCE($mood, mood)
+     WHERE checkins.user_email = $user_email`,
     {
       $id: c.id,
       $user_email: c.user_email,
-      $ref_decision_id: c.ref_decision_id ?? null,
+      $ref_decision_id: refDecisionId,
       $theme: c.theme ?? null,
       $prompt: c.prompt,
       $mood: c.mood ?? null,
@@ -179,9 +244,14 @@ export function upsertCheckin(c: CheckinRow) {
   );
 }
 
-export function deleteCheckin(id: string) {
+/** Scoped by owner: deleting somebody else's check-in affects zero rows. */
+export function deleteCheckin(id: string, userEmail: string) {
   const db = getDb();
-  db.run("DELETE FROM checkins WHERE id = $id", { $id: id });
+  assertOwner("checkin", id, userEmail);
+  db.run("DELETE FROM checkins WHERE id = $id AND user_email = $email", {
+    $id: id,
+    $email: userEmail,
+  });
 }
 
 export function getVisits(userEmail: string): number {
@@ -417,12 +487,19 @@ export function markInviteUsed(token: string): void {
  * A founder opting a single conversation in to coach visibility. Scoped by
  * user_email so one founder cannot share another's thread.
  */
-export function setThreadShared(threadId: string, userEmail: string, shared: boolean): void {
+export function setThreadShared(threadId: string, userEmail: string, shared: boolean): boolean {
   const db = getDb();
   db.run(
     "UPDATE threads SET shared_with_coach = $shared WHERE id = $id AND user_email = $email",
     { $shared: shared ? 1 : 0, $id: threadId, $email: userEmail },
   );
+  // Read the flag back rather than echoing the request. The scoping above
+  // means a call naming somebody else's thread updates nothing, and returning
+  // the requested value would have told the founder it worked.
+  const row = db
+    .query("SELECT shared_with_coach FROM threads WHERE id = $id AND user_email = $email")
+    .get({ $id: threadId, $email: userEmail }) as { shared_with_coach: number } | null;
+  return row?.shared_with_coach === 1;
 }
 
 /** The only raw-transcript view organizers get: threads founders chose to share. */

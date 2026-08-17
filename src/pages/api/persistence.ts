@@ -14,6 +14,7 @@ import {
   ensureUser,
   getWorkingGenius,
   upsertWorkingGenius,
+  NotOwnerError,
 } from "../../db/index";
 import { getSessionUser, type SessionUser } from "../../lib/auth";
 
@@ -30,7 +31,15 @@ import { getSessionUser, type SessionUser } from "../../lib/auth";
  * read write for the audience, and the signal disappears.
  */
 
-/** Writes are always first-person. Nobody edits anyone else's data. */
+/**
+ * Writes are always first-person. Nobody edits anyone else's data.
+ *
+ * This proves *identity* only. Every record id below is chosen by the client,
+ * so passing this check does not establish that the record being written
+ * belongs to the caller — that is enforced separately in the db layer, which
+ * throws NotOwnerError and is translated to 403 at the bottom of this handler.
+ * Conflating the two is what let one founder overwrite another's thread.
+ */
 function requireSelf(session: SessionUser | null, userEmail?: string): string | null {
   if (!session) return "not authenticated";
   if (!userEmail) return "userEmail required";
@@ -78,7 +87,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         upsertThread(
           {
             id: t.id,
-            user_email: body.userEmail,
+            user_email: session!.email,
             title: t.title,
             theme: t.theme,
             state: t.state,
@@ -96,8 +105,10 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.threadId || !body.userEmail) return err("threadId + userEmail required");
-        setThreadShared(body.threadId, body.userEmail, Boolean(body.shared));
-        return json({ ok: true, shared: Boolean(body.shared) });
+        // Report the state the database actually holds, not the state that
+        // was requested — a write that matched no row used to report success.
+        const shared = setThreadShared(body.threadId, session!.email, Boolean(body.shared));
+        return json({ ok: true, shared });
       }
 
       case "save-decision": {
@@ -107,7 +118,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         const d = body.decision;
         upsertDecision({
           id: d.id,
-          user_email: body.userEmail,
+          user_email: session!.email,
           thread_id: d.threadId || null,
           summary: d.summary,
           door: d.door as "reversible" | "one-way",
@@ -125,7 +136,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         if (!body.checkin || !body.userEmail) return err("checkin + userEmail required");
         upsertCheckin({
           id: body.checkin.id,
-          user_email: body.userEmail,
+          user_email: session!.email,
           ref_decision_id: body.checkin.refDecisionId || null,
           theme: body.checkin.theme || null,
           prompt: body.checkin.prompt,
@@ -138,7 +149,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.checkinId) return err("checkinId required");
-        deleteCheckin(body.checkinId);
+        deleteCheckin(body.checkinId, session!.email);
         return json({ ok: true });
       }
 
@@ -146,7 +157,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.userEmail) return err("userEmail required");
-        return json({ count: incrementVisits(body.userEmail) });
+        return json({ count: incrementVisits(session!.email) });
       }
 
       case "save-working-genius": {
@@ -154,7 +165,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
         if (!body.userEmail || !body.workingGenius) return err("workingGenius + userEmail required");
         upsertWorkingGenius({
-          user_email: body.userEmail,
+          user_email: session!.email,
           primary_type: body.workingGenius.primary,
           counts_json: JSON.stringify(body.workingGenius.counts),
           completed_at: body.workingGenius.completedAt,
@@ -166,8 +177,11 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         return err("unknown action: " + body.action);
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Persistence error";
-    return json({ error: msg }, 500);
+    // Writing to a record somebody else owns is a permission failure, not a
+    // server fault.
+    if (e instanceof NotOwnerError) return err("forbidden", 403);
+    console.error("persistence POST failed:", e);
+    return json({ error: "Could not save that. Please try again." }, 500);
   }
 };
 
@@ -225,8 +239,9 @@ export const GET: APIRoute = async ({ cookies, request }) => {
         return err("unknown resource: " + resource);
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Persistence error";
-    return json({ error: msg }, 500);
+    if (e instanceof NotOwnerError) return err("forbidden", 403);
+    console.error("persistence GET failed:", e);
+    return json({ error: "Could not load that. Please try again." }, 500);
   }
 };
 
