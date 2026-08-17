@@ -102,7 +102,11 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       id: t.id,
       title: t.title,
       theme: t.theme,
-      state: t.state,
+      // SQLite has no CHECK on threads.state, so narrow at the boundary
+      // rather than asserting. Anything unexpected reads as "thinking".
+      state: (["panic", "thinking", "venting"] as const).includes(t.state as never)
+        ? (t.state as Thread["state"])
+        : "thinking",
       lastAt: t.last_at,
       personality: (t.personality || "none") as Personality,
       messages: t.messages || [],

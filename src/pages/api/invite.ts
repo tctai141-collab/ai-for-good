@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { getInvite, markInviteUsed, setUserPassword } from "../../db/index";
+import { getInvite, redeemInvite } from "../../db/index";
 import {
   endAllSessions,
   hashPassword,
@@ -55,8 +55,11 @@ export const POST: APIRoute = async ({ cookies, request }) => {
   const problem = validatePassword(password);
   if (problem) return Response.json({ error: problem }, { status: 400 });
 
-  setUserPassword(invite.email, await hashPassword(password));
-  markInviteUsed(token);
+  // Claiming the token and setting the password happen together, so two
+  // concurrent redemptions of one link cannot both succeed.
+  const claimed = redeemInvite(token, await hashPassword(password));
+  if (!claimed) return Response.json({ error: INVALID_LINK }, { status: 400 });
+
   // On a reset, drop any session opened with the old password.
   endAllSessions(invite.email);
   startSession(cookies, request, invite.email);

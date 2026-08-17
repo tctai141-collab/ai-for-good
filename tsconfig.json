@@ -27,6 +27,8 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": [".astro/types.d.ts", "src/**/*", "astro.config.mjs"],
+  // scripts/ and test/ were outside typechecking, so create-organizer.ts — the
+  // production bootstrap path — was never checked at all.
+  "include": [".astro/types.d.ts", "src/**/*", "scripts/**/*", "test/**/*", "astro.config.mjs"],
   "exclude": ["dist", "node_modules"]
 }

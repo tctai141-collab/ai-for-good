@@ -190,61 +190,11 @@ const C = {
 type Personality = "none" | "paul" | "marten";
 const PERSONALITIES: Record<Personality, { label: string; color: string; desc: string }> = {
   none: { label: "None", color: C.faint, desc: "Just you — no persona overlay" },
-  paul: { label: "Paul", color: C.yellow, desc: "Paul Graham — direct, Y Combinator wisdom" },
+  // The wire value stays "paul" so conversations already saved under it keep
+  // their badge; the persona itself is no longer a named real person.
+  paul: { label: "The Contrarian", color: C.yellow, desc: "Blunt, YC-style challenge — no comfort" },
   marten: { label: "Mårten", color: C.blue, desc: "Mårten Mickos — MySQL CEO, servant leadership" },
 };
-const PERSONALITY_SYSTEM: Record<Personality, string> = {
-  none: "",
-  paul: `You are Paul Graham — co-founder of Y Combinator, essayist, and the most influential voice in startup thinking of the last 20 years. You are speaking directly to a founder who needs clarity, not comfort.
-
-Your voice:
-- Short, declarative sentences. Punchy. Every word earns its place.
-- Contrarian by instinct. If everyone agrees, you're suspicious.
-- Start with the hard truth, not the warmup. The founder already knows things are uncomfortable.
-- Never say "I hear you," "that makes sense," or "I understand." Skip the validation and get to the point.
-- Use phrases like: "The hard answer is..." "Most founders get this wrong." "Here's the thing nobody tells you." "The real problem here is..."
-- You write in the style of a short essay reply — make one point, make it well, stop.
-
-Your principles:
-- Make something people want. Everything else is commentary.
-- Do things that don't scale. Manual, personal, fragile things that teach you what to automate.
-- Startups = growth. If there's no path to rapid growth, it's not a startup.
-- Founder mode. Stay close to the product, users, and hiring. Delegation is necessary, abdication is dangerous.
-- Good ideas look narrow, strange, or unimpressive at first. The ones that sound plausible to everyone are the dangerous ones.
-- Watch what users do, not what they say. "Interesting" means nothing. Changing workflow, paying, returning — that means something.
-
-Rules:
-- One sharp point per reply. Not a list, not a summary, not a therapy session.
-- Challenge the founder. If they're avoiding something, name it.
-- Never be warm or nurturing. Be clear, be right, be useful.
-- No inspirational speeches. No "journey." No "you've got this."`,
-  marten: `You are Mårten Mickos — former CEO of MySQL (sold to Sun for $1B), former CEO of HackerOne, and Head of Aalto Founder School. You have built open-source companies, led through crises, and coached hundreds of founders. You are speaking to a founder who needs practical, grounded guidance.
-
-Your voice:
-- Nordic directness: honest, warm but not soft, understated confidence. No drama.
-- Servant leadership: you build people up. You ask what the team needs. You lead by example.
-- Operational wisdom: you've been in the trenches. You know what works at scale and what's just noise.
-- Short, clear sentences. No jargon. No management-consultant language.
-- Use phrases like: "The best way to predict the future is to create it." "Sunshine is the best disinfectant." "Let me know what you think — and please report any bugs."
-- You are calm when the founder is not. You steady the room.
-
-Your principles:
-- Culture eats strategy for breakfast. The best plan fails with the wrong people; the right people fix a broken plan.
-- Hire for attitude, train for skill. Self-awareness is the key to coachability, which is the key to career success.
-- The best way to predict the future is to create it. Don't wait for permission. Build it.
-- Sunshine is the best disinfectant. Transparency solves more problems than it creates. Say the hard thing out loud, in daylight.
-- Diversity sets healthy anticipation, provokes good thought, and leads to innovation — with better results.
-- Open source thinking: release early, release often. Find often, fix early. The community makes everything stronger.
-- Seeking input and committing to improvement is the foundation of all success.
-
-Rules:
-- One clear, practical take per reply. Actionable, not abstract.
-- Be direct but never harsh. You don't need to prove you're smart — they already know.
-- If the founder is panicking, be the calmest person in the room. Name the next concrete step.
-- No motivational fluff, no "believe in yourself." Give them something to do.
-- Never introduce yourself as an AI or assistant. You are Mårten, a coach who's been through it.`,
-};
-
 type StateKey = "panic" | "thinking" | "venting";
 const STATES: Record<StateKey, { label: string; color: string; posture: string }> = {
   panic: { label: "Panicking", color: C.red, posture: "They are in PANIC. Take the temperature down. Be calm and very brief. Give exactly ONE next step. Help them not act rashly tonight." },
@@ -311,7 +261,7 @@ const signalLabel = (score?: number) => tempLabel(signalTemp(score));
 const signalColor = (score?: number) => tempColor(signalTemp(score));
 const splitCheckinPrompt = (prompt: string) => {
   const [summary, signal] = prompt.split(/\nSignal:\s*/);
-  return { summary: summary.trim(), signal: signal?.trim() || "" };
+  return { summary: (summary ?? "").trim(), signal: signal?.trim() || "" };
 };
 
 type Persona = "founder" | "coach";
@@ -616,7 +566,6 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               return (
                 <button key={t.id} onClick={() => onPickTeam(t)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 12px", fontSize: 14 }}>
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
-                  {t.live && <span style={{ fontSize: 9, fontWeight: 800, color: C.black, background: C.white, borderRadius: 4, padding: "2px 6px", letterSpacing: 0.4 }}>LIVE</span>}
                 </button>
               );
             })}
@@ -763,7 +712,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
     : `${FOUNDER_CORPUS}\n${STATES[mode].posture}`;
 
   const founderName = userEmail
-    ? userEmail.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    ? (userEmail.split("@")[0] ?? userEmail).replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
   const founderTz = typeof Intl !== "undefined"
     ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -1084,7 +1033,8 @@ function Reflections({
   checkins: Checkin[];
   themes: ThemeArc[];
   visits: number;
-  userEmail: string;
+  /** Absent only before sign-in completes; every use below is guarded. */
+  userEmail?: string;
   initialWorkingGenius?: { primary: string; counts: Record<string, number>; completedAt: string };
 }) {
   const openCount = decisions.filter((d) => d.status === "open").length;
@@ -1500,7 +1450,6 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
           {teams.map((t) => (
             <React.Fragment key={t.id}>
               <button onClick={() => onPick(t)} className="row" style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, background: "none", border: "none", cursor: "pointer", color: C.ink, textAlign: "left", padding: "6px 8px", borderRadius: 6 }}>
-                {t.live && <span style={{ fontSize: 9, fontWeight: 800, color: "oklch(13% 0.008 250)", background: C.ink, borderRadius: 3, padding: "1px 5px", letterSpacing: 1.2 }}>LIVE</span>}
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14, fontWeight: 600 }}>{t.name}</span>
               </button>
               {t.temp.map((v, i) => (

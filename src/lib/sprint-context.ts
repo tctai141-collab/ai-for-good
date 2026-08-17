@@ -352,5 +352,6 @@ export function getSprintContext(): string {
 }
 
 function pickOne(arr: string[]): string {
-  return arr[Math.floor(Math.random() * arr.length)];
+  if (arr.length === 0) return "";
+  return arr[Math.floor(Math.random() * arr.length)] ?? "";
 }

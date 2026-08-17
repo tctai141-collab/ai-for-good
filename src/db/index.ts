@@ -560,6 +560,41 @@ export function markInviteUsed(token: string): void {
   db.run("UPDATE invites SET used_at = datetime('now') WHERE token = $token", { $token: token });
 }
 
+/**
+ * Claims an invite and sets the password in one transaction.
+ *
+ * Redemption used to be validate() -> setUserPassword() -> markInviteUsed() as
+ * three separate statements, so two concurrent requests with the same token
+ * could both pass validation and both set a password. The UPDATE below only
+ * matches a token that is still unused, so exactly one caller can win.
+ *
+ * Returns false when the token was already claimed.
+ */
+export function redeemInvite(token: string, passwordHash: string): boolean {
+  const db = getDb();
+  let claimed = false;
+  db.transaction(() => {
+    db.run(
+      "UPDATE invites SET used_at = datetime('now') WHERE token = $token AND used_at IS NULL",
+      { $token: token },
+    );
+    const row = db
+      .query("SELECT changes() AS n")
+      .get() as { n: number };
+    if (row.n !== 1) return;
+    const invite = db
+      .query("SELECT user_email FROM invites WHERE token = $token")
+      .get({ $token: token }) as { user_email: string } | null;
+    if (!invite) return;
+    db.run("UPDATE users SET password_hash = $hash WHERE email = $email", {
+      $hash: passwordHash,
+      $email: invite.user_email,
+    });
+    claimed = true;
+  })();
+  return claimed;
+}
+
 // --- per-thread sharing ---
 
 /**

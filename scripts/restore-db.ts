@@ -52,7 +52,9 @@ if (existsSync(destination)) {
 }
 
 // Fetch the compressed snapshot from wherever backups live.
-let gzipped: Uint8Array;
+// Typed over ArrayBuffer specifically: Bun.write rejects a Uint8Array backed by
+// a SharedArrayBuffer, which is what the plain Uint8Array type allows.
+let gzipped: Uint8Array<ArrayBuffer>;
 if (target.kind === "r2") {
   gzipped = new Uint8Array(await target.client.file(key).arrayBuffer());
 } else {

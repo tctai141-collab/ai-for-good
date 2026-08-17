@@ -11,11 +11,39 @@ const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
 
 function persistCheckinSummary(userEmail: string, fullContent: string): void {
   const match = fullContent.match(CHECKIN_TAG_RE);
-  if (!match) return;
+
+  // The model is asked to end a check-in with a [CHECKIN_SUMMARY] tag. When it
+  // does not, this used to return having recorded nothing at all — so the
+  // founder had a complete conversation, and the organizer's dashboard showed
+  // a missing week that reads as "gone quiet". Silence from a founder is the
+  // single most important signal on that dashboard, and this manufactured it.
+  //
+  // A check-in still gets recorded, with a null score: the founder turned up,
+  // we just have no reading. And the miss is logged, because a model that
+  // stops emitting the tag should be visible rather than slowly degrading the
+  // dashboard.
+  if (!match) {
+    console.warn(`[checkin] no [CHECKIN_SUMMARY] tag in the reply for ${userEmail}; recording an unscored check-in`);
+    try {
+      upsertCheckin({
+        id: crypto.randomUUID(),
+        user_email: userEmail,
+        ref_decision_id: null,
+        theme: "checkin",
+        prompt: "Check-in completed, but no summary was produced.",
+        mood: null,
+      });
+    } catch (err) {
+      console.error("Failed to persist unscored check-in:", err);
+    }
+    return;
+  }
+
+  const summary = (match[1] ?? "").trim();
   const signal = parseCheckinSignal(fullContent);
   const prompt = signal
-    ? `${match[1].trim()}\nSignal: ${signal.status} ${signal.score}/100 — ${signal.detail}`
-    : match[1].trim();
+    ? `${summary}\nSignal: ${signal.status} ${signal.score}/100 — ${signal.detail}`
+    : summary;
   try {
     upsertCheckin({
       id: crypto.randomUUID(),
@@ -34,7 +62,7 @@ function parseCheckinSignal(fullContent: string): { score: number; status: strin
   const match = fullContent.match(CHECKIN_SIGNAL_RE);
   if (!match) return null;
 
-  const raw = match[1].trim();
+  const raw = (match[1] ?? "").trim();
   try {
     const parsed = JSON.parse(raw) as { score?: number; status?: string; detail?: string };
     const score = clampScore(parsed.score);
@@ -98,7 +126,19 @@ const POSTURE_PROMPTS: Record<string, string> = {
   venting: "They are VENTING. Mostly witness and validate. One gentle reframe. Do not problem-solve hard.",
 };
 
-const PAUL_SYSTEM = `You are Paul Graham — co-founder of Y Combinator, essayist, and the most influential voice in startup thinking of the last 20 years. You are speaking directly to a founder who needs clarity, not comfort.
+/*
+ * A generic archetype, not a named person.
+ *
+ * This was written as "You are Paul Graham" and instructed to speak as him to
+ * students. Mårten Mickos is on the operating team and can consent to a
+ * persona in his own voice; Paul Graham has not been asked and has no
+ * relationship to this programme. Presenting AI-generated advice to founders
+ * under a real person's name is not something to do without their agreement,
+ * so the persona keeps the posture — contrarian, terse, growth-obsessed — and
+ * drops the identity. The principles below are ordinary startup canon, not
+ * anyone's copyrighted text.
+ */
+const CONTRARIAN_SYSTEM = `You are a blunt, experienced startup mentor in the Y Combinator tradition. You are speaking directly to a founder who needs clarity, not comfort.
 
 Your voice:
 - Short, declarative sentences. Punchy. Every word earns its place.
@@ -120,7 +160,8 @@ Rules:
 - One sharp point per reply. Not a list, not a summary, not a therapy session.
 - Challenge the founder. If they're avoiding something, name it.
 - Never be warm or nurturing. Be clear, be right, be useful.
-- No inspirational speeches. No "journey." No "you've got this."`;
+- No inspirational speeches. No "journey." No "you've got this."
+- Do not claim to be any specific real person. If asked who you are, say you are Sprint Buddy's contrarian advisor.`;
 
 const MARTEN_SYSTEM = `You are Mårten Mickos — former CEO of MySQL (sold to Sun for $1B), former CEO of HackerOne, and Head of Aalto Founder School. You have built open-source companies, led through crises, and coached hundreds of founders. You are speaking to a founder who needs practical, grounded guidance.
 
@@ -158,7 +199,8 @@ function buildSystem(body: {
 }): string {
   let p: string;
   if (body.personality === "paul") {
-    p = PAUL_SYSTEM;
+    // Legacy wire value; the persona is no longer a named person.
+    p = CONTRARIAN_SYSTEM;
   } else if (body.personality === "marten") {
     p = MARTEN_SYSTEM;
   } else {
