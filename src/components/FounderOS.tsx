@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import Tasks from "./Tasks";
 import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared } from "../lib/persistence";
 import type { Checkin, UserData } from "../lib/persistence";
 
@@ -432,6 +433,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
             setVisits={setVisits}
             markCheckinDone={markCheckinDone}
             userEmail={userEmail}
+            beforeMessages={<Tasks userEmail={userEmail} />}
           />
         )}
         {persona === "founder" && view === "reflections" && (
@@ -666,9 +668,11 @@ type ChatProps = {
   setVisits: React.Dispatch<React.SetStateAction<number>>;
   markCheckinDone: () => void;
   userEmail?: string;
+  /** Rendered above the conversation — the deadline card lives here. */
+  beforeMessages?: React.ReactNode;
 };
 
-function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail }: ChatProps) {
+function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail, beforeMessages }: ChatProps) {
   const existingFromActive = active.id ? threads.find((t) => t.id === active.id) : null;
   /* createdThreadId keeps subsequent sends updating the same thread rather
      than spawning duplicates after each user reply. */
@@ -825,6 +829,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
       <div ref={scroller} style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "26px 24px 10px" }}>
+          {beforeMessages}
           {isFresh && msgs.length === 0 && !isCheckin ? (
             <EmptyState ctx={ctx} />
           ) : (
