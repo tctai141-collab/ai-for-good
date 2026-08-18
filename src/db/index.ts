@@ -707,3 +707,186 @@ export function getOpenDecisionCounts(): Record<string, number> {
     .all() as { email: string; n: number }[];
   return Object.fromEntries(rows.map((r) => [r.email, r.n]));
 }
+
+// ---------------------------------------------------------------------------
+// Deadlines and task tracking (Work Package 3)
+//
+// Every id here is generated in this module with crypto.randomUUID() and never
+// accepted from a caller. That is the direct lesson of the cross-tenant write
+// bug: when the client picks the primary key, "are you who you say you are" and
+// "is this row yours" become different questions, and it is easy to check only
+// the first. Server-generated ids remove the question entirely.
+// ---------------------------------------------------------------------------
+
+export type DeadlineRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  due_date: string;
+  sprint_week: number | null;
+  status: "active" | "archived";
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeadlineInput = {
+  title: string;
+  description?: string | null;
+  dueDate: string;
+  sprintWeek?: number | null;
+};
+
+/** Creates a milestone. Returns the row, including its server-chosen id. */
+export function createDeadline(input: DeadlineInput, createdBy: string): DeadlineRow {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  db.run(
+    `INSERT INTO deadlines (id, title, description, due_date, sprint_week, created_by)
+     VALUES ($id, $title, $description, $due_date, $sprint_week, $created_by)`,
+    {
+      $id: id,
+      $title: input.title,
+      $description: input.description ?? null,
+      $due_date: input.dueDate,
+      $sprint_week: input.sprintWeek ?? null,
+      $created_by: createdBy,
+    },
+  );
+  return getDeadline(id)!;
+}
+
+export function getDeadline(id: string): DeadlineRow | null {
+  const db = getDb();
+  return db
+    .query("SELECT * FROM deadlines WHERE id = $id")
+    .get({ $id: id }) as DeadlineRow | null;
+}
+
+/** Active milestones only — what a founder should see. */
+export function listActiveDeadlines(): DeadlineRow[] {
+  const db = getDb();
+  return db
+    .query("SELECT * FROM deadlines WHERE status = 'active' ORDER BY due_date ASC, created_at ASC")
+    .all() as DeadlineRow[];
+}
+
+/** Everything, including archived — the organizer view. */
+export function listAllDeadlines(): DeadlineRow[] {
+  const db = getDb();
+  return db
+    .query("SELECT * FROM deadlines ORDER BY due_date ASC, created_at ASC")
+    .all() as DeadlineRow[];
+}
+
+export function updateDeadline(
+  id: string,
+  fields: Partial<DeadlineInput> & { status?: "active" | "archived" },
+): boolean {
+  const db = getDb();
+  const existing = getDeadline(id);
+  if (!existing) return false;
+  db.run(
+    `UPDATE deadlines SET
+       title = $title,
+       description = $description,
+       due_date = $due_date,
+       sprint_week = $sprint_week,
+       status = $status,
+       updated_at = datetime('now')
+     WHERE id = $id`,
+    {
+      $id: id,
+      $title: fields.title ?? existing.title,
+      $description: fields.description === undefined ? existing.description : fields.description,
+      $due_date: fields.dueDate ?? existing.due_date,
+      $sprint_week: fields.sprintWeek === undefined ? existing.sprint_week : fields.sprintWeek,
+      $status: fields.status ?? existing.status,
+    },
+  );
+  return true;
+}
+
+/** Archiving is preferred over deletion so completion history survives. */
+export function deleteDeadline(id: string): void {
+  const db = getDb();
+  db.run("DELETE FROM deadlines WHERE id = $id", { $id: id });
+}
+
+/**
+ * Marks a deadline done or not done for one founder.
+ *
+ * `userEmail` must come from the session. There is no code path that accepts it
+ * from a request body, which is what makes this immune to the bug class that
+ * affected threads, decisions and check-ins.
+ */
+export function setDeadlineDone(deadlineId: string, userEmail: string, done: boolean): boolean {
+  const db = getDb();
+  if (!getDeadline(deadlineId)) return false;
+  if (done) {
+    db.run(
+      `INSERT INTO deadline_completions (deadline_id, user_email) VALUES ($id, $email)
+       ON CONFLICT(deadline_id, user_email) DO NOTHING`,
+      { $id: deadlineId, $email: userEmail },
+    );
+  } else {
+    db.run(
+      "DELETE FROM deadline_completions WHERE deadline_id = $id AND user_email = $email",
+      { $id: deadlineId, $email: userEmail },
+    );
+  }
+  return true;
+}
+
+/** The set of deadline ids this founder has ticked off. */
+export function completedDeadlineIds(userEmail: string): string[] {
+  const db = getDb();
+  return (
+    db
+      .query("SELECT deadline_id FROM deadline_completions WHERE user_email = $email")
+      .all({ $email: userEmail }) as { deadline_id: string }[]
+  ).map((r) => r.deadline_id);
+}
+
+export type DeadlineStatusRow = {
+  deadline_id: string;
+  done_count: number;
+};
+
+/** How many founders have completed each deadline. */
+export function deadlineCompletionCounts(): Record<string, number> {
+  const db = getDb();
+  const rows = db
+    .query(
+      `SELECT c.deadline_id AS deadline_id, COUNT(*) AS n
+       FROM deadline_completions c
+       JOIN users u ON u.email = c.user_email
+       WHERE u.role = 'founder'
+       GROUP BY c.deadline_id`,
+    )
+    .all() as { deadline_id: string; n: number }[];
+  return Object.fromEntries(rows.map((r) => [r.deadline_id, r.n]));
+}
+
+/**
+ * Who has not completed a given deadline.
+ *
+ * Task status only. This deliberately never joins to threads, decisions or
+ * check-ins — the organizer's view of task completion is a different boundary
+ * from the conversation-privacy boundary, and mixing them is how the second
+ * one gets eroded.
+ */
+export function foundersBehindOn(deadlineId: string): { email: string; name: string }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT u.email, u.name
+       FROM users u
+       WHERE u.role = 'founder'
+         AND u.email NOT IN (
+           SELECT user_email FROM deadline_completions WHERE deadline_id = $id
+         )
+       ORDER BY u.name ASC`,
+    )
+    .all({ $id: deadlineId }) as { email: string; name: string }[];
+}
