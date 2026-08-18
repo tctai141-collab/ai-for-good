@@ -29,10 +29,22 @@ COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/src ./src
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 
-# Run as a non-root user. The base image ships one; the data directory has to
-# belong to it, since that is where the mounted disk gets written.
-RUN chown -R bun:bun /app
-USER bun
+# NOT run as a non-root user, deliberately.
+#
+# `USER bun` was added here as a hardening step and broke production. /app/data
+# is a persistent disk that Render mounts at *runtime*; the chown above runs at
+# *build* time and never touches it. The database files on that disk were
+# created by an earlier root container and stay root-owned 0644, so a non-root
+# process can read them and not write them:
+#
+#   uid=1000(bun)
+#   -rw-r--r-- 1 root bun  sprint-buddy.db
+#   [unhandled] attempt to write a readonly database { path: "/api/session" }
+#
+# Fixing it properly needs a root entrypoint that chowns the mount and then
+# drops privileges, which is more moving parts than the benefit justifies for a
+# single-tenant container whose only writable state is that disk. Revisit only
+# if the entrypoint is worth adding.
 
 EXPOSE 3000
 CMD ["bun", "./dist/server/entry.mjs"]
