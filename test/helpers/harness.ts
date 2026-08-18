@@ -197,7 +197,14 @@ export async function startServer(
     sent,
     advisorCalls,
     serverOutput: () => output.join(""),
-    db: () => new Database(dbPath),
+    db: () => {
+      const connection = new Database(dbPath);
+      // foreign_keys is per-connection, not a property of the file. Without
+      // this, assertions about cascade behaviour silently pass on a connection
+      // that is not enforcing the constraints the app runs under.
+      connection.run("PRAGMA foreign_keys=ON");
+      return connection;
+    },
     lastEmailTo: (address: string) => [...sent].reverse().find((m) => m.to === address),
     stop() {
       proc.kill();
