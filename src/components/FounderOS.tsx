@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import Tasks from "./Tasks";
+import Tasks, { useDeadlines, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared } from "../lib/persistence";
 import type { Checkin, UserData } from "../lib/persistence";
 
@@ -340,6 +340,10 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   }, [sidebarOpen]);
   const toggleSidebar = () => setSidebarOpen((v) => !v);
 
+  /* Deadlines are fetched once here rather than inside the sidebar section,
+     because the collapsed-sidebar button needs the overdue count too. */
+  const deadlines = useDeadlines(persona === "founder" ? userEmail : undefined);
+
   /* Today's check-in: once a day, persists via date-keyed localStorage */
   const todayKey = `founderos:checkin:${new Date().toISOString().slice(0, 10)}`;
   const [checkinDoneToday, setCheckinDoneToday] = useState<boolean>(() => {
@@ -395,6 +399,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
         teams={cohort?.teams ?? []}
         open={sidebarOpen} onToggle={toggleSidebar}
         checkinDone={checkinDoneToday}
+        deadlines={deadlines}
         onStartCheckin={startCheckin}
         onNew={newChat}
         onThread={(id) => { setView("chat"); setActive({ id }); }}
@@ -408,7 +413,11 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
         {!sidebarOpen && (
           <button
             onClick={toggleSidebar}
-            aria-label="Expand sidebar"
+            aria-label={
+              deadlines.overdueCount > 0
+                ? `Expand sidebar — ${deadlines.overdueCount} deadline${deadlines.overdueCount === 1 ? "" : "s"} overdue`
+                : "Expand sidebar"
+            }
             title="Expand sidebar"
             className="navitem sidebar-collapse-button"
             style={{
@@ -432,6 +441,31 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
             }}
           >
             ›
+            {deadlines.overdueCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  top: -5,
+                  right: -5,
+                  minWidth: 18,
+                  height: 18,
+                  padding: "0 5px",
+                  borderRadius: 9,
+                  background: C.red,
+                  color: "oklch(98% 0 0)",
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  lineHeight: "18px",
+                  textAlign: "center",
+                  fontVariantNumeric: "tabular-nums",
+                  border: `2px solid ${C.bg}`,
+                  boxSizing: "content-box",
+                }}
+              >
+                {deadlines.overdueCount}
+              </span>
+            )}
           </button>
         )}
         {persona === "founder" && view === "chat" && (
@@ -442,7 +476,6 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
             setVisits={setVisits}
             markCheckinDone={markCheckinDone}
             userEmail={userEmail}
-            beforeMessages={<Tasks userEmail={userEmail} />}
           />
         )}
         {persona === "founder" && view === "reflections" && (
@@ -473,6 +506,7 @@ type SidebarProps = {
   open: boolean;
   onToggle: () => void;
   checkinDone: boolean;
+  deadlines: DeadlinesState;
   onStartCheckin: () => void;
   onNew: () => void;
   onThread: (id: string) => void;
@@ -482,7 +516,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, onStartCheckin, onNew, onThread, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   return (
     <aside
       aria-hidden={!open}
@@ -517,6 +551,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
 
       {persona === "founder" ? (
         <>
+          <Tasks state={deadlines} />
+
           {checkinDone ? (
             <div className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14, color: C.faint, marginBottom: 14, cursor: "default" }}>
               <span style={{ width: 7, height: 7, borderRadius: 9, background: "#7CB893", flexShrink: 0 }} />
@@ -536,7 +572,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           </button>
 
           <p style={{ ...navLabel, marginTop: 26 }}>Pick up where you left off</p>
-          <div style={{ flex: 1, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+          <div style={{ flex: 1, minHeight: 96, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
             {threads.map((t) => {
               const on = view === "chat" && active.id === t.id;
               return (
@@ -677,11 +713,9 @@ type ChatProps = {
   setVisits: React.Dispatch<React.SetStateAction<number>>;
   markCheckinDone: () => void;
   userEmail?: string;
-  /** Rendered above the conversation — the deadline card lives here. */
-  beforeMessages?: React.ReactNode;
 };
 
-function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail, beforeMessages }: ChatProps) {
+function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail }: ChatProps) {
   const existingFromActive = active.id ? threads.find((t) => t.id === active.id) : null;
   /* createdThreadId keeps subsequent sends updating the same thread rather
      than spawning duplicates after each user reply. */
@@ -838,7 +872,6 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
       <div ref={scroller} style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "26px 24px 10px" }}>
-          {beforeMessages}
           {isFresh && msgs.length === 0 && !isCheckin ? (
             <EmptyState ctx={ctx} />
           ) : (
@@ -1682,6 +1715,38 @@ const CSS = `
 .tile { transition: transform .16s ease; }
 .tile:hover { transform: translateY(-1px); }
 .navitem:hover { background: rgba(255,255,255,0.05)!important; }
+
+/* Deadline checkboxes.
+   The browser default paints an unchecked box as a filled white square, which
+   on this sidebar reads as the loudest thing in the column — louder than the
+   overdue label it sits next to. accentColor only styles the checked state, so
+   the unchecked one has to be drawn. */
+.deadline-check {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 4px;
+  background: transparent;
+  cursor: inherit;
+  display: grid;
+  place-items: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.deadline-check:hover:not(:disabled) { border-color: var(--brand-blue); }
+.deadline-check:checked { background: var(--brand-blue); border-color: var(--brand-blue); }
+.deadline-check:checked::after {
+  content: "";
+  width: 3.5px;
+  height: 7px;
+  border: solid oklch(13% 0.008 250);
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+.deadline-check:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
 .composer-box:focus-within { border-color: var(--brand-blue)!important; }
