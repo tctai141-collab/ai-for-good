@@ -40,6 +40,8 @@ export const CHAT_RATE_WINDOW_MS = 60_000;
  * whenever it passes a size threshold, and hard-caps total size.
  */
 const MAX_TRACKED_KEYS = 5_000;
+/** Sweeps clear down to here, so the next few hundred calls need no sweep. */
+const LOW_WATER_MARK = 4_000;
 
 type Window = { count: number; resetAt: number };
 
@@ -74,19 +76,29 @@ export class RateLimiter {
     this.hits.delete(key);
   }
 
+  /**
+   * Keeps the map bounded without scanning it on every call.
+   *
+   * The obvious version — sweep whenever we are at capacity — is O(n) per
+   * request precisely when the map is full, which is exactly when an attack is
+   * in progress. That turns a memory-exhaustion defence into a CPU-exhaustion
+   * hole. Instead, a sweep clears down to a low-water mark, so the next few
+   * hundred calls return immediately and the cost is amortised to O(1).
+   */
   private evictExpired(now: number): void {
     if (this.hits.size < MAX_TRACKED_KEYS) return;
+
     for (const [key, window] of this.hits) {
       if (now >= window.resetAt) this.hits.delete(key);
     }
-    // Still full of live windows: this is an attack, not traffic. Drop the
-    // oldest so memory stays bounded even in the worst case.
-    if (this.hits.size >= MAX_TRACKED_KEYS) {
-      const excess = this.hits.size - MAX_TRACKED_KEYS + 1;
-      let dropped = 0;
+
+    // Still full of live windows: this is an attack, not traffic. Map iteration
+    // is insertion-ordered, so the oldest entries go first.
+    if (this.hits.size >= LOW_WATER_MARK) {
+      let toDrop = this.hits.size - LOW_WATER_MARK;
       for (const key of this.hits.keys()) {
+        if (toDrop-- <= 0) break;
         this.hits.delete(key);
-        if (++dropped >= excess) break;
       }
     }
   }

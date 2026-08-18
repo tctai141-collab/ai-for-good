@@ -147,6 +147,7 @@ export function getSessionUser(cookies: AstroCookies): SessionUser | null {
 const FAILURE_LIMIT = 10;
 const LOCKOUT_MS = 15 * 60 * 1000;
 const MAX_TRACKED_EMAILS = 5_000;
+const FAILURE_LOW_WATER = 4_000;
 const failures = new Map<string, { count: number; firstAt: number }>();
 
 function evictStaleFailures(now: number): void {
@@ -155,12 +156,14 @@ function evictStaleFailures(now: number): void {
     if (now - record.firstAt > LOCKOUT_MS) failures.delete(email);
   }
   // Every entry still inside its window means this is an attack, not traffic.
-  // Drop oldest-inserted first so memory stays bounded regardless.
-  let excess = failures.size - MAX_TRACKED_EMAILS + 1;
-  if (excess > 0) {
+  // Clear down to a low-water mark rather than to exactly the cap: sweeping on
+  // every call once full would make each login attempt O(n) at precisely the
+  // moment somebody is hammering the endpoint.
+  if (failures.size >= FAILURE_LOW_WATER) {
+    let toDrop = failures.size - FAILURE_LOW_WATER;
     for (const email of failures.keys()) {
+      if (toDrop-- <= 0) break;
       failures.delete(email);
-      if (--excess <= 0) break;
     }
   }
 }
