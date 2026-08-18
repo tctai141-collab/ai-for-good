@@ -1,7 +1,7 @@
 /**
  * Where the cohort is in the 15-week sprint.
  *
- * Prefers SPRINT_START_DATE (an ISO date, e.g. 2026-09-09), from which the
+ * Prefers SPRINT_START_DATE (an ISO date, e.g. 2026-09-08), from which the
  * current week is derived automatically. SPRINT_WEEK remains as a manual
  * override for a cohort whose start date isn't configured — but it has to be
  * bumped by hand every week, and a forgotten bump silently drifts the advisor

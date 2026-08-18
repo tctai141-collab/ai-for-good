@@ -38,7 +38,7 @@ services:
       # the cohort to week 1 forever — with the dashboard reporting that nobody
       # needs attention.
       - key: SPRINT_START_DATE
-        value: "2026-09-09"
+        value: "2026-09-08"
       # Fallback only, used when SPRINT_START_DATE is unset.
       - key: SPRINT_WEEK
         value: "1"

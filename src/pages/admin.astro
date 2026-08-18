@@ -113,6 +113,36 @@
       button.ghost.danger:hover { color: var(--danger); border-color: rgba(244, 116, 106, 0.5); }
       button:disabled { opacity: 0.5; cursor: default; }
       .links { margin-top: 20px; }
+      .deadline-row {
+        border-top: 1px solid var(--line);
+        padding: 12px 0;
+      }
+      .deadline-row.archived { opacity: 0.5; }
+      .deadline-head {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .deadline-head strong { flex: 1 1 220px; }
+      .deadline-meta { color: var(--ink-faint); font-size: 13px; }
+      .deadline-count {
+        font-size: 12.5px;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-sub);
+        white-space: nowrap;
+      }
+      .deadline-count.all-done { color: var(--brand-blue); font-weight: 700; }
+      .deadline-row details { margin-top: 6px; }
+      .deadline-row summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--ink-faint);
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+      }
+      .deadline-actions { margin-top: 8px; }
       .link-item {
         border: 1px solid var(--border);
         border-radius: 10px;
@@ -214,6 +244,38 @@
             <strong>Resend link</strong> on their row.
           </p>
           <div class="links" id="links"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Deadlines</h2>
+          <p class="note" style="margin-top:0">
+            Cohort-wide milestones. Everyone sees the same list, and each founder ticks
+            off their own. Archive rather than delete — archiving hides it from founders
+            and keeps the completion history.
+          </p>
+
+          <form id="add-deadline" class="row">
+            <label>
+              <span class="label-text">Title</span>
+              <input id="dl-title" required maxlength="200" placeholder="Lifeline pitch to the cohort" />
+            </label>
+            <label>
+              <span class="label-text">Description (optional)</span>
+              <input id="dl-description" maxlength="2000" placeholder="Five minutes, no slides" />
+            </label>
+            <label>
+              <span class="label-text">Due date</span>
+              <input id="dl-due" type="date" required />
+            </label>
+            <label>
+              <span class="label-text">Sprint week (optional)</span>
+              <input id="dl-week" type="number" min="1" max="15" placeholder="2" />
+            </label>
+            <button type="submit">Add deadline</button>
+          </form>
+          <p class="message" id="dl-message" hidden></p>
+
+          <div id="deadline-list"></div>
         </section>
       </div>
     </main>
@@ -347,6 +409,148 @@
         }
       }
 
+      // ---- Deadlines ----------------------------------------------------
+
+      const deadlineList = document.getElementById("deadline-list");
+
+      async function deadlineApi(body) {
+        let res;
+        try {
+          res = await fetch("/api/deadlines", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        } catch {
+          return { ok: false, data: { error: "Could not reach the server." } };
+        }
+        let data = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = { error: "The server returned an error (" + res.status + ") with no details." };
+        }
+        return { ok: res.ok, data };
+      }
+
+      function dueLabel(iso) {
+        const [y, m, d] = iso.split("-").map(Number);
+        if (!y) return iso;
+        const date = new Date(Date.UTC(y, m - 1, d));
+        const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getUTCDay()];
+        const mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][date.getUTCMonth()];
+        return day + " " + d + " " + mon;
+      }
+
+      async function loadDeadlines() {
+        let data;
+        try {
+          const res = await fetch("/api/deadlines?view=status");
+          if (!res.ok) return;
+          data = await res.json();
+        } catch {
+          return;
+        }
+
+        deadlineList.textContent = "";
+        if (!data.deadlines.length) {
+          const empty = document.createElement("p");
+          empty.className = "note";
+          empty.textContent = "No deadlines yet. Add the first one above.";
+          deadlineList.append(empty);
+          return;
+        }
+
+        const cohort = data.cohortSize;
+        for (const d of data.deadlines) {
+          const row = document.createElement("div");
+          row.className = "deadline-row";
+          if (d.status === "archived") row.classList.add("archived");
+
+          const head = document.createElement("div");
+          head.className = "deadline-head";
+
+          const title = document.createElement("strong");
+          title.textContent = d.title;
+
+          const meta = document.createElement("span");
+          meta.className = "deadline-meta";
+          meta.textContent =
+            dueLabel(d.dueDate) +
+            (d.sprintWeek ? " · W" + d.sprintWeek : "") +
+            (d.status === "archived" ? " · archived" : "");
+
+          // Completion count. Task status only — this view never shows anything
+          // a founder wrote.
+          const count = document.createElement("span");
+          count.className = "deadline-count";
+          count.textContent = d.doneCount + "/" + cohort + " done";
+          if (cohort > 0 && d.doneCount === cohort) count.classList.add("all-done");
+
+          head.append(title, meta, count);
+          row.append(head);
+
+          if (d.behind.length > 0 && d.status === "active") {
+            const details = document.createElement("details");
+            const summary = document.createElement("summary");
+            summary.textContent = d.behind.length + " not done yet";
+            const names = document.createElement("p");
+            names.className = "note";
+            names.style.margin = "6px 0 0";
+            names.textContent = d.behind.map((f) => f.name).join(", ");
+            details.append(summary, names);
+            row.append(details);
+          }
+
+          const actions = document.createElement("div");
+          actions.className = "deadline-actions";
+
+          const archive = document.createElement("button");
+          archive.className = "ghost";
+          archive.textContent = d.status === "archived" ? "Restore" : "Archive";
+          archive.addEventListener("click", async () => {
+            archive.disabled = true;
+            const { ok, data: body } = await deadlineApi({
+              action: "update",
+              id: d.id,
+              status: d.status === "archived" ? "active" : "archived",
+            });
+            archive.disabled = false;
+            if (!ok) return alert(body.error || "Could not update this deadline.");
+            loadDeadlines();
+          });
+
+          actions.append(archive);
+          row.append(actions);
+          deadlineList.append(row);
+        }
+      }
+
+      document.getElementById("add-deadline").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const message = document.getElementById("dl-message");
+        const title = document.getElementById("dl-title");
+        const description = document.getElementById("dl-description");
+        const due = document.getElementById("dl-due");
+        const week = document.getElementById("dl-week");
+
+        const { ok, data } = await deadlineApi({
+          action: "create",
+          title: title.value,
+          description: description.value,
+          dueDate: due.value,
+          sprintWeek: week.value === "" ? null : Number(week.value),
+        });
+
+        if (!ok) return say(message, data.error || "Could not add this deadline.", true);
+
+        say(message, "Added \u201c" + title.value.trim() + "\u201d.", false);
+        title.value = "";
+        description.value = "";
+        week.value = "";
+        loadDeadlines();
+      });
+
       async function load() {
         try {
           const res = await fetch("/api/admin/users");
@@ -433,6 +637,7 @@
       });
 
       load();
+      loadDeadlines();
     </script>
   </body>
 </html>

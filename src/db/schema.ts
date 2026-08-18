@@ -287,6 +287,47 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // --- Deadlines and task tracking (Work Package 3) --------------------------
+  //
+  // Cohort-wide milestones set by organizers, plus a per-founder done flag.
+  //
+  // Two things here are deliberate reactions to the audit. Ids are generated
+  // server-side with crypto.randomUUID(), never accepted from the client — the
+  // cross-tenant write bug existed precisely because every id in this app was
+  // client-chosen. And completions have no shared mutable row: each founder's
+  // completion is its own row keyed by their own email, so there is nothing for
+  // one founder to overwrite in another's.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS deadlines (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      due_date TEXT NOT NULL,
+      sprint_week INTEGER CHECK(sprint_week IS NULL OR (sprint_week BETWEEN 1 AND 15)),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'archived')),
+      created_by TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Presence of a row means done. No boolean to flip, no row to contend over.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS deadline_completions (
+      deadline_id TEXT NOT NULL REFERENCES deadlines(id) ON DELETE CASCADE,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (deadline_id, user_email)
+    )
+  `);
+
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_deadlines_status_due ON deadlines(status, due_date);
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_deadline_completions_user ON deadline_completions(user_email);
+  `);
+
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_threads_user ON threads(user_email, updated_at DESC);
   `);
