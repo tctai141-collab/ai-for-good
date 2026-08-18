@@ -40,6 +40,27 @@ export function isEmailConfigured(): boolean {
 
 type Message = { to: string; subject: string; text: string };
 
+/**
+ * Where a founder's reply goes.
+ *
+ * The From address is a no-reply on a dedicated sending subdomain, which is
+ * right for automated mail — but the reset email tells a founder to raise the
+ * alarm if they did not request the reset, and that instruction is worthless
+ * if replying bounces. Setting reply_to keeps the From line official and still
+ * lets a worried founder just hit reply.
+ */
+function replyTo(): string | undefined {
+  return process.env.RESEND_REPLY_TO?.trim() || undefined;
+}
+
+/** Named in the body too, so it survives forwarding and plain-text clients. */
+function contactLine(): string {
+  const address = replyTo();
+  return address
+    ? `reply to this email (it reaches ${address})`
+    : "tell the Sprint team straight away";
+}
+
 async function send(message: Message): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from = process.env.RESEND_FROM?.trim();
@@ -51,7 +72,13 @@ async function send(message: Message): Promise<void> {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from, to: [message.to], subject: message.subject, text: message.text }),
+    body: JSON.stringify({
+      from,
+      to: [message.to],
+      subject: message.subject,
+      text: message.text,
+      ...(replyTo() ? { reply_to: [replyTo()] } : {}),
+    }),
     signal: AbortSignal.timeout(15_000),
   });
 
@@ -64,11 +91,13 @@ async function send(message: Message): Promise<void> {
   }
 }
 
-const SIGN_OFF = `
+function signOff(): string {
+  return `
 — The Aalto Founder Sprint team
 
 This link is single-use and expires in 14 days. Nobody on the operating team
 can see it or your password.`;
+}
 
 /** First-time account setup. */
 export function sendInviteEmail(to: string, name: string, link: string): Promise<void> {
@@ -84,7 +113,7 @@ ${link}
 Sprint Buddy is your own space. Your conversations are private — the operating
 team sees themes and check-in signals, never what you wrote, unless you
 explicitly share a conversation with them.
-${SIGN_OFF}`,
+${signOff()}`,
   });
 }
 
@@ -106,8 +135,8 @@ password here:
 
 ${link}
 
-If you did NOT request this, tell the Sprint team straight away — it means
-somebody else triggered a reset on your account.
-${SIGN_OFF}`,
+If you did NOT request this, ${contactLine()} — it means somebody else
+triggered a reset on your account.
+${signOff()}`,
   });
 }

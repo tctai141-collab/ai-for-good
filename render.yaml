@@ -62,6 +62,10 @@ services:
         sync: false
       - key: RESEND_FROM
         sync: false
+      # A monitored address. The From line is a no-reply, so this is the only
+      # way a founder warned about an unrequested reset can reach anyone.
+      - key: RESEND_REPLY_TO
+        sync: false
       # --- Error tracking (EU region)
       - key: SENTRY_DSN
         sync: false

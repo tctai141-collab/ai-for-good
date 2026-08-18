@@ -108,6 +108,15 @@ describe("setup links are never handed to the operator", () => {
     expect(message!.subject).toMatch(/reset/i);
     expect(message!.text).toMatch(/did NOT request this/i);
   });
+
+  test("a founder warned about a reset can actually reach someone", async () => {
+    // The From address is a no-reply, so the warning above is only useful if
+    // replying goes somewhere real and the body names where.
+    await post(h, "/api/admin/users", { action: "reinvite", email: founder.email }, organizer.cookie);
+    const message = h.lastEmailTo(founder.email);
+    expect(message!.replyTo).toEqual(["sprint-team@example.test"]);
+    expect(message!.text).toContain("sprint-team@example.test");
+  });
 });
 
 describe("admin actions are attributable", () => {

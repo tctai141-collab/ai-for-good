@@ -18,7 +18,7 @@ import { join } from "node:path";
 const ENTRY = "dist/server/entry.mjs";
 
 /** One message captured by the stand-in Resend endpoint. */
-export type SentEmail = { to: string; subject: string; text: string };
+export type SentEmail = { to: string; subject: string; text: string; replyTo?: string[] };
 
 export type Harness = {
   url: string;
@@ -101,8 +101,8 @@ export async function startServer(
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      const body = (await request.json()) as { to: string[]; subject: string; text: string };
-      sent.push({ to: body.to[0]!, subject: body.subject, text: body.text });
+      const body = (await request.json()) as { to: string[]; subject: string; text: string; reply_to?: string[] };
+      sent.push({ to: body.to[0]!, subject: body.subject, text: body.text, replyTo: body.reply_to });
       return Response.json({ id: crypto.randomUUID() });
     },
   });
@@ -156,10 +156,11 @@ export async function startServer(
       ...(emailEnabled
         ? {
             RESEND_API_KEY: "test-key-not-real",
-            RESEND_FROM: "Sprint Buddy Test <test@example.test>",
+            RESEND_FROM: "Sprint Buddy Test <no-reply@send.example.test>",
+            RESEND_REPLY_TO: "sprint-team@example.test",
             RESEND_BASE_URL: mailUrl,
           }
-        : { RESEND_API_KEY: "", RESEND_FROM: "", RESEND_BASE_URL: "" }),
+        : { RESEND_API_KEY: "", RESEND_FROM: "", RESEND_REPLY_TO: "", RESEND_BASE_URL: "" }),
     },
     stdout: "pipe",
     stderr: "pipe",
