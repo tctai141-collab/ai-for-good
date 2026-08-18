@@ -3,6 +3,7 @@ import { getUserRow } from "../../db/index";
 import {
   clearLoginFailures,
   endSession,
+  equalizeVerifyCost,
   getSessionUser,
   isLockedOut,
   normalizeEmail,
@@ -50,6 +51,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
   // An invited user who has not set a password yet has no hash to verify
   // against; they must finish setup via their invite link first.
   if (!user || !user.password_hash) {
+    // Spend the same time an Argon2id verify would, so the response time does
+    // not reveal whether the account exists.
+    await equalizeVerifyCost(password);
     recordLoginFailure(email);
     return Response.json({ error: INVALID_CREDENTIALS }, { status: 401 });
   }

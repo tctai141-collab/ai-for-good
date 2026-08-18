@@ -1,0 +1,58 @@
+# The gate that did not exist.
+#
+# Render auto-deploys from `main` in about 90 seconds with nothing in front of
+# it, so before this a commit with a broken typecheck or a failing test reached
+# production unchallenged — and the typecheck was red the whole time, with no
+# tests to fail.
+#
+# For this to actually block anything, branch protection on `main` must require
+# the "verify" check. That is a repository setting, not something this file can
+# do on its own; see the PR description.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Pinned to the version the Dockerfile builds with, so CI cannot pass
+          # on a runtime the deployment never sees.
+          bun-version: 1.3.14
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      # Must come after the build: the tests run the real production output
+      # against a throwaway database rather than importing modules directly,
+      # because that is the only layer the authorization bugs were visible at.
+      - name: Test
+        run: bun test
+
+      - name: Audit dependencies
+        run: |
+          # Fail on high severity only. Moderate and low are reported for
+          # visibility but do not block — the residual ones need a major Astro
+          # upgrade, which is not something to do inside an unrelated PR.
+          bun audit > audit.txt 2>&1 || true
+          cat audit.txt
+          if grep -qE "^\s+high:" audit.txt; then
+            echo "::error::High-severity advisories found."
+            exit 1
+          fi
+          echo "No high-severity advisories."

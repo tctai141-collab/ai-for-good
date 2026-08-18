@@ -5,6 +5,10 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
 RUN bunx astro build
+# Drop dev-only packages before they are copied into the runtime image. The
+# runtime needs the production dependency tree; TypeScript and the type
+# packages have no business in a deployed container.
+RUN bun install --frozen-lockfile --production
 
 FROM oven/bun:1.3.14-alpine AS runtime
 WORKDIR /app
@@ -24,5 +28,11 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/src ./src
 COPY --from=build /app/tsconfig.json ./tsconfig.json
+
+# Run as a non-root user. The base image ships one; the data directory has to
+# belong to it, since that is where the mounted disk gets written.
+RUN chown -R bun:bun /app
+USER bun
+
 EXPOSE 3000
 CMD ["bun", "./dist/server/entry.mjs"]

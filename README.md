@@ -28,6 +28,18 @@ Passwords are hashed with Argon2id and never leave the server. Sessions are
 random opaque tokens checked against the database, so a client cannot forge a
 role, and removing someone revokes their access immediately.
 
+## Removing someone
+
+Removing an account from `/admin` deletes it and everything belonging to it —
+conversations, messages, check-ins, decisions, visit counts and Working Genius
+results — in a single transaction. That is the GDPR erasure path, and it is
+covered by a test that seeds a row in every child table first.
+
+## Operations
+
+- `docs/operations/deploy.md` — first deploy, start to finish
+- `docs/operations/backups.md` — automated backups, and the restore drill
+
 ## Privacy
 
 Founders' conversations are private. Organizers see themes, attention signals
@@ -88,8 +100,29 @@ agents/             — AI agent configuration
 ### Key constraint
 Privacy-first. If founders feel monitored, they perform instead of reflect.
 
-## Demo Boundaries
+## What is and isn't real
 
-- Organizer cohort rows are seeded demo data, with the live founder row partially driven by founder theme activity.
-- The decision journal is real local persistence: decision-like founder messages are detected in chat and saved to SQLite.
-- Production auth, aggregate-only organizer APIs, and database backups are still future work.
+Everything the operating team sees is derived from real founder activity. The
+hackathon build seeded the organizer view with eight fictional founders and the
+Reflections page with three invented themes; both are gone.
+
+- **Cohort dashboard** — real. Built from actual check-in signals: per-week
+  attention score, dominant theme, trend, days since last check-in, open
+  decision count. Founders with no history show as having no history.
+- **Reflections themes** — real, derived from the founder's own threads,
+  decisions and check-ins. Empty until they have some.
+- **Decision journal** — real. Decision-like messages are detected in chat and
+  saved to SQLite. Detection is a regex heuristic, so it both misses and
+  over-fires; treat it as a prompt, not a record.
+- **Check-in score** — real, produced by the advisor at the end of a check-in.
+  If the model omits it the check-in is still recorded, unscored, rather than
+  silently dropped.
+
+**Authentication, aggregate-only organizer APIs and database backups are all
+built.** See `docs/operations/backups.md` for the backup and restore procedure —
+it is automated daily to Cloudflare R2, and the restore drill is part of the
+test suite.
+
+Known gaps, deliberately: no email nudges or reminders, no deadline/task
+tracking (a separate work package), no multi-cohort support, and migrations are
+versioned but have no rollback path.

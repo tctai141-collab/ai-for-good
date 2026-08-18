@@ -34,10 +34,16 @@ export type Checkin = {
   mood?: number;
 };
 
+export type ThemeArc = { name: string; arc: number[] };
+
 export type UserData = {
   threads: Thread[];
   decisions: Decision[];
   checkins: Checkin[];
+  /** Derived server-side from real signals; empty until the founder has some. */
+  themes: ThemeArc[];
+  /** Which sprint week we are in, so in-session updates land in the right bar. */
+  week: number;
   visits: number;
   workingGenius?: WorkingGenius;
 };
@@ -66,12 +72,13 @@ async function get(params: Record<string, string>) {
 }
 
 export async function loadUserData(userEmail: string): Promise<UserData> {
-  const [tData, dData, cData, vData, wgData] = await Promise.all([
+  const [tData, dData, cData, vData, wgData, thData] = await Promise.all([
     get({ resource: "threads", user: userEmail }),
     get({ resource: "decisions", user: userEmail }),
     get({ resource: "checkins", user: userEmail }),
     get({ resource: "visits", user: userEmail }),
     get({ resource: "working-genius", user: userEmail }),
+    get({ resource: "themes", user: userEmail }),
   ]);
 
   const rawThreads = (tData.threads || []) as Array<{
@@ -95,7 +102,11 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       id: t.id,
       title: t.title,
       theme: t.theme,
-      state: t.state,
+      // SQLite has no CHECK on threads.state, so narrow at the boundary
+      // rather than asserting. Anything unexpected reads as "thinking".
+      state: (["panic", "thinking", "venting"] as const).includes(t.state as never)
+        ? (t.state as Thread["state"])
+        : "thinking",
       lastAt: t.last_at,
       personality: (t.personality || "none") as Personality,
       messages: t.messages || [],
@@ -118,6 +129,8 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       prompt: c.prompt,
       mood: c.mood || undefined,
     })),
+    themes: (thData.themes as ThemeArc[]) || [],
+    week: (thData.week as number) || 1,
     visits: (vData.visits as number) || 0,
     workingGenius: wgData.workingGenius
       ? {

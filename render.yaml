@@ -32,8 +32,40 @@ services:
         value: /app/data/sprint-buddy.db
       - key: HOST
         value: 0.0.0.0
-      # Which week of the 15-week sprint the cohort is in. Bump as it runs.
+      # The sprint's first day. sprint-calendar.ts prefers this and derives the
+      # current week from it. It was set in the dashboard but missing here, so a
+      # blueprint rebuild would silently drop back to SPRINT_WEEK below and pin
+      # the cohort to week 1 forever — with the dashboard reporting that nobody
+      # needs attention.
+      - key: SPRINT_START_DATE
+        value: "2026-09-09"
+      # Fallback only, used when SPRINT_START_DATE is unset.
       - key: SPRINT_WEEK
         value: "1"
       - key: ANTHROPIC_EFFORT
         value: low
+      - key: ANTHROPIC_MODEL
+        value: claude-opus-5
+      # --- Backups: Cloudflare R2, EU jurisdiction (see docs/operations/backups.md)
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
+      - key: BACKUP_RETENTION_DAYS
+        value: "30"
+      # --- Invite/reset email: Resend, EU region
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      # A monitored address. The From line is a no-reply, so this is the only
+      # way a founder warned about an unrequested reset can reach anyone.
+      - key: RESEND_REPLY_TO
+        sync: false
+      # --- Error tracking (EU region)
+      - key: SENTRY_DSN
+        sync: false

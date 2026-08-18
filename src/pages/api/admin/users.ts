@@ -6,9 +6,17 @@ import {
   deleteUser,
   getUserRow,
   listUsers,
+  recordAdminAction,
   updateUser,
   type Role,
 } from "../../../db/index";
+import { reportError } from "../../../lib/errors";
+import {
+  EmailNotConfiguredError,
+  isEmailConfigured,
+  sendInviteEmail,
+  sendResetEmail,
+} from "../../../lib/email";
 import {
   endAllSessions,
   getSessionUser,
@@ -56,10 +64,41 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
 }
 
-function issueInvite(request: Request, email: string): string {
+/**
+ * Issues a setup link and emails it to the account holder.
+ *
+ * Returns nothing. The link used to come back in the response body, which meant
+ * any organizer could press "Reset password" on a founder, redeem the link
+ * themselves, and sign in as that founder — reading the conversations the
+ * privacy model promises they cannot see. The operator now triggers an email
+ * they never see the contents of.
+ */
+async function issueInvite(
+  request: Request,
+  email: string,
+  name: string,
+  kind: "invite" | "reset",
+): Promise<void> {
   const token = randomToken();
   createInvite(token, email, inviteExpiry());
-  return inviteUrl(request, token);
+  const link = inviteUrl(request, token);
+  if (kind === "invite") await sendInviteEmail(email, name, link);
+  else await sendResetEmail(email, name, link);
+}
+
+/** Turns an email failure into a response without leaking provider detail. */
+function emailFailure(error: unknown) {
+  if (error instanceof EmailNotConfiguredError) {
+    return Response.json(
+      { error: "Email is not configured, so the setup link cannot be delivered. Set RESEND_API_KEY and RESEND_FROM." },
+      { status: 503 },
+    );
+  }
+  console.error("[admin] invite email failed:", error);
+  return Response.json(
+    { error: "The account is ready but the email could not be sent. Try 'Resend link' in a moment." },
+    { status: 502 },
+  );
 }
 
 export const GET: APIRoute = async ({ cookies }) => {
@@ -95,14 +134,32 @@ export const POST: APIRoute = async ({ cookies, request }) => {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const role: Role = body.role === "organizer" ? "organizer" : "founder";
 
+  // One try/catch around every branch. An unhandled throw here used to return
+  // a 500 with an *empty body*, so the admin page's `await res.json()` rejected
+  // before it could read an error — leaving the button disabled and showing
+  // nothing at all.
+  try {
   switch (body.action) {
     case "add": {
       if (!isValidEmail(email)) return Response.json({ error: "Enter a valid email address." }, { status: 400 });
       if (!name) return Response.json({ error: "Name is required." }, { status: 400 });
+      if (!isEmailConfigured()) {
+        return Response.json(
+          { error: "Email is not configured, so a setup link cannot be delivered. Set RESEND_API_KEY and RESEND_FROM." },
+          { status: 503 },
+        );
+      }
       if (!createUser(email, name, role)) {
         return Response.json({ error: `${email} already has an account.` }, { status: 409 });
       }
-      return Response.json({ ok: true, email, link: issueInvite(request, email) });
+      try {
+        await issueInvite(request, email, name, "invite");
+      } catch (error) {
+        recordAdminAction(session.email, "add-user:email-failed", email, role);
+        return emailFailure(error);
+      }
+      recordAdminAction(session.email, "add-user", email, role);
+      return Response.json({ ok: true, email, emailed: true });
     }
 
     // Adding a whole cohort at once. Each row is reported independently so one
@@ -121,17 +178,45 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           if (!createUser(entryEmail, entryName, entryRole)) {
             return { email: entryEmail, error: "Already has an account." };
           }
-          return { email: entryEmail, name: entryName, link: issueInvite(request, entryEmail) };
+          return { email: entryEmail, name: entryName, role: entryRole };
         },
       );
-      return Response.json({ ok: true, results });
+
+      // Deliver outside the map so one failing address does not abort the rest.
+      const delivered = [];
+      for (const entry of results) {
+        if ("error" in entry && entry.error) {
+          delivered.push(entry);
+          continue;
+        }
+        try {
+          await issueInvite(request, entry.email, entry.name!, "invite");
+          recordAdminAction(session.email, "add-user", entry.email, entry.role);
+          delivered.push({ email: entry.email, name: entry.name, emailed: true });
+        } catch (error) {
+          console.error("[admin] bulk invite email failed:", error);
+          recordAdminAction(session.email, "add-user:email-failed", entry.email, entry.role);
+          delivered.push({ email: entry.email, name: entry.name, error: "Created, but the email could not be sent. Use 'Resend link'." });
+        }
+      }
+      return Response.json({ ok: true, results: delivered });
     }
 
     // Used both for someone who never activated and for a forgotten password:
     // a fresh link invalidates any previous one.
     case "reinvite": {
-      if (!getUserRow(email)) return Response.json({ error: "No such account." }, { status: 404 });
-      return Response.json({ ok: true, email, link: issueInvite(request, email) });
+      const existing = getUserRow(email);
+      if (!existing) return Response.json({ error: "No such account." }, { status: 404 });
+      try {
+        // A reset the account holder did not ask for is exactly what they need
+        // to hear about, so the email says so explicitly.
+        await issueInvite(request, email, existing.name, existing.password_hash ? "reset" : "invite");
+      } catch (error) {
+        recordAdminAction(session.email, "reinvite:email-failed", email);
+        return emailFailure(error);
+      }
+      recordAdminAction(session.email, existing.password_hash ? "reset-password" : "reinvite", email);
+      return Response.json({ ok: true, email, emailed: true });
     }
 
     case "update": {
@@ -146,6 +231,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         );
       }
       updateUser(email, name, role);
+      recordAdminAction(session.email, "update-user", email, `${existing.role} -> ${role}`);
       return Response.json({ ok: true });
     }
 
@@ -158,13 +244,23 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       if (existing.role === "organizer" && countOrganizers() <= 1) {
         return Response.json({ error: "This is the only organizer account." }, { status: 409 });
       }
-      // Revoke live access first; deleting the row cascades to their data.
+      // Revoke live access first, then remove the account and every row that
+      // belongs to it. deleteUser() does the children in one transaction — it
+      // used to rely on a cascade that these tables do not have.
       endAllSessions(email);
       deleteUser(email);
+      recordAdminAction(session.email, "remove-user", email, existing.role);
       return Response.json({ ok: true });
     }
 
     default:
       return Response.json({ error: `Unknown action: ${body.action}` }, { status: 400 });
+  }
+  } catch (error) {
+    reportError(error, { where: "admin.users", extra: { action: String(body.action) } });
+    return Response.json(
+      { error: "That did not work. Nothing was changed — check the server logs." },
+      { status: 500 },
+    );
   }
 };

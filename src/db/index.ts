@@ -67,8 +67,55 @@ export type WorkingGeniusRow = {
   completed_at: string;
 };
 
+/**
+ * Raised when a caller tries to write a record that belongs to someone else.
+ *
+ * Every record id below is chosen by the client, so identity ("you are who you
+ * say you are") is not the same question as ownership ("this row is yours").
+ * Checking only the first is what allowed one founder to overwrite another's
+ * conversation. The check lives here rather than in the API layer so it cannot
+ * be bypassed by a future caller that forgets it.
+ */
+export class NotOwnerError extends Error {
+  constructor(kind: string) {
+    super(`not the owner of this ${kind}`);
+    this.name = "NotOwnerError";
+  }
+}
+
+export type OwnedRecord = "thread" | "decision" | "checkin";
+
+/** The owner of an existing record, or null when the id is not yet taken. */
+export function ownerOf(kind: OwnedRecord, id: string): string | null {
+  const db = getDb();
+  // Literal SQL per branch — no identifier interpolation.
+  const sql =
+    kind === "thread"
+      ? "SELECT user_email FROM threads WHERE id = $id"
+      : kind === "decision"
+        ? "SELECT user_email FROM decisions WHERE id = $id"
+        : "SELECT user_email FROM checkins WHERE id = $id";
+  const row = db.query(sql).get({ $id: id }) as { user_email: string } | null;
+  return row?.user_email ?? null;
+}
+
+/**
+ * Throws unless `email` may write to `id`. An id nobody holds yet is claimable;
+ * an id somebody else holds is refused rather than silently ignored, so the
+ * caller can return 403 instead of reporting a success that did nothing.
+ */
+function assertOwner(kind: OwnedRecord, id: string, email: string): void {
+  const existing = ownerOf(kind, id);
+  if (existing !== null && existing !== email) throw new NotOwnerError(kind);
+}
+
 export function upsertThread(thread: ThreadRow, messages: { role: "user" | "assistant"; content: string }[]) {
   const db = getDb();
+
+  // Before anything else: this thread must be unclaimed or already ours.
+  // Without this, the DELETE FROM messages below would wipe another founder's
+  // conversation even when the INSERT itself was correctly scoped.
+  assertOwner("thread", thread.id, thread.user_email);
 
   const insert = db.prepare(`
     INSERT INTO threads (id, user_email, title, theme, state, last_at, personality, updated_at)
@@ -76,6 +123,7 @@ export function upsertThread(thread: ThreadRow, messages: { role: "user" | "assi
     ON CONFLICT(id) DO UPDATE SET
       title = $title, theme = $theme, state = $state, last_at = $last_at,
       personality = $personality, updated_at = datetime('now')
+    WHERE threads.user_email = $user_email
   `);
 
   const deleteMsgs = db.prepare("DELETE FROM messages WHERE thread_id = $thread_id");
@@ -126,16 +174,24 @@ export function getDecisions(userEmail: string) {
 
 export function upsertDecision(d: Omit<DecisionRow, "at"> & { at?: string }) {
   const db = getDb();
+  assertOwner("decision", d.id, d.user_email);
+
+  // A decision may only point at a thread the same person owns. Otherwise one
+  // founder could hang their decision off another's conversation.
+  const threadId =
+    d.thread_id && ownerOf("thread", d.thread_id) === d.user_email ? d.thread_id : null;
+
   db.run(
     `INSERT INTO decisions (id, user_email, thread_id, summary, door, status, theme, outcome, at, updated_at)
      VALUES ($id, $user_email, $thread_id, $summary, $door, $status, $theme, $outcome, $at, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        status = $status, outcome = $outcome, updated_at = datetime('now'),
-       thread_id = COALESCE($thread_id, thread_id)`,
+       thread_id = COALESCE($thread_id, thread_id)
+     WHERE decisions.user_email = $user_email`,
     {
       $id: d.id,
       $user_email: d.user_email,
-      $thread_id: d.thread_id ?? null,
+      $thread_id: threadId,
       $summary: d.summary,
       $door: d.door,
       $status: d.status,
@@ -163,15 +219,24 @@ export function getLastCheckin(userEmail: string): CheckinRow | null {
 
 export function upsertCheckin(c: CheckinRow) {
   const db = getDb();
+  assertOwner("checkin", c.id, c.user_email);
+
+  // Same rule as decisions: only reference a decision you own.
+  const refDecisionId =
+    c.ref_decision_id && ownerOf("decision", c.ref_decision_id) === c.user_email
+      ? c.ref_decision_id
+      : null;
+
   db.run(
     `INSERT INTO checkins (id, user_email, ref_decision_id, theme, prompt, mood)
      VALUES ($id, $user_email, $ref_decision_id, $theme, $prompt, $mood)
      ON CONFLICT(id) DO UPDATE SET
-       mood = COALESCE($mood, mood)`,
+       mood = COALESCE($mood, mood)
+     WHERE checkins.user_email = $user_email`,
     {
       $id: c.id,
       $user_email: c.user_email,
-      $ref_decision_id: c.ref_decision_id ?? null,
+      $ref_decision_id: refDecisionId,
       $theme: c.theme ?? null,
       $prompt: c.prompt,
       $mood: c.mood ?? null,
@@ -179,9 +244,14 @@ export function upsertCheckin(c: CheckinRow) {
   );
 }
 
-export function deleteCheckin(id: string) {
+/** Scoped by owner: deleting somebody else's check-in affects zero rows. */
+export function deleteCheckin(id: string, userEmail: string) {
   const db = getDb();
-  db.run("DELETE FROM checkins WHERE id = $id", { $id: id });
+  assertOwner("checkin", id, userEmail);
+  db.run("DELETE FROM checkins WHERE id = $id AND user_email = $email", {
+    $id: id,
+    $email: userEmail,
+  });
 }
 
 export function getVisits(userEmail: string): number {
@@ -312,10 +382,89 @@ export function updateUser(email: string, name: string, role: Role): void {
   });
 }
 
-/** Cascades to that user's sessions and invites via foreign keys. */
+/**
+ * Removes an account and everything belonging to it.
+ *
+ * The five original tables reference users(email) with ON DELETE NO ACTION,
+ * while foreign_keys is ON — so a plain DELETE FROM users threw a constraint
+ * error for any founder who had ever used the app, and the caller turned that
+ * into an empty HTTP 500. The account survived; the sessions, already deleted
+ * by then, did not.
+ *
+ * The children are deleted explicitly, in one transaction, in FK order. That
+ * is lower-risk than recreating seven tables to change their cascade policy,
+ * and it makes the erasure claim in the README true — which matters, because
+ * this is the GDPR right-to-erasure path.
+ */
 export function deleteUser(email: string): void {
   const db = getDb();
-  db.run("DELETE FROM users WHERE email = $email", { $email: email });
+  db.transaction(() => {
+    // Messages hang off threads, which cascade — but only once the threads
+    // themselves go, so delete them via the thread ids first.
+    db.run(
+      "DELETE FROM messages WHERE thread_id IN (SELECT id FROM threads WHERE user_email = $email)",
+      { $email: email },
+    );
+    // checkins.ref_decision_id -> decisions, so check-ins go before decisions.
+    db.run("DELETE FROM checkins WHERE user_email = $email", { $email: email });
+    // decisions.thread_id -> threads, so decisions go before threads.
+    db.run("DELETE FROM decisions WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM threads WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM visits WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM working_genius WHERE user_email = $email", { $email: email });
+    // sessions and invites cascade, but being explicit costs nothing and keeps
+    // the intent readable next to the rest.
+    db.run("DELETE FROM sessions WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM invites WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM users WHERE email = $email", { $email: email });
+  })();
+}
+
+// --- admin audit ---
+
+export type AuditEntry = {
+  id: string;
+  actor_email: string;
+  action: string;
+  subject_email: string | null;
+  detail: string | null;
+  created_at: string;
+};
+
+/**
+ * Records an administrative action. Never throws into the caller: losing an
+ * audit line is bad, but failing the operation the organizer was performing
+ * because the audit write failed is worse.
+ */
+export function recordAdminAction(
+  actorEmail: string,
+  action: string,
+  subjectEmail: string | null = null,
+  detail: string | null = null,
+): void {
+  try {
+    const db = getDb();
+    db.run(
+      `INSERT INTO admin_audit (id, actor_email, action, subject_email, detail)
+       VALUES ($id, $actor, $action, $subject, $detail)`,
+      {
+        $id: crypto.randomUUID(),
+        $actor: actorEmail,
+        $action: action,
+        $subject: subjectEmail,
+        $detail: detail,
+      },
+    );
+  } catch (error) {
+    console.error("[audit] could not record admin action:", error);
+  }
+}
+
+export function listAdminAudit(limit = 200): AuditEntry[] {
+  const db = getDb();
+  return db
+    .query("SELECT * FROM admin_audit ORDER BY created_at DESC, rowid DESC LIMIT $limit")
+    .all({ $limit: limit }) as AuditEntry[];
 }
 
 export function countOrganizers(): number {
@@ -411,18 +560,60 @@ export function markInviteUsed(token: string): void {
   db.run("UPDATE invites SET used_at = datetime('now') WHERE token = $token", { $token: token });
 }
 
+/**
+ * Claims an invite and sets the password in one transaction.
+ *
+ * Redemption used to be validate() -> setUserPassword() -> markInviteUsed() as
+ * three separate statements, so two concurrent requests with the same token
+ * could both pass validation and both set a password. The UPDATE below only
+ * matches a token that is still unused, so exactly one caller can win.
+ *
+ * Returns false when the token was already claimed.
+ */
+export function redeemInvite(token: string, passwordHash: string): boolean {
+  const db = getDb();
+  let claimed = false;
+  db.transaction(() => {
+    db.run(
+      "UPDATE invites SET used_at = datetime('now') WHERE token = $token AND used_at IS NULL",
+      { $token: token },
+    );
+    const row = db
+      .query("SELECT changes() AS n")
+      .get() as { n: number };
+    if (row.n !== 1) return;
+    const invite = db
+      .query("SELECT user_email FROM invites WHERE token = $token")
+      .get({ $token: token }) as { user_email: string } | null;
+    if (!invite) return;
+    db.run("UPDATE users SET password_hash = $hash WHERE email = $email", {
+      $hash: passwordHash,
+      $email: invite.user_email,
+    });
+    claimed = true;
+  })();
+  return claimed;
+}
+
 // --- per-thread sharing ---
 
 /**
  * A founder opting a single conversation in to coach visibility. Scoped by
  * user_email so one founder cannot share another's thread.
  */
-export function setThreadShared(threadId: string, userEmail: string, shared: boolean): void {
+export function setThreadShared(threadId: string, userEmail: string, shared: boolean): boolean {
   const db = getDb();
   db.run(
     "UPDATE threads SET shared_with_coach = $shared WHERE id = $id AND user_email = $email",
     { $shared: shared ? 1 : 0, $id: threadId, $email: userEmail },
   );
+  // Read the flag back rather than echoing the request. The scoping above
+  // means a call naming somebody else's thread updates nothing, and returning
+  // the requested value would have told the founder it worked.
+  const row = db
+    .query("SELECT shared_with_coach FROM threads WHERE id = $id AND user_email = $email")
+    .get({ $id: threadId, $email: userEmail }) as { shared_with_coach: number } | null;
+  return row?.shared_with_coach === 1;
 }
 
 /** The only raw-transcript view organizers get: threads founders chose to share. */
@@ -452,6 +643,25 @@ export function getSharedThreads(userEmail: string) {
 // actually wrote. See src/pages/api/persistence.ts for the same rule applied
 // to individual records.
 // ---------------------------------------------------------------------------
+
+/**
+ * Every dated theme signal for one founder: what they talked about and when.
+ *
+ * Feeds the "On your mind" arcs, which used to be three hardcoded names with
+ * zero-filled bars, identical for every founder and never persisted.
+ */
+export function getThemeSignals(userEmail: string): { theme: string; created_at: string }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT theme, created_at FROM threads   WHERE user_email = $email AND theme IS NOT NULL
+       UNION ALL
+       SELECT theme, created_at FROM decisions WHERE user_email = $email AND theme IS NOT NULL
+       UNION ALL
+       SELECT theme, created_at FROM checkins  WHERE user_email = $email AND theme IS NOT NULL`,
+    )
+    .all({ $email: userEmail }) as { theme: string; created_at: string }[];
+}
 
 export type FounderRow = { email: string; name: string; created_at: string | null };
 

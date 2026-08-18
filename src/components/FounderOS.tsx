@@ -190,61 +190,11 @@ const C = {
 type Personality = "none" | "paul" | "marten";
 const PERSONALITIES: Record<Personality, { label: string; color: string; desc: string }> = {
   none: { label: "None", color: C.faint, desc: "Just you — no persona overlay" },
-  paul: { label: "Paul", color: C.yellow, desc: "Paul Graham — direct, Y Combinator wisdom" },
+  // The wire value stays "paul" so conversations already saved under it keep
+  // their badge; the persona itself is no longer a named real person.
+  paul: { label: "The Contrarian", color: C.yellow, desc: "Blunt, YC-style challenge — no comfort" },
   marten: { label: "Mårten", color: C.blue, desc: "Mårten Mickos — MySQL CEO, servant leadership" },
 };
-const PERSONALITY_SYSTEM: Record<Personality, string> = {
-  none: "",
-  paul: `You are Paul Graham — co-founder of Y Combinator, essayist, and the most influential voice in startup thinking of the last 20 years. You are speaking directly to a founder who needs clarity, not comfort.
-
-Your voice:
-- Short, declarative sentences. Punchy. Every word earns its place.
-- Contrarian by instinct. If everyone agrees, you're suspicious.
-- Start with the hard truth, not the warmup. The founder already knows things are uncomfortable.
-- Never say "I hear you," "that makes sense," or "I understand." Skip the validation and get to the point.
-- Use phrases like: "The hard answer is..." "Most founders get this wrong." "Here's the thing nobody tells you." "The real problem here is..."
-- You write in the style of a short essay reply — make one point, make it well, stop.
-
-Your principles:
-- Make something people want. Everything else is commentary.
-- Do things that don't scale. Manual, personal, fragile things that teach you what to automate.
-- Startups = growth. If there's no path to rapid growth, it's not a startup.
-- Founder mode. Stay close to the product, users, and hiring. Delegation is necessary, abdication is dangerous.
-- Good ideas look narrow, strange, or unimpressive at first. The ones that sound plausible to everyone are the dangerous ones.
-- Watch what users do, not what they say. "Interesting" means nothing. Changing workflow, paying, returning — that means something.
-
-Rules:
-- One sharp point per reply. Not a list, not a summary, not a therapy session.
-- Challenge the founder. If they're avoiding something, name it.
-- Never be warm or nurturing. Be clear, be right, be useful.
-- No inspirational speeches. No "journey." No "you've got this."`,
-  marten: `You are Mårten Mickos — former CEO of MySQL (sold to Sun for $1B), former CEO of HackerOne, and Head of Aalto Founder School. You have built open-source companies, led through crises, and coached hundreds of founders. You are speaking to a founder who needs practical, grounded guidance.
-
-Your voice:
-- Nordic directness: honest, warm but not soft, understated confidence. No drama.
-- Servant leadership: you build people up. You ask what the team needs. You lead by example.
-- Operational wisdom: you've been in the trenches. You know what works at scale and what's just noise.
-- Short, clear sentences. No jargon. No management-consultant language.
-- Use phrases like: "The best way to predict the future is to create it." "Sunshine is the best disinfectant." "Let me know what you think — and please report any bugs."
-- You are calm when the founder is not. You steady the room.
-
-Your principles:
-- Culture eats strategy for breakfast. The best plan fails with the wrong people; the right people fix a broken plan.
-- Hire for attitude, train for skill. Self-awareness is the key to coachability, which is the key to career success.
-- The best way to predict the future is to create it. Don't wait for permission. Build it.
-- Sunshine is the best disinfectant. Transparency solves more problems than it creates. Say the hard thing out loud, in daylight.
-- Diversity sets healthy anticipation, provokes good thought, and leads to innovation — with better results.
-- Open source thinking: release early, release often. Find often, fix early. The community makes everything stronger.
-- Seeking input and committing to improvement is the foundation of all success.
-
-Rules:
-- One clear, practical take per reply. Actionable, not abstract.
-- Be direct but never harsh. You don't need to prove you're smart — they already know.
-- If the founder is panicking, be the calmest person in the room. Name the next concrete step.
-- No motivational fluff, no "believe in yourself." Give them something to do.
-- Never introduce yourself as an AI or assistant. You are Mårten, a coach who's been through it.`,
-};
-
 type StateKey = "panic" | "thinking" | "venting";
 const STATES: Record<StateKey, { label: string; color: string; posture: string }> = {
   panic: { label: "Panicking", color: C.red, posture: "They are in PANIC. Take the temperature down. Be calm and very brief. Give exactly ONE next step. Help them not act rashly tonight." },
@@ -275,7 +225,6 @@ type Team = {
   name: string;
   email?: string;
   company?: string;
-  live?: boolean;
   temp: number[];
   trend: "tenser" | "calmer" | "steady" | "quiet";
   theme: string;
@@ -295,17 +244,6 @@ type CohortData = {
   startDateConfigured: boolean;
 };
 
-/* ---------- Fictional demo seed data — no real PII ---------- */
-const seedThreads: Thread[] = [];
-
-const seedDecisions: Decision[] = [];
-
-const seedThemes: ThemeArc[] = [
-  { name: "Research", arc: Array(15).fill(0) },
-  { name: "Team", arc: Array(15).fill(0) },
-  { name: "Direction", arc: Array(15).fill(0) },
-];
-
 const WEEKS = Array.from({ length: 15 }, (_, i) => `W${i + 1}`);
 /* The cohort is loaded from /api/cohort. The hackathon build shipped eight
    hardcoded fictional founders here, complete with invented coaching notes —
@@ -323,7 +261,7 @@ const signalLabel = (score?: number) => tempLabel(signalTemp(score));
 const signalColor = (score?: number) => tempColor(signalTemp(score));
 const splitCheckinPrompt = (prompt: string) => {
   const [summary, signal] = prompt.split(/\nSignal:\s*/);
-  return { summary: summary.trim(), signal: signal?.trim() || "" };
+  return { summary: (summary ?? "").trim(), signal: signal?.trim() || "" };
 };
 
 type Persona = "founder" | "coach";
@@ -360,10 +298,13 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
     return () => { cancelled = true; };
   }, [persona]);
 
-  const [threads, setThreads] = useState<Thread[]>(initialData?.threads || seedThreads);
-  const [decisions, setDecisions] = useState<Decision[]>(initialData?.decisions || seedDecisions);
+  const [threads, setThreads] = useState<Thread[]>(initialData?.threads || []);
+  const [decisions, setDecisions] = useState<Decision[]>(initialData?.decisions || []);
   const [checkins, setCheckins] = useState<Checkin[]>(initialData?.checkins || []);
-  const [themes, setThemes] = useState<ThemeArc[]>(seedThemes);
+  // Derived server-side from this founder's real threads, decisions and
+  // check-ins. This used to be three hardcoded names with zero-filled arcs,
+  // identical for everyone and never saved anywhere.
+  const [themes, setThemes] = useState<ThemeArc[]>(initialData?.themes || []);
   const [visits, setVisits] = useState(initialData?.visits ?? 4);
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -406,11 +347,20 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   };
   const markCheckinDone = () => setCheckinDoneToday(true);
 
+  // An optimistic in-session bump so a theme appears as soon as it is talked
+  // about; the server recomputes it properly on the next load. The increment
+  // lands on the *current* sprint week — it used to always hit arc[5],
+  // attributing everything to week six regardless of the date.
+  const currentWeekIndex = Math.max(0, Math.min(14, (initialData?.week ?? 1) - 1));
   const bumpTheme = (name: string) => setThemes((prev) => {
     const i = prev.findIndex((t) => t.name === name);
-    if (i === -1) return [...prev, { name, arc: [...Array(14).fill(0), 1] }];
+    if (i === -1) {
+      const arc = Array(15).fill(0);
+      arc[currentWeekIndex] = 1;
+      return [...prev, { name, arc }];
+    }
     const next = prev.map((t) => ({ ...t, arc: [...t.arc] }));
-    next[i].arc[5] += 1;
+    next[i]!.arc[currentWeekIndex] = (next[i]!.arc[currentWeekIndex] ?? 0) + 1;
     return next;
   });
   const addDecision = (d: { summary: string; door: "reversible" | "one-way"; theme: string }) => {
@@ -490,7 +440,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
         {persona === "coach" && (
           <Scroll>
             {coachTeam
-              ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} liveDecisions={decisions} liveCheckins={checkins} />
+              ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} />
               : <Cohort onPick={setCoachTeam} cohort={cohort} loading={cohortLoading} />}
           </Scroll>
         )}
@@ -548,7 +498,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             title="Collapse sidebar"
             tabIndex={open ? 0 : -1}
             className="navitem sidebar-collapse-button"
-            style={{ marginTop: 8, marginRight: -2, background: "transparent", border: `1px solid var(--line)`, color: C.ink, cursor: "pointer", padding: "3px 10px 5px", fontSize: 22, lineHeight: 1, borderRadius: 8, width: "auto", fontWeight: 900, opacity: 0.35 }}
+            style={{ marginTop: 8, marginRight: -2, background: "transparent", border: `1px solid var(--line)`, color: C.ink, cursor: "pointer", padding: "9px 12px 11px", fontSize: 22, lineHeight: 1, borderRadius: 8, width: "auto", fontWeight: 900, opacity: 0.35 }}
           >
             ‹
           </button>
@@ -616,7 +566,6 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               return (
                 <button key={t.id} onClick={() => onPickTeam(t)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 12px", fontSize: 14 }}>
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
-                  {t.live && <span style={{ fontSize: 9, fontWeight: 800, color: C.black, background: C.white, borderRadius: 4, padding: "2px 6px", letterSpacing: 0.4 }}>LIVE</span>}
                 </button>
               );
             })}
@@ -763,7 +712,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
     : `${FOUNDER_CORPUS}\n${STATES[mode].posture}`;
 
   const founderName = userEmail
-    ? userEmail.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    ? (userEmail.split("@")[0] ?? userEmail).replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
   const founderTz = typeof Intl !== "undefined"
     ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -925,7 +874,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
               placeholder={mode === "panic" ? "Say it plainly. One thing at a time." : mode === "venting" ? "Let it out, nobody's grading this." : "What are you turning over?"}
-              style={{ flex: 1, background: "transparent", border: "none", padding: "6px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", maxHeight: 160, outline: "none" }} />
+              style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
             <button
               onClick={() => send()}
               disabled={busy || !input.trim()}
@@ -1084,7 +1033,8 @@ function Reflections({
   checkins: Checkin[];
   themes: ThemeArc[];
   visits: number;
-  userEmail: string;
+  /** Absent only before sign-in completes; every use below is guarded. */
+  userEmail?: string;
   initialWorkingGenius?: { primary: string; counts: Record<string, number>; completedAt: string };
 }) {
   const openCount = decisions.filter((d) => d.status === "open").length;
@@ -1203,10 +1153,10 @@ function Reflections({
         <PatternLine
           label="You keep returning to"
           value={themes
-            .filter((t) => (t.arc[t.arc.length - 1] ?? 0) > 0 || ["Research", "Team", "Direction"].includes(t.name))
+            .filter((t) => t.arc.reduce((sum, n) => sum + n, 0) > 0)
             .slice(0, 3)
             .map((t) => t.name)
-            .join(" / ") || topTheme}
+            .join(" / ") || "Nothing yet — this fills in as you talk."}
         />
         <PatternLine
           label="Latest check-in signal"
@@ -1239,9 +1189,15 @@ function Reflections({
       </div>
 
       <p style={{ ...kicker, margin: "0 0 14px" }}>On your mind</p>
-      <ul style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
-        {themes.map((t) => <ThemeRow key={t.name} t={t} />)}
-      </ul>
+      {themes.length === 0 ? (
+        <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint, fontVariationSettings: '"opsz" 18' }}>
+          Nothing tracked yet. Themes appear here once you've talked a few things through.
+        </p>
+      ) : (
+        <ul style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
+          {themes.map((t) => <ThemeRow key={t.name} t={t} />)}
+        </ul>
+      )}
 
       <p style={{ ...kicker, marginTop: 44, marginBottom: 14 }}>Decisions</p>
       {decisions.length === 0 ? (
@@ -1494,7 +1450,6 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
           {teams.map((t) => (
             <React.Fragment key={t.id}>
               <button onClick={() => onPick(t)} className="row" style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, background: "none", border: "none", cursor: "pointer", color: C.ink, textAlign: "left", padding: "6px 8px", borderRadius: 6 }}>
-                {t.live && <span style={{ fontSize: 9, fontWeight: 800, color: "oklch(13% 0.008 250)", background: C.ink, borderRadius: 3, padding: "1px 5px", letterSpacing: 1.2 }}>LIVE</span>}
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14, fontWeight: 600 }}>{t.name}</span>
               </button>
               {t.temp.map((v, i) => (
@@ -1530,12 +1485,16 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
 }
 
 /* ---------------- Coach: per-founder card ---------------- */
-function FounderCard({ team, onBack, liveDecisions, liveCheckins }: { team: Team; onBack: () => void; liveDecisions: Decision[]; liveCheckins: Checkin[] }) {
+/*
+ * Everything shown here comes from the aggregate cohort payload. It used to
+ * also receive the signed-in organizer's OWN decisions and check-ins and
+ * render them under "Still open for them" whenever team.live was set — the
+ * coach's private material, attributed to a founder. /api/cohort never sends
+ * `live`, so it was inert, but it only stayed inert by accident.
+ */
+function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
   const arrow = ({ tenser: "↗", calmer: "↘", steady: "→", quiet: "•" } as const)[team.trend] || "→";
   const arrowColor = ({ tenser: C.red, calmer: C.blue, steady: C.sub, quiet: C.faint } as const)[team.trend] || C.sub;
-  const openLoops = team.live ? liveDecisions.filter((d) => d.status === "open") : [];
-  const latestCheckin = team.live ? liveCheckins[0] : null;
-  const latestCheckinParts = latestCheckin ? splitCheckinPrompt(latestCheckin.prompt) : null;
 
   return (
     <div className="rise" style={{ maxWidth: 640, margin: "0 auto", padding: "26px 28px 90px" }}>
@@ -1578,7 +1537,6 @@ function FounderCard({ team, onBack, liveDecisions, liveCheckins }: { team: Team
 
       <h1 style={{ margin: "0 0 4px", fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", color: C.ink, fontVariationSettings: '"opsz" 60' }}>
         {team.name}
-        {team.live && <span style={{ marginLeft: 14, fontSize: 11, fontWeight: 800, letterSpacing: 1.6, color: "oklch(13% 0.008 250)", background: C.ink, borderRadius: 4, padding: "3px 8px", verticalAlign: "0.45em" }}>LIVE</span>}
       </h1>
       <p style={{ margin: "0 0 32px", color: C.faint, fontSize: 13.5 }}>{team.company}</p>
 
@@ -1601,33 +1559,6 @@ function FounderCard({ team, onBack, liveDecisions, liveCheckins }: { team: Team
         <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint, marginBottom: 10 }}>Open with</span>
         <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>{team.openWith}</p>
       </div>
-
-      {latestCheckin && (
-        <div style={{ marginTop: 28, padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
-          <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint, marginBottom: 8 }}>Latest check-in</span>
-          <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>{latestCheckinParts?.summary}</p>
-          {latestCheckin.mood != null && (
-            <p style={{ margin: "10px 0 0", color: signalColor(latestCheckin.mood), fontSize: 13, fontWeight: 800 }}>
-              {signalLabel(latestCheckin.mood)} · {latestCheckin.mood}/100{latestCheckinParts?.signal ? ` — ${latestCheckinParts.signal}` : ""}
-            </p>
-          )}
-        </div>
-      )}
-
-      {team.live && openLoops.length > 0 && (
-        <>
-          <p style={{ ...kicker, marginTop: 36, marginBottom: 14 }}>Still open for them</p>
-          <ol style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
-            {openLoops.map((d) => (
-              <li key={d.id} style={{ display: "grid", gridTemplateColumns: "5rem 1fr auto", alignItems: "baseline", gap: 16, padding: "13px 0", borderBottom: `1px solid ${C.line}`, fontSize: 14.5, lineHeight: 1.5 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.6, textTransform: "uppercase", color: C.yellow }}>Open</span>
-                <span style={{ color: C.ink }}>{d.summary}</span>
-                <span style={{ fontSize: 12, color: C.faint }}>{d.door}</span>
-              </li>
-            ))}
-          </ol>
-        </>
-      )}
 
       <p style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, marginTop: 36, paddingTop: 18, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 8, fontVariationSettings: '"opsz" 18' }}>
         <span style={{ width: 6, height: 6, borderRadius: 9, background: C.blue, flexShrink: 0 }} />
@@ -1741,9 +1672,11 @@ const CSS = `
 .newbtn:hover { opacity: .9; }
 .composer-box:focus-within { border-color: var(--brand-blue)!important; }
 .send-button {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  /* 44px is the smallest reliable touch target on iOS and Android, and this
+     is the control founders hit most. It was 36px. */
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   display: grid;
   place-items: center;
   margin-bottom: 0;
