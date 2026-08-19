@@ -190,18 +190,29 @@ export const GET: APIRoute = async ({ cookies }) => {
     };
   });
 
-  // Judged on the most recently completed week, not the one still running.
+  /*
+   * Judged on the most recently completed week, not the one still running.
+   *
+   * Strain and silence are counted separately, and that separation is the
+   * point. They were one number, so a founder in real difficulty and a founder
+   * who never opened the app landed in the same total — and they demand
+   * opposite responses. Four people showing strain is a coaching problem. Six
+   * people who have not checked in is an onboarding problem, and in the first
+   * fortnight it is the more urgent of the two, because if adoption is broken
+   * every other signal on this page is noise.
+   */
   const settledWeek = Math.max(1, week - 1);
-  const needAttention = teams.filter((t) => {
-    const value = t.temp[settledWeek - 1] ?? 1;
-    return value >= 2 || value === 0;
-  }).length;
+  const valueFor = (t: (typeof teams)[number]) => t.temp[settledWeek - 1] ?? 1;
+  const needAttention = teams.filter((t) => valueFor(t) >= 2).length;
+  const quiet = teams.filter((t) => valueFor(t) === 0).length;
 
   return Response.json({
     week,
     totalWeeks: TOTAL_WEEKS,
     teams,
     needAttention,
+    /** Founders with no check-in in the settled week. Absence, not distress. */
+    quiet,
     // Lets the UI say "no cohort yet" rather than drawing an empty grid.
     cohortSize: founders.length,
     // False means SPRINT_START_DATE is unset, so check-ins cannot be placed
