@@ -4,11 +4,11 @@ import { getLastCheckin, upsertCheckin } from "../../db";
 import { advisorReply, advisorReplyStream } from "../../lib/ai";
 import { getSessionUser } from "../../lib/auth";
 import { buildProgrammeContext } from "../../lib/programme";
+import { martenPersona } from "../../lib/knowledge";
 import { capHistory, chatLimiter } from "../../lib/limits";
 import { reportError } from "../../lib/errors";
 import {
   FOUNDER_VOICE_SYSTEM,
-  MARTEN_SYSTEM,
   POSTURE_PROMPTS,
   STYLE_GUARDRAILS,
 } from "../../lib/personas";
@@ -119,7 +119,7 @@ function buildSystem(body: {
   // than being special-cased, which is what removing a persona should mean.
   const persona =
     body.personality === "marten"
-      ? MARTEN_SYSTEM
+      ? martenPersona()
       : FOUNDER_VOICE_SYSTEM + "\n\n" + STYLE_GUARDRAILS;
 
   /*

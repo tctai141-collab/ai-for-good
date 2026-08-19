@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { MARTEN_DEFAULT_KNOWLEDGE } from "../lib/personas";
 
 /**
  * Adds a column only if it is missing, so schema upgrades are safe to re-run
@@ -321,6 +322,43 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // The advisor's knowledge, editable rather than compiled in.
+  //
+  // Deliberately not a vector store. Retrieval exists to solve "more knowledge
+  // than fits in a request", and this is a few thousand tokens against a
+  // million-token window — with the persona prefix cached, sending all of it
+  // every time costs less than embedding it would, and every retrieval step is
+  // a chance to fetch the wrong passage. Assembling the whole pack cannot miss.
+  // If it ever grows past roughly 40k tokens, revisit that.
+  //
+  // Mårten has consented to his material being used this way, including in the
+  // public repository (Tai, 19 Aug 2026). Worth knowing what that means in
+  // practice: anything committed here is world-readable and scrapeable
+  // permanently. The database itself is private, EU-hosted and backed up.
+  //
+  // `persona` scopes an entry so a second advisor can have its own knowledge
+  // without inheriting Mårten's. `position` orders the assembled pack, because
+  // the order topics appear in is part of how the prompt reads.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_entries (
+      id TEXT PRIMARY KEY,
+      persona TEXT NOT NULL DEFAULT 'marten',
+      topic TEXT NOT NULL,
+      body TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'archived')),
+      source TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_knowledge_persona
+      ON knowledge_entries(persona, status, position);
+  `);
+
+  seedMartenKnowledge(db);
+
   // The cohort's programme, one row per week.
   //
   // This used to be a TypeScript file, which meant a moved session needed a code
@@ -384,4 +422,37 @@ export function initSchema(db: Database) {
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_email);
   `);
+}
+
+/**
+ * Writes the shipped knowledge pack into the table the first time only.
+ *
+ * A fresh install should not be born ignorant, and the operating team should
+ * find something to edit rather than an empty box. It seeds only when the table
+ * has no rows for the persona: once anybody has touched it, the database is the
+ * source of truth and this must never overwrite their work — including if they
+ * deliberately deleted an entry.
+ */
+function seedMartenKnowledge(db: Database): void {
+  const existing = db
+    .query("SELECT COUNT(*) AS n FROM knowledge_entries WHERE persona = 'marten'")
+    .get() as { n: number };
+  if (existing.n > 0) return;
+
+  const pack = MARTEN_DEFAULT_KNOWLEDGE.replace(/^WHAT YOU KNOW[^\n]*\n+/, "");
+  const blocks = pack.split(/\n\n+/).map((b) => b.trim()).filter(Boolean);
+
+  let position = 0;
+  for (const block of blocks) {
+    // "TOPIC IN CAPS. Body text..." — the shape the pack was written in.
+    const match = block.match(/^([A-Z][A-Z ,/'\u2019-]{4,})\.\s+([\s\S]+)$/);
+    const topic = match ? match[1]!.trim() : "GENERAL";
+    const body = match ? match[2]!.trim() : block;
+    db.run(
+      `INSERT INTO knowledge_entries (id, persona, topic, body, position, source)
+       VALUES ($id, 'marten', $topic, $body, $position, 'shipped default')`,
+      { $id: crypto.randomUUID(), $topic: topic, $body: body, $position: position },
+    );
+    position += 10;
+  }
 }

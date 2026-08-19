@@ -333,6 +333,42 @@
 
           <div id="programme-list"></div>
         </section>
+
+        <section class="panel">
+          <h2>What Mårten knows</h2>
+          <p class="note" style="margin-top:0">
+            The advisor's knowledge, one entry per topic. All of it is sent with
+            every message — there is no search step to miss the right passage.
+            Order matters: it is the order he reads them in. Archive rather than
+            delete so you can put something back.
+          </p>
+          <p class="note" id="kb-size" style="margin-top:0"></p>
+
+          <form id="knowledge-form" class="row">
+            <input type="hidden" id="kb-id" />
+            <label>
+              <span class="label-text">Topic</span>
+              <input id="kb-topic" maxlength="120" placeholder="SELLING AND PRODUCT-MARKET FIT" />
+            </label>
+            <label>
+              <span class="label-text">Order</span>
+              <input id="kb-position" type="number" step="10" value="0" />
+            </label>
+            <label>
+              <span class="label-text">Source (optional)</span>
+              <input id="kb-source" maxlength="120" placeholder="Quora, 2015" />
+            </label>
+            <label style="flex:1 1 100%">
+              <span class="label-text">What he thinks about it</span>
+              <textarea id="kb-body" rows="6" maxlength="8000" placeholder="Sell before you build; you can start selling before you have a prototype. (Jyri Engeström's formulation — credit him.) Pre-PMF the metric is not revenue, it is learning."></textarea>
+            </label>
+            <button type="submit">Save entry</button>
+            <button type="button" id="kb-new">New entry</button>
+          </form>
+          <p class="message" id="kb-message" hidden></p>
+
+          <div id="knowledge-list"></div>
+        </section>
       </div>
     </main>
 
@@ -797,9 +833,134 @@
         loadProgramme();
       });
 
+      // ---- Knowledge base ------------------------------------------------
+
+      const kbId = document.getElementById("kb-id");
+      const kbTopic = document.getElementById("kb-topic");
+      const kbBody = document.getElementById("kb-body");
+      const kbPosition = document.getElementById("kb-position");
+      const kbSource = document.getElementById("kb-source");
+      const kbMessage = document.getElementById("kb-message");
+      const kbSize = document.getElementById("kb-size");
+      const knowledgeList = document.getElementById("knowledge-list");
+
+      let knowledgeEntries = [];
+
+      function kbClear() {
+        kbId.value = "";
+        kbTopic.value = "";
+        kbBody.value = "";
+        kbSource.value = "";
+        const highest = knowledgeEntries.reduce((m, e) => Math.max(m, e.position), 0);
+        kbPosition.value = String(highest + 10);
+      }
+
+      function renderKnowledge() {
+        if (!knowledgeEntries.length) {
+          knowledgeList.innerHTML = '<p class="note">Nothing yet.</p>';
+          return;
+        }
+        knowledgeList.innerHTML = knowledgeEntries
+          .map((e) => {
+            const archived = e.status === "archived";
+            const preview = e.body.length > 130 ? e.body.slice(0, 130) + "…" : e.body;
+            return (
+              '<div style="padding:10px 0;border-bottom:1px solid var(--border);opacity:' + (archived ? "0.5" : "1") + '">' +
+              '<div class="row" style="align-items:baseline;gap:10px">' +
+              '<strong style="min-width:44px">' + e.position + "</strong>" +
+              '<span style="flex:1"><strong>' + (e.topic || "(no topic)") + "</strong>" +
+              (e.source ? ' <span class="note" style="margin:0">· ' + e.source + "</span>" : "") +
+              (archived ? ' <span class="note" style="margin:0">· archived</span>' : "") +
+              "</span>" +
+              '<button type="button" data-edit="' + e.id + '">Edit</button>' +
+              '<button type="button" data-toggle="' + e.id + '">' + (archived ? "Restore" : "Archive") + "</button>" +
+              "</div>" +
+              '<p class="note" style="margin:4px 0 0">' + preview + "</p>" +
+              "</div>"
+            );
+          })
+          .join("");
+
+        knowledgeList.querySelectorAll("button[data-edit]").forEach((b) => {
+          b.addEventListener("click", () => {
+            const entry = knowledgeEntries.find((e) => e.id === b.dataset.edit);
+            if (!entry) return;
+            kbId.value = entry.id;
+            kbTopic.value = entry.topic;
+            kbBody.value = entry.body;
+            kbPosition.value = String(entry.position);
+            kbSource.value = entry.source || "";
+            kbTopic.focus();
+          });
+        });
+        knowledgeList.querySelectorAll("button[data-toggle]").forEach((b) => {
+          b.addEventListener("click", async () => {
+            const entry = knowledgeEntries.find((e) => e.id === b.dataset.toggle);
+            if (!entry) return;
+            await knowledgeApi({ action: entry.status === "archived" ? "restore" : "archive", id: entry.id });
+            loadKnowledge();
+          });
+        });
+      }
+
+      async function knowledgeApi(body) {
+        let res;
+        try {
+          res = await fetch("/api/knowledge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        } catch {
+          say(kbMessage, "Could not reach the server.", true);
+          return { ok: false, data: {} };
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) say(kbMessage, data.error || "That did not work.", true);
+        return { ok: res.ok, data };
+      }
+
+      async function loadKnowledge() {
+        let res;
+        try {
+          res = await fetch("/api/knowledge");
+        } catch {
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        knowledgeEntries = data.entries || [];
+        const size = data.size || {};
+        const pct = Math.round((size.chars / size.budgetChars) * 100);
+        kbSize.textContent =
+          "Active pack: ~" + (size.approxTokens || 0) + " tokens, " + pct + "% of the budget." +
+          (size.truncated ? " Over budget — the lowest-ordered entries are being dropped." : "");
+        renderKnowledge();
+        if (!kbId.value) kbClear();
+      }
+
+      document.getElementById("kb-new").addEventListener("click", kbClear);
+
+      document.getElementById("knowledge-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const { ok, data } = await knowledgeApi({
+          action: "save",
+          id: kbId.value || undefined,
+          topic: kbTopic.value,
+          body: kbBody.value,
+          position: Number(kbPosition.value),
+          source: kbSource.value,
+        });
+        if (!ok) return;
+        say(kbMessage, "Saved. Mårten uses it on the next message.", false);
+        kbId.value = data.id || "";
+        loadKnowledge();
+      });
+
       load();
       loadDeadlines();
       loadProgramme();
+      loadKnowledge();
     </script>
   </body>
 </html>
