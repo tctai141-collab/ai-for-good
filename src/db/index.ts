@@ -918,6 +918,52 @@ export function deadlineCompletionCounts(): Record<string, number> {
  * from the conversation-privacy boundary, and mixing them is how the second
  * one gets eroded.
  */
+export type ProgrammeWeekRow = {
+  week: number;
+  phase: string;
+  title: string;
+  milestones: string;
+  sessions: string;
+};
+
+export function listProgrammeWeeks(): ProgrammeWeekRow[] {
+  const db = getDb();
+  return db
+    .query("SELECT week, phase, title, milestones, sessions FROM programme_weeks ORDER BY week ASC")
+    .all() as ProgrammeWeekRow[];
+}
+
+export function getProgrammeWeek(week: number): ProgrammeWeekRow | null {
+  const db = getDb();
+  return db
+    .query("SELECT week, phase, title, milestones, sessions FROM programme_weeks WHERE week = $week")
+    .get({ $week: week }) as ProgrammeWeekRow | null;
+}
+
+/** Writes a week. Blank everywhere means the week is cleared, not stored empty. */
+export function upsertProgrammeWeek(row: ProgrammeWeekRow): void {
+  const db = getDb();
+  const empty = !row.phase.trim() && !row.title.trim() && !row.milestones.trim() && !row.sessions.trim();
+  if (empty) {
+    db.run("DELETE FROM programme_weeks WHERE week = $week", { $week: row.week });
+    return;
+  }
+  db.run(
+    `INSERT INTO programme_weeks (week, phase, title, milestones, sessions, updated_at)
+     VALUES ($week, $phase, $title, $milestones, $sessions, datetime('now'))
+     ON CONFLICT(week) DO UPDATE SET
+       phase = $phase, title = $title, milestones = $milestones,
+       sessions = $sessions, updated_at = datetime('now')`,
+    {
+      $week: row.week,
+      $phase: row.phase.trim(),
+      $title: row.title.trim(),
+      $milestones: row.milestones.trim(),
+      $sessions: row.sessions.trim(),
+    },
+  );
+}
+
 export type ReminderKind = "due-soon" | "overdue";
 
 export type PendingReminder = {

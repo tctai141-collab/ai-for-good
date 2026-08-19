@@ -91,7 +91,7 @@ async function waitForPort(output: string[], deadlineMs = 15_000): Promise<numbe
 }
 
 export async function startServer(
-  options: { email?: boolean; advisorFails?: boolean } = {},
+  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string } = {},
 ): Promise<Harness> {
   const emailEnabled = options.email !== false;
   if (!(await Bun.file(ENTRY).exists())) {
@@ -173,7 +173,9 @@ export async function startServer(
       // Never a real key: no test may reach the live API.
       ANTHROPIC_API_KEY: "test-key-not-real",
       ANTHROPIC_BASE_URL: advisorUrl,
-      SPRINT_START_DATE: "2026-09-09",
+      // Future by default, which is the state the app is actually in and the
+      // one that produced a bug. Tests that need a running sprint say so.
+      SPRINT_START_DATE: options.sprintStartDate ?? "2026-09-09",
       // Omitted entirely when a test needs the unconfigured case.
       ...(emailEnabled
         ? {
