@@ -31,8 +31,8 @@ export type Harness = {
   lastEmailTo(address: string): SentEmail | undefined;
   /** Everything the server has logged, for diagnosing a failing test. */
   serverOutput(): string;
-  /** What was actually forwarded to the advisor API. */
-  advisorCalls: { messages: { role: string; content: string }[] }[];
+  /** What was actually forwarded to the advisor API, system prompt included. */
+  advisorCalls: { system: string; messages: { role: string; content: string }[] }[];
   stop(): void;
 };
 
@@ -112,13 +112,15 @@ export async function startServer(
   // without reaching the real service. Returns a minimal non-streaming
   // Messages response; tests that care about the rate limit or the history cap
   // sit in front of this anyway.
-  const advisorCalls: { messages: { role: string; content: string }[] }[] = [];
+  const advisorCalls: { system: string; messages: { role: string; content: string }[] }[] = [];
   const advisor = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      const body = (await request.json()) as { messages: { role: string; content: string }[] };
-      advisorCalls.push({ messages: body.messages ?? [] });
+      const body = (await request.json()) as { system?: string; messages: { role: string; content: string }[] };
+      // The system prompt is captured too: what the advisor is told about the
+      // cohort is exactly the thing that went wrong once.
+      advisorCalls.push({ system: body.system ?? "", messages: body.messages ?? [] });
       if (options.advisorFails) {
         // The shape the audit caught being relayed to the browser verbatim.
         return new Response(
