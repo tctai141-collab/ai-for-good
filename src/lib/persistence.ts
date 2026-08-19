@@ -1,5 +1,5 @@
 export type Msg = { role: "user" | "assistant"; content: string };
-export type Personality = "none" | "paul" | "marten";
+export type Personality = "none" | "marten";
 
 export type Thread = {
   id: string;
