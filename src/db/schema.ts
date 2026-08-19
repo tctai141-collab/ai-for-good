@@ -321,6 +321,19 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // What has already been said to whom, so a reminder is a reminder and not a
+  // daily nag. One row per (deadline, founder, kind); the primary key is what
+  // makes a second send impossible rather than merely unlikely.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS deadline_reminders (
+      deadline_id TEXT NOT NULL REFERENCES deadlines(id) ON DELETE CASCADE,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('due-soon', 'overdue')),
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (deadline_id, user_email, kind)
+    )
+  `);
+
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_deadlines_status_due ON deadlines(status, due_date);
   `);

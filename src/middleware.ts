@@ -1,11 +1,13 @@
 import { defineMiddleware } from "astro:middleware";
 import { startBackupScheduler } from "./lib/backup";
+import { startReminderScheduler } from "./lib/reminders";
 import { MAX_BODY_BYTES } from "./lib/limits";
 import { reportError } from "./lib/errors";
 
 // Module scope runs once when the server boots, which is the only start hook
 // Astro gives us. No-ops outside production and when no backup target is set.
 startBackupScheduler();
+startReminderScheduler();
 
 /**
  * Security headers applied to every response.
