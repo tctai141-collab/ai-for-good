@@ -1,5 +1,4 @@
 import type { APIRoute } from "astro";
-import { getSprintContext } from "../../lib/sprint-context";
 import { buildCheckinPrompt } from "../../lib/prompts/checkin";
 import { getLastCheckin, upsertCheckin } from "../../db";
 import { advisorReply, advisorReplyStream } from "../../lib/ai";
@@ -124,7 +123,6 @@ function buildSystem(body: {
     p = FOUNDER_VOICE_SYSTEM + "\n\n" + STYLE_GUARDRAILS;
   }
 
-  p += "\n\n" + getSprintContext();
 
   if (body.kind === "checkin") {
     const last = body.userEmail ? getLastCheckin(body.userEmail) : null;
