@@ -1,7 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import * as personas from "../src/lib/personas";
-import { FOUNDER_VOICE_SYSTEM, MARTEN_SYSTEM } from "../src/lib/personas";
+import {
+  FOUNDER_VOICE_SYSTEM,
+  MARTEN_CORE_BOTTOM,
+  MARTEN_CORE_TOP,
+  MARTEN_DEFAULT_KNOWLEDGE,
+} from "../src/lib/personas";
+
+/*
+ * The prompt as shipped. At runtime the middle section is read from the
+ * database, seeded from MARTEN_DEFAULT_KNOWLEDGE — these assertions are about
+ * what the app ships with, which is what a fresh install gets.
+ */
+const MARTEN_SYSTEM = [MARTEN_CORE_TOP, MARTEN_DEFAULT_KNOWLEDGE, MARTEN_CORE_BOTTOM].join("\n\n");
 
 /**
  * Guards on the advisor personas.

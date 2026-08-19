@@ -918,6 +918,68 @@ export function deadlineCompletionCounts(): Record<string, number> {
  * from the conversation-privacy boundary, and mixing them is how the second
  * one gets eroded.
  */
+export type KnowledgeRow = {
+  id: string;
+  persona: string;
+  topic: string;
+  body: string;
+  position: number;
+  status: string;
+  source: string;
+};
+
+export function listKnowledge(persona: string, includeArchived = false): KnowledgeRow[] {
+  const db = getDb();
+  const sql = includeArchived
+    ? `SELECT id, persona, topic, body, position, status, source FROM knowledge_entries
+       WHERE persona = $persona ORDER BY position ASC, topic ASC`
+    : `SELECT id, persona, topic, body, position, status, source FROM knowledge_entries
+       WHERE persona = $persona AND status = 'active' ORDER BY position ASC, topic ASC`;
+  return db.query(sql).all({ $persona: persona }) as KnowledgeRow[];
+}
+
+export function upsertKnowledge(entry: {
+  id?: string;
+  persona: string;
+  topic: string;
+  body: string;
+  position: number;
+  source: string;
+}): string {
+  const db = getDb();
+  // Server-generated, like every other id here. A caller never names a row.
+  const id = entry.id ?? crypto.randomUUID();
+  db.run(
+    `INSERT INTO knowledge_entries (id, persona, topic, body, position, source, updated_at)
+     VALUES ($id, $persona, $topic, $body, $position, $source, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       topic = $topic, body = $body, position = $position,
+       source = $source, updated_at = datetime('now')`,
+    {
+      $id: id,
+      $persona: entry.persona,
+      $topic: entry.topic,
+      $body: entry.body,
+      $position: entry.position,
+      $source: entry.source,
+    },
+  );
+  return id;
+}
+
+export function setKnowledgeStatus(id: string, status: "active" | "archived"): boolean {
+  const db = getDb();
+  const existing = db
+    .query("SELECT id FROM knowledge_entries WHERE id = $id")
+    .get({ $id: id }) as { id: string } | null;
+  if (!existing) return false;
+  db.run("UPDATE knowledge_entries SET status = $status, updated_at = datetime('now') WHERE id = $id", {
+    $id: id,
+    $status: status,
+  });
+  return true;
+}
+
 export type ProgrammeWeekRow = {
   week: number;
   phase: string;
