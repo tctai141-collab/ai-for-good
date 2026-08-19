@@ -20,34 +20,44 @@ startBackupScheduler();
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
- * The host this request was actually addressed to.
+ * Every host this deployment legitimately answers on.
  *
  * Render terminates TLS and forwards over plain HTTP, so the URL the server
- * sees is http:// on an internal host while the browser sent https:// on the
- * public one. Comparing full origins therefore never matches in production.
- * Comparing hosts does, and the protocol adds nothing here: HSTS is set, so a
- * browser will not speak plain HTTP to this origin in the first place.
+ * sees is http:// on an internal host while the browser sent https:// on a
+ * public one. Comparing full origins therefore never matches in production;
+ * comparing hosts does, and the protocol adds nothing here because HSTS is set.
+ *
+ * The set matters as much as the comparison. An earlier version trusted only
+ * PUBLIC_BASE_URL, which is correct for one domain and wrong for this service —
+ * it also answers on its onrender.com address, and every state-changing request
+ * from that host was rejected with a 403 that no log recorded. The security
+ * property we actually want is the ordinary same-origin one: the Origin the
+ * browser reports must match the host the browser addressed. A page on another
+ * origin cannot forge either — it cannot set Host, and it cannot add
+ * X-Forwarded-Host without triggering a preflight this app never approves.
  */
-function expectedHost(request: Request): string | null {
-  // PUBLIC_BASE_URL first, because it is the one value a client cannot
-  // influence at all. x-forwarded-host is set by Render, but it arrives as a
-  // request header, and a header a request carries is a header something else
-  // could have carried. A cross-origin attacker cannot actually set it — custom
-  // headers force a CORS preflight that this app never approves — but "cannot
-  // in practice" is a weaker guarantee than "is not read from the request".
+function acceptableHosts(request: Request): Set<string> {
+  const hosts = new Set<string>();
+
+  const add = (value: string | null | undefined) => {
+    if (!value) return;
+    const first = value.split(",")[0]!.trim().toLowerCase();
+    if (first) hosts.add(first);
+  };
+
   const configured = process.env.PUBLIC_BASE_URL?.trim();
   if (configured) {
     try {
-      return new URL(configured).host.toLowerCase();
+      add(new URL(configured).host);
     } catch {
-      // Misconfigured; fall through to the headers rather than reject everything.
+      // Misconfigured; the request's own headers still apply below.
     }
   }
 
-  const forwarded = request.headers.get("x-forwarded-host");
-  if (forwarded) return forwarded.split(",")[0]!.trim().toLowerCase();
-  const host = request.headers.get("host");
-  return host ? host.trim().toLowerCase() : null;
+  add(request.headers.get("x-forwarded-host"));
+  add(request.headers.get("host"));
+
+  return hosts;
 }
 
 /**
@@ -75,9 +85,9 @@ function crossSiteRequest(request: Request): boolean {
     return true;
   }
 
-  const target = expectedHost(request);
-  if (!target) return true;
-  return claimedHost !== target;
+  const allowed = acceptableHosts(request);
+  if (allowed.size === 0) return true;
+  return !allowed.has(claimedHost);
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
