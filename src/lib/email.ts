@@ -117,6 +117,65 @@ ${signOff()}`,
   });
 }
 
+/** "Wednesday 16 September" — a date a person reads, not one a machine writes. */
+function readableDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const months = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  return `${days[date.getUTCDay()]} ${d} ${months[date.getUTCMonth()]}`;
+}
+
+/**
+ * A nudge about one deadline.
+ *
+ * Deliberately about a single milestone rather than a digest of everything
+ * outstanding. A list of five things you are behind on is a reason to close the
+ * email; one thing with a date is a reason to go and do it. The scheduler only
+ * ever sends one of these per deadline per founder, so this cannot become a
+ * daily list by accident.
+ */
+export function sendDeadlineReminder(
+  to: string,
+  name: string,
+  deadline: { title: string; description: string | null; dueDate: string },
+  kind: "due-soon" | "overdue",
+  appUrl: string,
+): Promise<void> {
+  const when = kind === "overdue"
+    ? `was due ${readableDate(deadline.dueDate)}`
+    : `due tomorrow, ${readableDate(deadline.dueDate)}`;
+  const subject = kind === "overdue"
+    ? `Overdue: ${deadline.title}`
+    : `Due tomorrow: ${deadline.title}`;
+
+  const opener = kind === "overdue"
+    ? `This one slipped past its date. That happens — it is worth five minutes to
+either finish it or decide it is not happening.`
+    : `A heads-up rather than a nag.`;
+
+  return send({
+    to,
+    subject,
+    text: `Hi ${name},
+
+${opener}
+
+  ${deadline.title}
+  ${when}${deadline.description ? `\n  ${deadline.description}` : ""}
+
+Tick it off here when it is done:
+
+${appUrl}
+
+You will not get another email about this one either way.
+
+— The Aalto Founder Sprint team`,
+  });
+}
+
 /**
  * Password reset.
  *

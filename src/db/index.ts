@@ -918,6 +918,59 @@ export function deadlineCompletionCounts(): Record<string, number> {
  * from the conversation-privacy boundary, and mixing them is how the second
  * one gets eroded.
  */
+export type ReminderKind = "due-soon" | "overdue";
+
+export type PendingReminder = {
+  deadline_id: string;
+  title: string;
+  description: string | null;
+  due_date: string;
+  email: string;
+  name: string;
+};
+
+/**
+ * Founders who still owe an active deadline and have not been told about it in
+ * this way yet.
+ *
+ * The NOT EXISTS against deadline_reminders is what makes this idempotent: the
+ * scheduler can run twice in a day, or a deploy can restart it, without anybody
+ * receiving the same reminder twice. Archived deadlines are excluded, because
+ * an archived milestone is one the team decided to stop chasing.
+ */
+export function pendingReminders(kind: ReminderKind, dueDate: string): PendingReminder[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT d.id AS deadline_id, d.title, d.description, d.due_date, u.email, u.name
+       FROM deadlines d
+       CROSS JOIN users u
+       WHERE d.status = 'active'
+         AND d.due_date = $due
+         AND u.role = 'founder'
+         AND NOT EXISTS (
+           SELECT 1 FROM deadline_completions c
+           WHERE c.deadline_id = d.id AND c.user_email = u.email
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM deadline_reminders r
+           WHERE r.deadline_id = d.id AND r.user_email = u.email AND r.kind = $kind
+         )
+       ORDER BY u.name ASC, d.due_date ASC`,
+    )
+    .all({ $due: dueDate, $kind: kind }) as PendingReminder[];
+}
+
+/** Records that a reminder went out, so it never goes out again. */
+export function recordReminder(deadlineId: string, userEmail: string, kind: ReminderKind): void {
+  const db = getDb();
+  db.run(
+    `INSERT OR IGNORE INTO deadline_reminders (deadline_id, user_email, kind)
+     VALUES ($id, $email, $kind)`,
+    { $id: deadlineId, $email: userEmail, $kind: kind },
+  );
+}
+
 export function foundersBehindOn(deadlineId: string): { email: string; name: string }[] {
   const db = getDb();
   return db

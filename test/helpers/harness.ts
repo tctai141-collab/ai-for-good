@@ -23,6 +23,8 @@ export type SentEmail = { to: string; subject: string; text: string; replyTo?: s
 export type Harness = {
   url: string;
   dbPath: string;
+  /** The stand-in Resend endpoint, for code driven inside the test process. */
+  mailUrl: string;
   /** A fresh read/write connection to the scratch database, for assertions. */
   db(): Database;
   /** Every email the app tried to send, oldest first. */
@@ -196,6 +198,7 @@ export async function startServer(
   return {
     url,
     dbPath,
+    mailUrl,
     sent,
     advisorCalls,
     serverOutput: () => output.join(""),
