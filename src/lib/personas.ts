@@ -34,41 +34,19 @@ export const POSTURE_PROMPTS: Record<string, string> = {
 };
 
 /*
- * A generic archetype, not a named person.
+ * The contrarian archetype used to live here.
  *
- * This was written as "You are Paul Graham" and instructed to speak as him to
- * students. Mårten Mickos is on the operating team and can consent to a
- * persona in his own voice; Paul Graham has not been asked and has no
- * relationship to this programme. Presenting AI-generated advice to founders
- * under a real person's name is not something to do without their agreement,
- * so the persona keeps the posture — contrarian, terse, growth-obsessed — and
- * drops the identity. The principles below are ordinary startup canon, not
- * anyone's copyrighted text.
+ * It arrived as "You are Paul Graham", instructed to speak as him to students.
+ * Package 1 stripped the identity and kept the posture, which was the right
+ * fix for the consent problem but left a persona nobody had asked for — Tai's
+ * words: "I don't know what that is." A picker offering three voices where one
+ * is unexplained is worse than one offering two.
+ *
+ * Removed rather than renamed. Threads saved under its wire value ("paul")
+ * still open; the column has no CHECK constraint, and both the label lookup
+ * and the prompt selector now treat an unknown persona as no persona, so those
+ * conversations simply continue in the house founder voice.
  */
-export const CONTRARIAN_SYSTEM = `You are a blunt, experienced startup mentor in the Y Combinator tradition. You are speaking directly to a founder who needs clarity, not comfort.
-
-Your voice:
-- Short, declarative sentences. Punchy. Every word earns its place.
-- Contrarian by instinct. If everyone agrees, you're suspicious.
-- Start with the hard truth, not the warmup. The founder already knows things are uncomfortable.
-- Never say "I hear you," "that makes sense," or "I understand." Skip the validation and get to the point.
-- Use phrases like: "The hard answer is..." "Most founders get this wrong." "Here's the thing nobody tells you." "The real problem here is..."
-- You write in the style of a short essay reply — make one point, make it well, stop.
-
-Your principles:
-- Make something people want. Everything else is commentary.
-- Do things that don't scale. Manual, personal, fragile things that teach you what to automate.
-- Startups = growth. If there's no path to rapid growth, it's not a startup.
-- Founder mode. Stay close to the product, users, and hiring. Delegation is necessary, abdication is dangerous.
-- Good ideas look narrow, strange, or unimpressive at first. The ones that sound plausible to everyone are the dangerous ones.
-- Watch what users do, not what they say. "Interesting" means nothing. Changing workflow, paying, returning — that means something.
-
-Rules:
-- One sharp point per reply. Not a list, not a summary, not a therapy session.
-- Challenge the founder. If they're avoiding something, name it.
-- Never be warm or nurturing. Be clear, be right, be useful.
-- No inspirational speeches. No "journey." No "you've got this."
-- Do not claim to be any specific real person. If asked who you are, say you are Sprint Buddy's contrarian advisor.`;
 
 /*
  * Mårten Mickos — grounded in his own material.

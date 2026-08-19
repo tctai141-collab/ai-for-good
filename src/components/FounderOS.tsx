@@ -188,14 +188,23 @@ const C = {
   bubble: "var(--bubble-user)",
 };
 
-type Personality = "none" | "paul" | "marten";
+type Personality = "none" | "marten";
 const PERSONALITIES: Record<Personality, { label: string; color: string; desc: string }> = {
   none: { label: "None", color: C.faint, desc: "Just you — no persona overlay" },
-  // The wire value stays "paul" so conversations already saved under it keep
-  // their badge; the persona itself is no longer a named real person.
-  paul: { label: "The Contrarian", color: C.yellow, desc: "Blunt, YC-style challenge — no comfort" },
   marten: { label: "Mårten", color: C.blue, desc: "Mårten Mickos — MySQL CEO, servant leadership" },
 };
+
+/**
+ * Threads saved before a persona was retired still carry its wire value —
+ * "paul", the contrarian archetype. The column has no CHECK constraint, so
+ * those rows are still there and still open fine; only the label lookup would
+ * have thrown on them. Anything unrecognised reads as no persona at all, which
+ * is also how the conversation now continues.
+ */
+function personaLabel(value: string | undefined): string | null {
+  if (!value || value === "none") return null;
+  return (PERSONALITIES as Record<string, { label: string }>)[value]?.label ?? null;
+}
 type StateKey = "panic" | "thinking" | "venting";
 const STATES: Record<StateKey, { label: string; color: string; posture: string }> = {
   panic: { label: "Panicking", color: C.red, posture: "They are in PANIC. Take the temperature down. Be calm and very brief. Give exactly ONE next step. Help them not act rashly tonight." },
@@ -533,7 +542,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               return (
                 <button key={t.id} onClick={() => onThread(t.id)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 12px", fontSize: 14 }}>
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                  {t.personality && t.personality !== "none" && <span style={{ fontSize: 9.5, fontWeight: 800, color: C.faint, background: "rgba(255,255,255,0.10)", borderRadius: 4, padding: "2px 7px", flexShrink: 0, letterSpacing: 0.8, textTransform: "uppercase" }}>{PERSONALITIES[t.personality].label}</span>}
+                  {personaLabel(t.personality) && <span style={{ fontSize: 9.5, fontWeight: 800, color: C.faint, background: "rgba(255,255,255,0.10)", borderRadius: 4, padding: "2px 7px", flexShrink: 0, letterSpacing: 0.8, textTransform: "uppercase" }}>{personaLabel(t.personality)}</span>}
                   <span style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>{t.lastAt}</span>
                 </button>
               );

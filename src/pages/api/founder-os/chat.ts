@@ -7,7 +7,6 @@ import { getSessionUser } from "../../../lib/auth";
 import { capHistory, chatLimiter } from "../../../lib/limits";
 import { reportError } from "../../../lib/errors";
 import {
-  CONTRARIAN_SYSTEM,
   FOUNDER_VOICE_SYSTEM,
   MARTEN_SYSTEM,
   POSTURE_PROMPTS,
@@ -115,11 +114,11 @@ function buildSystem(body: {
   founderName?: string;
   founderTz?: string;
 }): string {
+  // "paul" — the retired contrarian archetype — still arrives from threads
+  // saved before it was removed. It falls through to the house voice rather
+  // than being special-cased, which is what removing a persona should mean.
   let p: string;
-  if (body.personality === "paul") {
-    // Legacy wire value; the persona is no longer a named person.
-    p = CONTRARIAN_SYSTEM;
-  } else if (body.personality === "marten") {
+  if (body.personality === "marten") {
     p = MARTEN_SYSTEM;
   } else {
     p = FOUNDER_VOICE_SYSTEM + "\n\n" + STYLE_GUARDRAILS;
@@ -183,7 +182,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     // More headroom than the OpenClaw caps: the current model writes longer by
     // default. Brevity is enforced by the style guardrails in the system prompt,
     // so this only needs to be high enough to avoid truncating mid-sentence.
-    const maxTokens = personality === "paul" ? 700 : personality === "marten" ? 500 : 550;
+    const maxTokens = personality === "marten" ? 500 : 550;
 
     const advisorRequest = {
       system: buildSystem(body),

@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
-import {
-  CONTRARIAN_SYSTEM,
-  FOUNDER_VOICE_SYSTEM,
-  MARTEN_SYSTEM,
-} from "../src/lib/personas";
+import * as personas from "../src/lib/personas";
+import { FOUNDER_VOICE_SYSTEM, MARTEN_SYSTEM } from "../src/lib/personas";
 
 /**
  * Guards on the advisor personas.
@@ -79,9 +76,15 @@ describe("Mårten persona — honest disclosure", () => {
 });
 
 describe("persona policy", () => {
-  test("the contrarian archetype claims no real identity", () => {
-    expect(CONTRARIAN_SYSTEM.toLowerCase()).toContain("do not claim to be any specific real person");
-    expect(CONTRARIAN_SYSTEM).not.toContain("Paul Graham");
+  test("the retired contrarian persona is gone, not renamed", () => {
+    // It shipped as "You are Paul Graham". Package 1 de-named it; Tai then
+    // removed it outright ("I don't know what that is"). This guards against
+    // it coming back through the door it left by.
+    expect(Object.keys(personas)).not.toContain("CONTRARIAN_SYSTEM");
+    for (const value of Object.values(personas)) {
+      if (typeof value !== "string") continue;
+      expect(value).not.toContain("Paul Graham");
+    }
   });
 
   test("the default founder voice is not a named person either", () => {
