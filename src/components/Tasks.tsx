@@ -1,15 +1,23 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
- * The founder's deadline card.
+ * The founder's deadlines, in the sidebar.
  *
- * Sits at the top of the chat view rather than behind its own tab: a to-do list
- * you have to go looking for is a to-do list nobody looks at, and the whole
- * point of the benchmark work was that visible shared deadlines are what drive
- * completion.
+ * This first shipped as a card pinned above the conversation. That put a
+ * worklist inside a reading surface: it competed with the thing the founder
+ * came to do, and it scrolled away the moment they started typing — so it was
+ * neither persistent nor out of the way.
  *
- * A deliberate sibling of FounderOS.tsx, not an addition to it. That file is
- * already 1,700 lines and both audits flagged it.
+ * The sidebar is where the app already keeps "what is true about you right
+ * now", next to today's check-in. But it is 264px wide inside its padding, and
+ * its only scroll region is the thread list, so a straight move would have
+ * squeezed both. What lives here is a status object, not a worklist: one line
+ * per deadline, only what is actually due, capped at three until asked.
+ *
+ * The fetching lives in useDeadlines() rather than in the component because
+ * two places need the same answer — this section, and the badge on the
+ * expand-sidebar button that keeps overdue work visible when the sidebar is
+ * closed, which is how every phone starts.
  */
 
 export type DeadlineGroup = "overdue" | "thisWeek" | "upcoming" | "done";
@@ -36,157 +44,67 @@ const C = {
   line: "var(--line)",
   red: "var(--brand-red)",
   blue: "var(--brand-blue)",
-  yellow: "var(--brand-yellow)",
 };
 
-const kicker: React.CSSProperties = {
+/** Matches the sidebar's other section headings exactly. */
+const heading: React.CSSProperties = {
   color: C.faint,
-  fontSize: 11,
-  letterSpacing: 1.4,
+  fontSize: 9.5,
+  letterSpacing: 2,
   textTransform: "uppercase",
-  fontWeight: 700,
+  fontWeight: 800,
   margin: 0,
 };
 
-/** "Fri 11 Sep" — short, and never ambiguous about day of week. */
-function formatDue(dueDate: string): string {
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function parse(dueDate: string): Date | null {
   const [y, m, d] = dueDate.split("-").map(Number);
-  if (!y || !m || !d) return dueDate;
-  const date = new Date(Date.UTC(y, m - 1, d));
-  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getUTCDay()];
-  const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getUTCMonth()];
-  return `${day} ${d} ${month}`;
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
-/** How overdue, in whole days, for the "2 days late" label. */
+/** Whole days a deadline is past, for the "3d late" label. */
 function daysLate(dueDate: string): number {
-  const [y, m, d] = dueDate.split("-").map(Number);
-  if (!y || !m || !d) return 0;
-  const due = Date.UTC(y, m - 1, d);
+  const due = parse(dueDate);
+  if (!due) return 0;
   const today = new Date();
   const now = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  return Math.max(0, Math.round((now - due) / 86_400_000));
+  return Math.max(0, Math.round((now - due.getTime()) / 86_400_000));
 }
 
-function Progress({ completed, total }: { completed: number; total: number }) {
-  // Nothing due yet reads as "nothing due yet", not as zero progress.
-  if (total === 0) {
-    return <span style={{ color: C.faint, fontSize: 12.5 }}>Nothing due yet</span>;
+/**
+ * At this width the date has to earn its characters.
+ *
+ * Within the week a weekday is what a founder actually plans against — "Fri"
+ * answers "how long have I got" without arithmetic. Further out the weekday
+ * stops being useful and the calendar date takes over.
+ */
+function statusLabel(item: DeadlineItem): string {
+  if (item.done) return "Done";
+  if (item.group === "overdue") {
+    const late = daysLate(item.dueDate);
+    return late <= 0 ? "Late" : `${late}d late`;
   }
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 9 }}>
-      <span style={{ display: "inline-flex", gap: 3 }} aria-hidden="true">
-        {Array.from({ length: total }, (_, i) => (
-          <span
-            key={i}
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: 9,
-              background: i < completed ? C.blue : "transparent",
-              border: `1px solid ${i < completed ? C.blue : C.line}`,
-            }}
-          />
-        ))}
-      </span>
-      <span style={{ color: C.sub, fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>
-        {completed} of {total}
-      </span>
-    </span>
-  );
+  const date = parse(item.dueDate);
+  if (!date) return item.dueDate;
+  if (item.group === "thisWeek") return DAYS[date.getUTCDay()]!;
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
 }
 
-function Row({
-  item,
-  onToggle,
-  busy,
-}: {
-  item: DeadlineItem;
-  onToggle: (item: DeadlineItem) => void;
-  busy: boolean;
-}) {
-  const late = item.group === "overdue" ? daysLate(item.dueDate) : 0;
-
-  return (
-    <li style={{ listStyle: "none" }}>
-      <label
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr auto",
-          alignItems: "center",
-          gap: 12,
-          padding: "10px 4px",
-          minHeight: 44,
-          cursor: busy ? "wait" : "pointer",
-          opacity: busy ? 0.55 : 1,
-          borderBottom: `1px solid ${C.line}`,
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={item.done}
-          disabled={busy}
-          onChange={() => onToggle(item)}
-          style={{ width: 20, height: 20, accentColor: C.blue, cursor: "inherit" }}
-        />
-        <span style={{ minWidth: 0 }}>
-          <span
-            style={{
-              display: "block",
-              color: item.done ? C.faint : C.ink,
-              textDecoration: item.done ? "line-through" : "none",
-              fontSize: 14.5,
-              lineHeight: 1.35,
-            }}
-          >
-            {item.title}
-          </span>
-          {item.description && !item.done && (
-            <span style={{ display: "block", color: C.faint, fontSize: 12.5, marginTop: 2 }}>
-              {item.description}
-            </span>
-          )}
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
-          {item.sprintWeek != null && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 800,
-                letterSpacing: 0.6,
-                color: C.faint,
-                border: `1px solid ${C.line}`,
-                borderRadius: 4,
-                padding: "1px 5px",
-              }}
-            >
-              W{item.sprintWeek}
-            </span>
-          )}
-          <span
-            style={{
-              fontSize: 12,
-              color: item.group === "overdue" ? C.red : C.faint,
-              fontWeight: item.group === "overdue" ? 700 : 400,
-            }}
-          >
-            {item.group === "overdue"
-              ? late === 0
-                ? "Overdue"
-                : `${late}d late`
-              : formatDue(item.dueDate)}
-          </span>
-        </span>
-      </label>
-    </li>
-  );
-}
-
-export default function Tasks({ userEmail }: { userEmail?: string }) {
+/**
+ * One fetch, shared. Returns the founder's list plus the overdue count, which
+ * the shell needs for the collapsed-sidebar badge.
+ */
+export function useDeadlines(userEmail?: string) {
   const [data, setData] = useState<Payload | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  /* Ticking something off moves it to the "done" group, which would make the
+     row vanish mid-click. Anything toggled in this session stays put so the
+     founder can see it land — and untick it if they were wrong. */
+  const [pinned, setPinned] = useState<Set<string>>(() => new Set());
 
   const load = useCallback(async () => {
     try {
@@ -205,14 +123,13 @@ export default function Tasks({ userEmail }: { userEmail?: string }) {
 
   const toggle = useCallback(
     async (item: DeadlineItem) => {
-      if (!data) return;
       setBusyId(item.id);
-
-      // Optimistic, then replaced by whatever the server actually stored.
-      setData({
-        ...data,
-        deadlines: data.deadlines.map((d) => (d.id === item.id ? { ...d, done: !d.done } : d)),
-      });
+      setPinned((prev) => new Set(prev).add(item.id));
+      setData((prev) =>
+        prev
+          ? { ...prev, deadlines: prev.deadlines.map((d) => (d.id === item.id ? { ...d, done: !d.done } : d)) }
+          : prev,
+      );
 
       try {
         const res = await fetch("/api/deadlines", {
@@ -230,97 +147,196 @@ export default function Tasks({ userEmail }: { userEmail?: string }) {
         setBusyId(null);
       }
     },
-    [data, load],
+    [load],
   );
 
-  if (!userEmail || failed || !data || data.deadlines.length === 0) return null;
+  const overdueCount = useMemo(
+    () => (data ? data.deadlines.filter((d) => d.group === "overdue").length : 0),
+    [data],
+  );
 
-  const overdue = data.deadlines.filter((d) => d.group === "overdue");
-  const thisWeek = data.deadlines.filter((d) => d.group === "thisWeek");
-  const upcoming = data.deadlines.filter((d) => d.group === "upcoming");
-  const done = data.deadlines.filter((d) => d.group === "done");
+  return { data: failed ? null : data, toggle, busyId, pinned, overdueCount };
+}
 
-  // Collapsed shows only what needs doing now; the rest is one click away.
-  const visible = expanded
-    ? [
-        { label: "Overdue", items: overdue },
-        { label: "This week", items: thisWeek },
-        { label: "Upcoming", items: upcoming },
-        { label: "Done", items: done },
-      ]
-    : [
-        { label: "Overdue", items: overdue },
-        { label: "This week", items: thisWeek },
-      ];
+export type DeadlinesState = ReturnType<typeof useDeadlines>;
 
-  const hiddenCount = expanded ? 0 : upcoming.length + done.length;
+function Row({
+  item,
+  onToggle,
+  busy,
+}: {
+  item: DeadlineItem;
+  onToggle: (item: DeadlineItem) => void;
+  busy: boolean;
+}) {
+  const overdue = item.group === "overdue" && !item.done;
 
   return (
-    <section
-      aria-label="Your deadlines"
-      style={{
-        border: `1px solid ${C.line}`,
-        borderRadius: 10,
-        padding: "14px 16px 6px",
-        margin: "0 0 22px",
-        background: "rgba(255,255,255,0.025)",
-      }}
-    >
-      <div
+    <li style={{ listStyle: "none" }}>
+      <label
+        className="navitem"
         style={{
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 6,
+          gap: 9,
+          // 38px with a full-width target. Denser than a nav row on purpose —
+          // these are status, not navigation — but still comfortably tappable.
+          minHeight: 38,
+          padding: "8px 8px",
+          borderRadius: 8,
+          cursor: busy ? "wait" : "pointer",
+          opacity: busy ? 0.5 : 1,
+          background: "transparent",
         }}
       >
-        <p style={kicker}>
-          {overdue.length > 0 ? "Needs attention" : thisWeek.length > 0 ? "This week" : "Deadlines"}
-        </p>
-        <Progress completed={data.progress.completed} total={data.progress.total} />
+        <input
+          type="checkbox"
+          className="deadline-check"
+          checked={item.done}
+          disabled={busy}
+          onChange={() => onToggle(item)}
+        />
+        <span
+          // The full text is one hover away; truncation is the price of the
+          // column, not a reason to wrap to three lines.
+          title={item.description ? `${item.title} — ${item.description}` : item.title}
+          style={{
+            fontSize: 13,
+            lineHeight: 1.3,
+            color: item.done ? C.faint : C.ink,
+            textDecoration: item.done ? "line-through" : "none",
+            textDecorationColor: "rgba(255,255,255,0.35)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            minWidth: 0,
+          }}
+        >
+          {item.title}
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: overdue ? 800 : 600,
+            color: overdue ? C.red : C.faint,
+            fontVariantNumeric: "tabular-nums",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          {statusLabel(item)}
+        </span>
+      </label>
+    </li>
+  );
+}
+
+/** How many rows show before "N more". Three keeps the thread list alive. */
+const COLLAPSED_ROWS = 3;
+
+export default function Tasks({ state }: { state: DeadlinesState }) {
+  const { data, toggle, busyId, pinned } = state;
+  const [expanded, setExpanded] = useState(false);
+
+  if (!data || data.deadlines.length === 0) return null;
+
+  const items = data.deadlines;
+  const isLive = (d: DeadlineItem) =>
+    d.group === "overdue" || d.group === "thisWeek" || pinned.has(d.id);
+
+  const live = items.filter(isLive);
+  const upcoming = items.filter((d) => d.group === "upcoming" && !pinned.has(d.id));
+  const done = items.filter((d) => d.group === "done" && !pinned.has(d.id));
+
+  const overdueCount = items.filter((d) => d.group === "overdue").length;
+  const thisWeekCount = items.filter((d) => d.group === "thisWeek").length;
+
+  /* The heading carries urgency so the rows don't have to shout it twice. */
+  const title =
+    overdueCount > 0 ? "Needs attention" : thisWeekCount > 0 ? "This week" : "Deadlines";
+
+  const visible = expanded ? live : live.slice(0, COLLAPSED_ROWS);
+  /* When nothing is live, the "Next:" line below already names the first
+     upcoming deadline — counting it again here reads as one more than there
+     is. */
+  const namesNext = live.length === 0 && upcoming.length > 0;
+  const hidden = expanded
+    ? 0
+    : live.length - visible.length + upcoming.length + done.length - (namesNext ? 1 : 0);
+
+  const { completed, total } = data.progress;
+
+  return (
+    <section aria-label="Your deadlines" style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, padding: "0 8px 6px" }}>
+        <p style={{ ...heading, color: overdueCount > 0 ? C.red : C.faint }}>{title}</p>
+        {total > 0 && (
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.faint, fontVariantNumeric: "tabular-nums" }}>
+            {completed}/{total}
+          </span>
+        )}
       </div>
 
-      {visible.map(({ label, items }) =>
-        items.length === 0 ? null : (
-          <div key={label}>
-            {(expanded || (label === "Overdue" && overdue.length > 0 && thisWeek.length > 0)) && (
-              <p style={{ ...kicker, fontSize: 10, marginTop: 12, marginBottom: 2, color: label === "Overdue" ? C.red : C.faint }}>
-                {label}
-              </p>
-            )}
-            <ul style={{ margin: 0, padding: 0 }}>
-              {items.map((item) => (
-                <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
-              ))}
-            </ul>
-          </div>
-        ),
-      )}
-
-      {overdue.length === 0 && thisWeek.length === 0 && !expanded && (
-        <p style={{ margin: "8px 0 12px", color: C.faint, fontSize: 13.5, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-          Nothing due this week.
+      {/* Nothing due yet still says so in one line. An empty box in permanent
+          navigation is worse than no box, but silently disappearing teaches
+          founders the feature is unreliable. */}
+      {live.length === 0 && !expanded ? (
+        <p style={{ margin: 0, padding: "0 8px 4px", fontSize: 12.5, color: C.faint, lineHeight: 1.4 }}>
+          {upcoming.length > 0 ? (
+            <>
+              Next: <span style={{ color: C.sub }}>{upcoming[0]!.title}</span> · {statusLabel(upcoming[0]!)}
+            </>
+          ) : (
+            "All clear."
+          )}
         </p>
+      ) : (
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            // Only the opened state scrolls, and only if it has to. The thread
+            // list below keeps a floor so it can never be squeezed to nothing.
+            ...(expanded ? { maxHeight: "38vh", overflowY: "auto" as const } : {}),
+          }}
+        >
+          {visible.map((item) => (
+            <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
+          ))}
+          {expanded &&
+            upcoming.map((item) => (
+              <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
+            ))}
+          {expanded &&
+            done.map((item) => (
+              <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
+            ))}
+        </ul>
       )}
 
-      {(hiddenCount > 0 || expanded) && (
+      {(hidden > 0 || expanded) && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
+          className="navitem"
           style={{
-            background: "none",
+            display: "block",
+            width: "100%",
+            textAlign: "left",
+            background: "transparent",
             border: "none",
             color: C.faint,
             cursor: "pointer",
-            fontSize: 12,
-            padding: "10px 4px",
-            minHeight: 44,
+            fontSize: 11.5,
+            fontWeight: 700,
             fontFamily: "inherit",
+            padding: "8px 8px",
+            minHeight: 34,
+            borderRadius: 8,
           }}
         >
-          {expanded ? "Show less" : `Show all (${hiddenCount} more)`}
+          {expanded ? "Show less" : `${hidden} more`}
         </button>
       )}
     </section>
