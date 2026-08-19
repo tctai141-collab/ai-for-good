@@ -255,6 +255,7 @@ type CohortData = {
   totalWeeks: number;
   teams: Team[];
   needAttention: number;
+  quiet: number;
   cohortSize: number;
   startDateConfigured: boolean;
 };
@@ -264,16 +265,27 @@ const WEEKS = Array.from({ length: 15 }, (_, i) => `W${i + 1}`);
    hardcoded fictional founders here, complete with invented coaching notes —
    fine for a demo, misleading in front of a real operating team. */
 
-/* Temperature scale: 0 = quiet → needs-attention · 1 = Stable · 2 = Monitor · 3 = Needs-attention */
+/*
+ * Temperature scale: 0 = no check-in · 1 = Stable · 2 = Monitor · 3 = Needs attention
+ *
+ * "No check-in" is drawn as an empty outline rather than a colour, because the
+ * absence of a signal is not a signal of distress. It used to render in the
+ * same red as a founder in real difficulty, which made a quiet week and a hard
+ * week indistinguishable at a glance — and they call for opposite responses.
+ */
 const TEMP_STABLE = "oklch(44% 0.012 255)";
 const TEMP_MONITOR = C.yellow;
 const TEMP_NEEDS_ATTENTION = C.red;
-const tempColor = (v: number) => (v >= 3 || v === 0) ? TEMP_NEEDS_ATTENTION : v === 2 ? TEMP_MONITOR : TEMP_STABLE;
+const tempColor = (v: number) => v >= 3 ? TEMP_NEEDS_ATTENTION : v === 2 ? TEMP_MONITOR : v === 0 ? "transparent" : TEMP_STABLE;
+const tempBorder = (v: number) => v === 0 ? `1px solid ${C.line}` : "none";
+/* For text. A transparent swatch works in the grid and would be invisible as a
+   label, so "no check-in" reads as muted rather than absent. */
+const tempTextColor = (v: number) => v === 0 ? C.faint : tempColor(v);
 const tempA = () => 1;
-const tempLabel = (v: number) => v === 0 ? "Needs attention (quiet)" : v >= 3 ? "Needs attention" : v === 2 ? "Monitor" : "Stable";
+const tempLabel = (v: number) => v === 0 ? "No check-in" : v >= 3 ? "Needs attention" : v === 2 ? "Monitor" : "Stable";
 const signalTemp = (score?: number) => score == null ? 0 : score >= 70 ? 3 : score >= 40 ? 2 : 1;
 const signalLabel = (score?: number) => tempLabel(signalTemp(score));
-const signalColor = (score?: number) => tempColor(signalTemp(score));
+const signalColor = (score?: number) => tempTextColor(signalTemp(score));
 const splitCheckinPrompt = (prompt: string) => {
   const [summary, signal] = prompt.split(/\nSignal:\s*/);
   return { summary: (summary ?? "").trim(), signal: signal?.trim() || "" };
@@ -1550,7 +1562,8 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
       <p style={kicker}>The cohort, week {week}</p>
       <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", margin: "10px 0 16px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>Where to put your attention.</h1>
       <p style={{ margin: "0 0 32px", fontFamily: "var(--font-serif)", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 28' }}>
-        Attention signal by founder. <Stat c={C.red}>{cohort?.needAttention ?? 0}</Stat> of <Stat>{teams.length}</Stat> need attention this week.
+        Who to check on, not who is performing. <Stat c={C.red}>{cohort?.needAttention ?? 0}</Stat> of <Stat>{teams.length}</Stat> showing strain
+        {(cohort?.quiet ?? 0) > 0 && <> · <Stat>{cohort?.quiet}</Stat> with no check-in</>}.
       </p>
 
       {cohort && !cohort.startDateConfigured && (
@@ -1573,7 +1586,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
                   key={i}
                   onClick={() => onPick(t)}
                   title={`${t.name} · ${WEEKS[i]} · ${tempLabel(v)}`}
-                  style={{ display: "block", height: 24, width: 24, borderRadius: 3, border: "none", cursor: "pointer", background: tempColor(v), opacity: tempA(), margin: 0 }}
+                  style={{ display: "block", height: 24, width: 24, borderRadius: 3, border: tempBorder(v), boxSizing: "border-box", cursor: "pointer", background: tempColor(v), opacity: tempA(), margin: 0 }}
                 />
               ))}
             </React.Fragment>
@@ -1585,14 +1598,28 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
         <Legend c={TEMP_STABLE} l="Stable" />
         <Legend c={TEMP_MONITOR} l="Monitor" />
         <Legend c={TEMP_NEEDS_ATTENTION} l="Needs attention" />
-        <span style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, fontVariationSettings: '"opsz" 18' }}>Quiet rows count as needs-attention. Silence is a signal.</span>
+        <Legend c="transparent" l="No check-in" outlined />
+        <span style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, fontVariationSettings: '"opsz" 18' }}>An empty cell is an absence, not a verdict.</span>
       </div>
 
+      {/* Two different problems, so two different prompts. Silence is checked
+          first: if a third of the cohort is not using the tool, the strain
+          numbers are drawn from too few people to mean much yet. */}
+      {(cohort?.quiet ?? 0) > 0 && (cohort?.quiet ?? 0) >= teams.length / 3 && (
+        <div style={{ marginTop: 28, border: `1px solid ${C.line}`, borderRadius: 8, padding: "16px 20px" }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 2.2, textTransform: "uppercase", color: C.faint }}>Adoption</p>
+          <p style={{ margin: "6px 0 0", fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>
+            {cohort?.quiet} of {teams.length} have not checked in this week. That is a habit problem before it is a
+            coaching one — and until it closes, the signals above come from too few people to read much into.
+          </p>
+        </div>
+      )}
+
       {(cohort?.needAttention ?? 0) >= 2 && (
-        <div style={{ marginTop: 28, background: C.yellow, color: "oklch(13% 0.008 250)", borderRadius: 8, padding: "16px 20px" }}>
+        <div style={{ marginTop: 16, background: C.yellow, color: "oklch(13% 0.008 250)", borderRadius: 8, padding: "16px 20px" }}>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 2.2, textTransform: "uppercase" }}>Pattern</p>
           <p style={{ margin: "6px 0 0", fontSize: 15.5, lineHeight: 1.5, fontWeight: 600 }}>
-            {cohort?.needAttention} of {teams.length} founders need attention this week. Consider a group session before the 1:1s.
+            {cohort?.needAttention} of {teams.length} founders are showing strain this week. Consider a group session before the 1:1s.
           </p>
         </div>
       )}
@@ -1659,7 +1686,7 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 24, paddingBottom: 22, borderBottom: `1px solid ${C.line}` }}>
         <div>
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint, marginBottom: 8 }}>Status</div>
-          <div style={{ fontSize: 17, fontWeight: 600, color: tempColor(team.temp[5] ?? 0) }}>{tempLabel(team.temp[5] ?? 0)}</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: tempTextColor(team.temp[5] ?? 0) }}>{tempLabel(team.temp[5] ?? 0)}</div>
         </div>
         <div>
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint, marginBottom: 8 }}>Trend</div>
@@ -1687,8 +1714,19 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
 /* ---------------- small shared bits ---------------- */
 const kicker: React.CSSProperties = { color: C.faint, fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, margin: 0 };
 const Stat = ({ children, c = C.white }: { children: React.ReactNode; c?: string }) => <strong style={{ color: c }}>{children}</strong>;
-const Legend = ({ c, l }: { c: string; l: string }) => (
-  <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><span style={{ width: 14, height: 14, borderRadius: 4, background: c }} /> {l}</span>
+const Legend = ({ c, l, outlined }: { c: string; l: string; outlined?: boolean }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+    <span
+      style={{
+        width: 14,
+        height: 14,
+        borderRadius: 4,
+        background: c,
+        border: outlined ? `1px solid ${C.line}` : "none",
+        boxSizing: "border-box",
+      }}
+    /> {l}
+  </span>
 );
 
 function useTimeContext(): TimeCtx {
