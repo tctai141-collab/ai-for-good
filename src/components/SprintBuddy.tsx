@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import Tasks, { useDeadlines, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
 import type { Checkin, UserData } from "../lib/persistence";
+import { advisorErrorMessage } from "../lib/advisor-errors";
 
 function formatMarkdown(text: string): string {
   let out = text
@@ -132,7 +133,9 @@ async function callClaude(
       }),
     });
 
-    if (!res.ok) throw new Error("API error");
+    // Carry the status through. Collapsing every failure into one message is
+    // what made a 403 look like a dropped connection.
+    if (!res.ok) throw new Error(advisorErrorMessage(res.status));
 
     if (onChunk) {
       const reader = res.body?.getReader();
@@ -165,8 +168,10 @@ async function callClaude(
     const data = await res.json() as { content: string };
     return { voice: data.content || "", theme, decision: detectDecision(lastUser, theme) };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Chat request failed.";
-    throw new Error(message);
+    // A thrown fetch means the request never landed; anything else already
+    // carries a message chosen for the status it came back with.
+    if (err instanceof TypeError) throw new Error(advisorErrorMessage(null));
+    throw err instanceof Error ? err : new Error(advisorErrorMessage(null));
   }
 }
 
@@ -901,9 +906,12 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
           markCheckinDone();
         }
       }
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error && err.message
+        ? err.message
+        : advisorErrorMessage(null);
       setMsgs((prev) => prev.map((m, i) => i === prev.length - 1
-        ? { role: "assistant" as const, content: "Could not reach your advisor just now. Check your connection and try again." }
+        ? { role: "assistant" as const, content: message }
         : m));
     }
     setBusy(false);

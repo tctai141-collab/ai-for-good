@@ -94,6 +94,29 @@ function crossSiteRequest(request: Request): boolean {
 
 export const onRequest = defineMiddleware(async (context, next) => {
   if (crossSiteRequest(context.request)) {
+    /*
+     * Log it. This rejection happens before any route runs, so nothing else
+     * records it — and when the expected-host set was wrong, that silence cost
+     * about forty minutes: chat was broken on one hostname while twenty-four
+     * hours of server logs showed only deploys and backups. A refusal that
+     * leaves no trace is indistinguishable from a network fault.
+     *
+     * The origin and host are the two values needed to tell "somebody is
+     * probing" from "we are refusing our own traffic", which are opposite
+     * problems with the same status code.
+     */
+    reportError(new Error("cross-site request rejected"), {
+      where: "csrf",
+      level: "warning",
+      extra: {
+        method: context.request.method,
+        path: new URL(context.request.url).pathname,
+        origin: context.request.headers.get("origin") ?? "(none)",
+        forwardedHost: context.request.headers.get("x-forwarded-host") ?? "(none)",
+        host: context.request.headers.get("host") ?? "(none)",
+      },
+    });
+
     return new Response(JSON.stringify({ error: "Cross-site request rejected." }), {
       status: 403,
       headers: { "Content-Type": "application/json" },
