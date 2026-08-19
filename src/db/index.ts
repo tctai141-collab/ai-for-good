@@ -479,7 +479,10 @@ export function countOrganizers(): number {
 
 export type SessionRow = {
   user_email: string;
+  /** When this session goes stale if it is not used again. Slides forward. */
   expires_at: string;
+  /** When it was created. Fixes the absolute deadline, which never slides. */
+  created_at: string;
   name: string;
   role: Role;
 };
@@ -496,11 +499,20 @@ export function getSessionRow(token: string): SessionRow | null {
   const db = getDb();
   return db
     .query(
-      `SELECT s.user_email, s.expires_at, u.name, u.role
+      `SELECT s.user_email, s.expires_at, s.created_at, u.name, u.role
        FROM sessions s JOIN users u ON u.email = s.user_email
        WHERE s.token = $token`,
     )
     .get({ $token: token }) as SessionRow | null;
+}
+
+/** Slides a live session's idle deadline forward. */
+export function touchSessionRow(token: string, expiresAt: string): void {
+  const db = getDb();
+  db.run("UPDATE sessions SET expires_at = $expires WHERE token = $token", {
+    $token: token,
+    $expires: expiresAt,
+  });
 }
 
 export function deleteSessionRow(token: string): void {
