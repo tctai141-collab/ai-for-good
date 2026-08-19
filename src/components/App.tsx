@@ -92,10 +92,48 @@ export default function App() {
   }, [enter]);
 
   const handleSignOut = useCallback(async () => {
+    let ended = false;
+    try {
+      const response = await fetch("/api/session", {
+        method: "DELETE",
+        /*
+         * This header is load-bearing, which is not obvious.
+         *
+         * Astro's CSRF guard only inspects requests whose content type is
+         * form-like — and a request with no body has no content type at all,
+         * which counts. So this DELETE was rejected with 403 before it ever
+         * reached the route. It only failed in production, because the guard
+         * then compares the Origin header against the URL the server thinks it
+         * is serving, and behind Render's TLS-terminating proxy that is http
+         * while the browser sends https. Locally the origins matched and
+         * sign-out worked, which is why this survived.
+         *
+         * Every other non-GET request in the app already sends this header.
+         * This one did not, because it has no body.
+         */
+        headers: { "Content-Type": "application/json" },
+        /* The session must die even if the tab is closing underneath us. */
+        keepalive: true,
+      });
+      ended = response.ok;
+    } catch {
+      /* Network failure; ended stays false. */
+    }
+
+    if (!ended) {
+      /*
+       * Never paint a signed-out screen over a live session. Showing the login
+       * form while the cookie was still valid is exactly what made this look
+       * like it worked — you appeared signed out until you opened a new tab.
+       * Reload instead and let the server say what is true.
+       */
+      window.location.assign("/");
+      return;
+    }
+
     setUser(null);
     setUserData(null);
     setBuddyStage("login");
-    fetch("/api/session", { method: "DELETE" }).catch(() => {});
   }, []);
 
   const handleLogin = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {

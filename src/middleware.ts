@@ -16,7 +16,78 @@ startBackupScheduler();
  * browser behaviour would put that whole URL in the Referer header of any
  * outbound request from that page — handing the token to a third party.
  */
+/** Methods that cannot change state, and so need no origin check. */
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * The host this request was actually addressed to.
+ *
+ * Render terminates TLS and forwards over plain HTTP, so the URL the server
+ * sees is http:// on an internal host while the browser sent https:// on the
+ * public one. Comparing full origins therefore never matches in production.
+ * Comparing hosts does, and the protocol adds nothing here: HSTS is set, so a
+ * browser will not speak plain HTTP to this origin in the first place.
+ */
+function expectedHost(request: Request): string | null {
+  // PUBLIC_BASE_URL first, because it is the one value a client cannot
+  // influence at all. x-forwarded-host is set by Render, but it arrives as a
+  // request header, and a header a request carries is a header something else
+  // could have carried. A cross-origin attacker cannot actually set it — custom
+  // headers force a CORS preflight that this app never approves — but "cannot
+  // in practice" is a weaker guarantee than "is not read from the request".
+  const configured = process.env.PUBLIC_BASE_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).host.toLowerCase();
+    } catch {
+      // Misconfigured; fall through to the headers rather than reject everything.
+    }
+  }
+
+  const forwarded = request.headers.get("x-forwarded-host");
+  if (forwarded) return forwarded.split(",")[0]!.trim().toLowerCase();
+  const host = request.headers.get("host");
+  return host ? host.trim().toLowerCase() : null;
+}
+
+/**
+ * Rejects state-changing requests that did not come from this site.
+ *
+ * Stricter than what it replaces: it covers every unsafe method whatever the
+ * content type, so the JSON endpoints this app is made of are actually
+ * protected rather than skipped. The session cookie is already SameSite=Lax,
+ * which is the primary defence; this is the second one.
+ */
+function crossSiteRequest(request: Request): boolean {
+  if (SAFE_METHODS.has(request.method)) return false;
+
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const claimed = origin ?? referer;
+  // A browser always sends Origin on an unsafe method. Nothing else legitimate
+  // reaches these routes, so a request without either header is not ours.
+  if (!claimed) return true;
+
+  let claimedHost: string;
+  try {
+    claimedHost = new URL(claimed).host.toLowerCase();
+  } catch {
+    return true;
+  }
+
+  const target = expectedHost(request);
+  if (!target) return true;
+  return claimedHost !== target;
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
+  if (crossSiteRequest(context.request)) {
+    return new Response(JSON.stringify({ error: "Cross-site request rejected." }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   // Reject oversized bodies before any handler touches them. A 20 MB write was
   // accepted in 112 ms onto a 1 GB disk, so ~50 requests could fill it and take
   // the database down with the app.

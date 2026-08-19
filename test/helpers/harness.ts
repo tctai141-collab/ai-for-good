@@ -232,6 +232,11 @@ export async function post(h: Harness, path: string, body: unknown, cookie?: str
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      // A browser always sends Origin on an unsafe method, and the middleware
+      // now rejects requests that do not. Omitting it here would have every
+      // test exercising a path no real client takes. Tests that deliberately
+      // probe the cross-site check build their own requests instead.
+      origin: h.url,
       ...(cookie ? { cookie } : {}),
     },
     body: JSON.stringify(body),
