@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import Tasks, { useDeadlines, type DeadlinesState } from "./Tasks";
-import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared } from "../lib/persistence";
+import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
 import type { Checkin, UserData } from "../lib/persistence";
 
 function formatMarkdown(text: string): string {
@@ -27,7 +27,7 @@ function formatMarkdown(text: string): string {
 /* ============================================================
    FOUNDER OS.
 
-   Founder chat calls `/api/founder-os/chat`, which proxies to
+   Founder chat calls `/api/chat`, which proxies to
    OpenClaw from the server. Chat errors are surfaced instead of
    silently swapping in demo content.
 
@@ -117,7 +117,7 @@ async function callClaude(
   else if (system.includes("VENTING")) posture = "venting";
 
   try {
-    const res = await fetch("/api/founder-os/chat", {
+    const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -165,7 +165,7 @@ async function callClaude(
     const data = await res.json() as { content: string };
     return { voice: data.content || "", theme, decision: detectDecision(lastUser, theme) };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Founder OS chat request failed.";
+    const message = err instanceof Error ? err.message : "Chat request failed.";
     throw new Error(message);
   }
 }
@@ -279,7 +279,7 @@ type View = "chat" | "reflections";
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
-type FounderOSProps = {
+type SprintBuddyProps = {
   persona: Persona;
   userEmail?: string;
   initialData?: UserData;
@@ -287,7 +287,7 @@ type FounderOSProps = {
   signOutLabel?: string;
 };
 
-export default function FounderOS({ persona, userEmail, initialData, onSignOut, signOutLabel = "Sign out" }: FounderOSProps) {
+export default function SprintBuddy({ persona, userEmail, initialData, onSignOut, signOutLabel = "Sign out" }: SprintBuddyProps) {
   const [view, setView] = useState<View>("chat");
   const [active, setActive] = useState<ActiveTarget>({ fresh: true });
   const [coachTeam, setCoachTeam] = useState<Team | null>(null);
@@ -320,7 +320,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     if (window.matchMedia("(max-width: 700px)").matches) return false;
-    const saved = window.localStorage.getItem("founderos:sidebar");
+    const saved = window.localStorage.getItem("sprintbuddy:sidebar");
     return saved === null ? true : saved === "1";
   });
   useEffect(() => {
@@ -335,7 +335,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   }, []);
   useEffect(() => {
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("founderos:sidebar", sidebarOpen ? "1" : "0");
+      window.localStorage.setItem("sprintbuddy:sidebar", sidebarOpen ? "1" : "0");
     }
   }, [sidebarOpen]);
   const toggleSidebar = () => setSidebarOpen((v) => !v);
@@ -345,7 +345,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   const deadlines = useDeadlines(persona === "founder" ? userEmail : undefined);
 
   /* Today's check-in: once a day, persists via date-keyed localStorage */
-  const todayKey = `founderos:checkin:${new Date().toISOString().slice(0, 10)}`;
+  const todayKey = `sprintbuddy:checkin:${new Date().toISOString().slice(0, 10)}`;
   const [checkinDoneToday, setCheckinDoneToday] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(todayKey) === "1";
@@ -387,6 +387,23 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
   };
   const newChat = () => { setView("chat"); setActive({ fresh: true, _t: Date.now() }); };
 
+  /**
+   * Removes a conversation, optimistically, and puts it back if the server
+   * disagrees. A delete that appears to work and silently did not is worse
+   * than one that visibly fails — the founder would find it again tomorrow.
+   */
+  const removeThread = async (id: string) => {
+    const previous = threads;
+    setThreads((prev) => prev.filter((t) => t.id !== id));
+    // Do not leave the reader staring at a conversation that no longer exists.
+    if (active.id === id) setActive({ fresh: true, _t: Date.now() });
+    try {
+      if (userEmail) await deleteThread(userEmail, id);
+    } catch {
+      setThreads(previous);
+    }
+  };
+
   const activeKey = active.id || (active.fresh ? "fresh" + (active._t || "") : "x");
 
   return (
@@ -403,6 +420,7 @@ export default function FounderOS({ persona, userEmail, initialData, onSignOut, 
         onStartCheckin={startCheckin}
         onNew={newChat}
         onThread={(id) => { setView("chat"); setActive({ id }); }}
+        onDeleteThread={removeThread}
         onReflections={() => setView("reflections")}
         onSignOut={onSignOut}
         signOutLabel={signOutLabel}
@@ -510,13 +528,16 @@ type SidebarProps = {
   onStartCheckin: () => void;
   onNew: () => void;
   onThread: (id: string) => void;
+  onDeleteThread: (id: string) => void;
   onReflections: () => void;
   onSignOut?: () => void;
   signOutLabel: string;
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
   return (
     <aside
       aria-hidden={!open}
@@ -532,9 +553,9 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
       <div style={{ width: 304, height: "100%", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 4px 28px" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-            <span style={{ ...wordmarkType, fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Founder</span>
+            <span style={{ ...wordmarkType, fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Sprint</span>
             <span style={{ display: "inline-block", background: C.blue, padding: "2px 12px 5px", marginLeft: -5, marginTop: 1 }}>
-              <span style={{ ...wordmarkType, color: "oklch(13% 0.008 250)", fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>OS</span>
+              <span style={{ ...wordmarkType, color: "oklch(13% 0.008 250)", fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Buddy</span>
             </span>
           </div>
           <button
@@ -575,12 +596,52 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           <div style={{ flex: 1, minHeight: 96, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
             {threads.map((t) => {
               const on = view === "chat" && active.id === t.id;
+              const confirming = confirmDelete === t.id;
+
+              /* Confirming replaces the row rather than opening a dialog. A
+                 modal here would be heavier than the action deserves, and a
+                 native confirm() blocks the whole page. */
+              if (confirming) {
+                return (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", margin: "2px 0", borderRadius: 10, background: "rgba(255,90,90,0.10)", border: "1px solid rgba(255,90,90,0.30)" }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      Delete this conversation?
+                    </span>
+                    <button
+                      onClick={() => { setConfirmDelete(null); onDeleteThread(t.id); }}
+                      style={{ background: C.red, color: "oklch(98% 0 0)", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minHeight: 32 }}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      style={{ background: "transparent", color: C.sub, border: `1px solid ${C.line}`, borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", minHeight: 32 }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                );
+              }
+
               return (
-                <button key={t.id} onClick={() => onThread(t.id)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 12px", fontSize: 14 }}>
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                  {personaLabel(t.personality) && <span style={{ fontSize: 9.5, fontWeight: 800, color: C.faint, background: "rgba(255,255,255,0.10)", borderRadius: 4, padding: "2px 7px", flexShrink: 0, letterSpacing: 0.8, textTransform: "uppercase" }}>{personaLabel(t.personality)}</span>}
-                  <span style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>{t.lastAt}</span>
-                </button>
+                <div key={t.id} className="threadrow" style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <button onClick={() => onThread(t.id)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 34px 12px 12px", fontSize: 14 }}>
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                    {personaLabel(t.personality) && <span style={{ fontSize: 9.5, fontWeight: 800, color: C.faint, background: "rgba(255,255,255,0.10)", borderRadius: 4, padding: "2px 7px", flexShrink: 0, letterSpacing: 0.8, textTransform: "uppercase" }}>{personaLabel(t.personality)}</span>}
+                    <span style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>{t.lastAt}</span>
+                  </button>
+                  {/* A sibling, not a child: a button cannot be nested inside a
+                      button, and the delete must not also open the thread. */}
+                  <button
+                    className="thread-delete"
+                    aria-label={`Delete conversation: ${t.title}`}
+                    title="Delete conversation"
+                    onClick={() => setConfirmDelete(t.id)}
+                    style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 26, height: 26, display: "grid", placeItems: "center", background: "transparent", border: "none", borderRadius: 6, color: C.faint, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0, fontFamily: "inherit" }}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -1094,7 +1155,7 @@ function Reflections({
     return Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
   }, [threads]);
 
-  const storageKey = `founderos:working-genius:${userEmail}`;
+  const storageKey = `sprintbuddy:working-genius:${userEmail}`;
   const [workingGenius, setWorkingGenius] = useState<WorkingGeniusResult | null>(() => {
     if (!initialWorkingGenius) return null;
     return {
@@ -1666,7 +1727,7 @@ function useTimeContext(): TimeCtx {
     "Somewhere a competitor just raised $67M to do exactly what you're doing but with more headcount. Doesn't matter. You're faster.",
     "The spreadsheet says runway is 18 months. The spreadsheet is an optimist. It also said you'd launch in Q2.",
     "Remember: every unicorn was once a startup that looked like a bad idea run by people who didn't know better. That's you. Congratulations.",
-    "Founder OS tip #67: the meeting that could have been a Slack message is costing you $342 in collective salary. You're welcome.",
+    "Sprint Buddy tip #67: the meeting that could have been a Slack message is costing you $342 in collective salary. You're welcome.",
     "Your investors believe in you. Or at least they believe in the 67 other startups they also invested in. One of you has to work out.",
     "Running a startup is just repeatedly asking 'is this normal?' and the answer is always 'yes, and it's also fine, probably.'",
     "No thoughts, just vibes and a burning desire to disrupt enterprise procurement.",
@@ -1715,6 +1776,16 @@ const CSS = `
 .tile { transition: transform .16s ease; }
 .tile:hover { transform: translateY(-1px); }
 .navitem:hover { background: rgba(255,255,255,0.05)!important; }
+
+/* The delete control on a conversation row. Hidden until the row is hovered
+   or focused, so the list stays calm — but a touch screen has no hover, and an
+   invisible control there is no control at all. */
+.thread-delete { opacity: 0; transition: opacity 120ms ease, color 120ms ease; }
+.threadrow:hover .thread-delete,
+.threadrow:focus-within .thread-delete { opacity: 1; }
+.thread-delete:hover { color: var(--brand-red)!important; background: rgba(255,255,255,0.07)!important; }
+.thread-delete:focus-visible { opacity: 1; outline: 2px solid var(--brand-blue); outline-offset: 1px; }
+@media (hover: none) { .thread-delete { opacity: 0.5; } }
 
 /* Deadline checkboxes.
    The browser default paints an unchecked box as a filled white square, which

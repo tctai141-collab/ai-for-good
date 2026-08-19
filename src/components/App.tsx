@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
-import FounderOS from "./FounderOS";
+import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
 
 type Role = "founder" | "organizer";
@@ -25,7 +25,7 @@ const STARTUP_TIPS = [
   "Your cofounder cannot read your mind. This is unfortunate, but currently still true.",
   "Do the boring distribution work. The product fairy has limited office hours.",
   "If everyone is aligned except reality, invite reality to the next standup.",
-  "Aalti note: vibes are not a financing instrument.",
+  "Sprint Buddy note: vibes are not a financing instrument.",
   "The best MVP is embarrassing in the exact places customers do not care about.",
   "If a feature needs a meeting to explain why it matters, it is applying for deletion.",
   "Replace one strategy document with one uncomfortable user call.",
@@ -41,17 +41,17 @@ const STARTUP_TIPS = [
   "Investor feedback is useful. Customer behavior is evidence.",
   "Sleep is not a vanity metric.",
   "The meeting starts when someone says the uncomfortable sentence.",
-  "If the launch plan depends on everyone remembering everything, Aalti has concerns.",
+  "If the launch plan depends on everyone remembering everything, Sprint Buddy has concerns.",
   "Good founder energy: stubborn about the mission, suspicious of the current plan.",
-  "Aalti's favorite KPI is things learned the hard way before spending money.",
+  "Sprint Buddy's favorite KPI is things learned the hard way before spending money.",
   "A roadmap is a hypothesis wearing office clothes.",
   "If a channel only works when the founder personally begs, congratulations, you found the starting point.",
   "The market does not owe your clever idea a standing ovation.",
-  "Aalti checked: the user still has not read the onboarding copy.",
+  "Sprint Buddy checked: the user still has not read the onboarding copy.",
   "A beautiful dashboard cannot rescue a confused customer.",
   "One paying user is louder than twenty polite compliments.",
   "If the problem is urgent, someone has already hacked together a bad workaround. Go find it.",
-  "Aalti recommends fewer promises and more receipts.",
+  "Sprint Buddy recommends fewer promises and more receipts.",
   "The best cofounder conversation is the one you stop rehearsing and actually have.",
   "If your product only works in the demo, your demo is the product. Awkward.",
   "Cut the feature that sounds impressive but changes no behavior.",
@@ -187,13 +187,10 @@ export default function App() {
             </div>
             <div className="login-panel" aria-labelledby="login-title">
               <h1 id="login-title" className="login-title">
-                <span className="login-title-line login-title-line--buddy">Sprint Buddy</span>
-                <span className="login-title-divider" aria-hidden="true">x</span>
-                <span className="login-title-line login-title-line--os">Founder OS</span>
+                <span className="login-title-line login-title-line--buddy">
+                  Sprint <span className="login-title-accent">Buddy</span>
+                </span>
               </h1>
-              <p style={{ margin: "-8px 0 18px", color: "var(--ink-sub)", fontSize: 14, lineHeight: 1.5 }}>
-                Meet Aalti!
-              </p>
 
               <form className="login-form" onSubmit={handleLogin}>
                 <label className="login-field">
@@ -241,7 +238,7 @@ export default function App() {
   if (user.role === "organizer") {
     return (
       <>
-        <FounderOS persona="coach" userEmail={user.email} onSignOut={handleSignOut} />
+        <SprintBuddy persona="coach" userEmail={user.email} onSignOut={handleSignOut} />
         <a
           href="/admin"
           style={{
@@ -268,7 +265,7 @@ export default function App() {
 
   return (
     <>
-      <FounderOS
+      <SprintBuddy
         key={user.email}
         persona="founder"
         userEmail={user.email}

@@ -254,6 +254,36 @@ export function deleteCheckin(id: string, userEmail: string) {
   });
 }
 
+/**
+ * Deletes one conversation and everything hanging off it.
+ *
+ * Scoped to the caller in two ways on purpose. assertOwner throws if the id
+ * belongs to somebody else, and the DELETE still carries `AND user_email`, so a
+ * gap between the check and the write cannot delete another founder's thread.
+ * This is the bug class the audit found — a delete that trusted the id alone.
+ *
+ * Messages cascade. Decisions do not: their thread_id is ON DELETE SET NULL, so
+ * a decision outlives the conversation that prompted it, which is the policy
+ * the schema migration settled on. Returns whether a row actually went, so the
+ * client is told the truth rather than an optimistic success.
+ */
+export function deleteThread(id: string, userEmail: string): boolean {
+  const db = getDb();
+
+  // One lookup answers both questions: does it exist, and is it theirs. The
+  // driver's run() reports no row count, so "did anything go" has to be
+  // established before the write rather than read back from it.
+  const owner = ownerOf("thread", id);
+  if (owner === null) return false;
+  if (owner !== userEmail) throw new NotOwnerError("thread");
+
+  db.run("DELETE FROM threads WHERE id = $id AND user_email = $email", {
+    $id: id,
+    $email: userEmail,
+  });
+  return true;
+}
+
 export function getVisits(userEmail: string): number {
   const db = getDb();
   const row = db

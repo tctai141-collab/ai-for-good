@@ -166,10 +166,29 @@
       .message.ok { color: var(--ok); }
       [hidden] { display: none !important; }
       a { color: var(--accent); }
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        /* 44px is the smallest reliable touch target, and this is the control
+           somebody reaches for when they are stuck on the wrong page. */
+        min-height: 44px;
+        margin: 0 0 6px;
+        color: var(--muted);
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .back-link:hover { color: var(--accent); text-decoration: underline; }
+      .back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
     </style>
   </head>
   <body>
     <main>
+      <!-- The only way back used to be editing the URL. -->
+      <a class="back-link" href="/">
+        <span aria-hidden="true">&#8592;</span> Back to Sprint Buddy
+      </a>
       <h1>Cohort admin</h1>
       <p class="lede" id="lede">Loading…</p>
 

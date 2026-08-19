@@ -57,7 +57,7 @@ Three faces, three roles. Each owns its moment.
 
 - **Newsreader** (400, 400 italic, 500). Assistant voice: chat reply bubbles, soft check-in prompts, the kicker paragraph at the top of Reflections, the "open with" line on the coach card. Serif, optical-size aware. Makes the buddy feel handwritten, not chatbot.
 
-- **Fraunces** (400, 600, 900). Identity moments: login wordmark, Founder OS sidebar wordmark, Reflections page heading, key affirmations. Variable, opinionated, gives Aalto presence without licensing the actual Aalto Sans / Aino.
+- **Fraunces** (400, 600, 900). Identity moments: login wordmark, Sprint Buddy sidebar wordmark, Reflections page heading, key affirmations. Variable, opinionated, gives Aalto presence without licensing the actual Aalto Sans / Aino.
 
 ### Pairing rules
 

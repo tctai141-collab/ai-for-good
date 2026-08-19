@@ -1,17 +1,17 @@
 import type { APIRoute } from "astro";
-import { getSprintContext } from "../../../lib/sprint-context";
-import { buildCheckinPrompt } from "../../../lib/prompts/checkin";
-import { getLastCheckin, upsertCheckin } from "../../../db";
-import { advisorReply, advisorReplyStream } from "../../../lib/ai";
-import { getSessionUser } from "../../../lib/auth";
-import { capHistory, chatLimiter } from "../../../lib/limits";
-import { reportError } from "../../../lib/errors";
+import { getSprintContext } from "../../lib/sprint-context";
+import { buildCheckinPrompt } from "../../lib/prompts/checkin";
+import { getLastCheckin, upsertCheckin } from "../../db";
+import { advisorReply, advisorReplyStream } from "../../lib/ai";
+import { getSessionUser } from "../../lib/auth";
+import { capHistory, chatLimiter } from "../../lib/limits";
+import { reportError } from "../../lib/errors";
 import {
   FOUNDER_VOICE_SYSTEM,
   MARTEN_SYSTEM,
   POSTURE_PROMPTS,
   STYLE_GUARDRAILS,
-} from "../../../lib/personas";
+} from "../../lib/personas";
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;

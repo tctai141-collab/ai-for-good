@@ -176,7 +176,7 @@ describe("cross-tenant isolation", () => {
   });
 
   test("bob cannot chat as alice", async () => {
-    const res = await post(h, "/api/founder-os/chat", {
+    const res = await post(h, "/api/chat", {
       messages: [{ role: "user", content: "hello" }],
       userEmail: alice.email,
     }, bob.cookie);
