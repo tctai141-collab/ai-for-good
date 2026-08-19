@@ -3,6 +3,7 @@ import { buildCheckinPrompt } from "../../lib/prompts/checkin";
 import { getLastCheckin, upsertCheckin } from "../../db";
 import { advisorReply, advisorReplyStream } from "../../lib/ai";
 import { getSessionUser } from "../../lib/auth";
+import { buildProgrammeContext } from "../../lib/programme";
 import { capHistory, chatLimiter } from "../../lib/limits";
 import { reportError } from "../../lib/errors";
 import {
@@ -142,6 +143,14 @@ function buildSystem(body: {
   } else if (body.posture && POSTURE_PROMPTS[body.posture]) {
     variable = POSTURE_PROMPTS[body.posture]!;
   }
+
+  /*
+   * The programme goes in the variable half, never the cached persona. It
+   * changes weekly and is edited from /admin, so folding it into the cached
+   * prefix would serve a stale week from cache until the entry expired.
+   */
+  const programme = buildProgrammeContext();
+  if (programme) variable = variable ? `${variable}\n\n${programme}` : programme;
 
   return { persona, variable };
 }

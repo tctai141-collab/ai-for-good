@@ -296,6 +296,43 @@
 
           <div id="deadline-list"></div>
         </section>
+
+        <section class="panel">
+          <h2>Programme</h2>
+          <p class="note" style="margin-top:0">
+            What the sprint is running each week. The advisor is given the current
+            week only, and is told plainly that it describes the cohort's schedule
+            and not any individual founder's company. Leave a week blank and it says
+            nothing about it at all — which is better than saying something stale.
+          </p>
+
+          <form id="programme-form" class="row">
+            <label>
+              <span class="label-text">Week</span>
+              <select id="pr-week"></select>
+            </label>
+            <label>
+              <span class="label-text">Phase</span>
+              <input id="pr-phase" maxlength="200" placeholder="Trend Research" />
+            </label>
+            <label>
+              <span class="label-text">Title</span>
+              <input id="pr-title" maxlength="200" placeholder="Orientation &amp; Kick-off" />
+            </label>
+            <label style="flex:1 1 100%">
+              <span class="label-text">Milestones — one per line</span>
+              <textarea id="pr-milestones" rows="4" maxlength="4000" placeholder="Define the research framework&#10;Clarify roles and tasks"></textarea>
+            </label>
+            <label style="flex:1 1 100%">
+              <span class="label-text">Sessions — one per line</span>
+              <textarea id="pr-sessions" rows="4" maxlength="4000" placeholder="Tue 9:30–11:30 — Team meeting, intro to the sprint&#10;Wed 13:00–15:00 — Workshop"></textarea>
+            </label>
+            <button type="submit">Save week</button>
+          </form>
+          <p class="message" id="pr-message" hidden></p>
+
+          <div id="programme-list"></div>
+        </section>
       </div>
     </main>
 
@@ -655,8 +692,114 @@
         load();
       });
 
+      // ---- Programme ----------------------------------------------------
+
+      const prWeek = document.getElementById("pr-week");
+      const prPhase = document.getElementById("pr-phase");
+      const prTitle = document.getElementById("pr-title");
+      const prMilestones = document.getElementById("pr-milestones");
+      const prSessions = document.getElementById("pr-sessions");
+      const prMessage = document.getElementById("pr-message");
+      const programmeList = document.getElementById("programme-list");
+
+      let programmeWeeks = [];
+      let totalWeeks = 15;
+
+      function fillWeek(week) {
+        const row = programmeWeeks.find((w) => w.week === week);
+        prPhase.value = row ? row.phase : "";
+        prTitle.value = row ? row.title : "";
+        prMilestones.value = row ? row.milestones : "";
+        prSessions.value = row ? row.sessions : "";
+      }
+
+      function renderProgramme() {
+        if (!programmeWeeks.length) {
+          programmeList.innerHTML =
+            '<p class="note">No weeks entered yet. The advisor says nothing about the programme until one is.</p>';
+          return;
+        }
+        programmeList.innerHTML = programmeWeeks
+          .map((w) => {
+            const heading = [w.phase, w.title].filter(Boolean).join(" — ");
+            const milestones = w.milestones.split("\n").filter((l) => l.trim()).length;
+            const sessions = w.sessions.split("\n").filter((l) => l.trim()).length;
+            return (
+              '<div class="row" style="align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+              '<strong style="min-width:70px">Week ' + w.week + "</strong>" +
+              '<span style="flex:1">' + (heading || "<em>untitled</em>") + "</span>" +
+              '<span class="note" style="margin:0">' + milestones + " milestone" + (milestones === 1 ? "" : "s") +
+              ", " + sessions + " session" + (sessions === 1 ? "" : "s") + "</span>" +
+              '<button type="button" data-week="' + w.week + '">Edit</button>' +
+              "</div>"
+            );
+          })
+          .join("");
+        programmeList.querySelectorAll("button[data-week]").forEach((b) => {
+          b.addEventListener("click", () => {
+            const week = Number(b.dataset.week);
+            prWeek.value = String(week);
+            fillWeek(week);
+            prPhase.focus();
+          });
+        });
+      }
+
+      async function loadProgramme() {
+        let res;
+        try {
+          res = await fetch("/api/programme");
+        } catch {
+          return say(prMessage, "Could not reach the server.", true);
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        totalWeeks = data.totalWeeks || 15;
+        programmeWeeks = data.weeks || [];
+
+        if (!prWeek.options.length) {
+          for (let i = 1; i <= totalWeeks; i++) {
+            const option = document.createElement("option");
+            option.value = String(i);
+            option.textContent = "Week " + i;
+            prWeek.appendChild(option);
+          }
+          prWeek.addEventListener("change", () => fillWeek(Number(prWeek.value)));
+        }
+        renderProgramme();
+        fillWeek(Number(prWeek.value || 1));
+      }
+
+      document.getElementById("programme-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        let res;
+        try {
+          res = await fetch("/api/programme", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              week: Number(prWeek.value),
+              phase: prPhase.value,
+              title: prTitle.value,
+              milestones: prMilestones.value,
+              sessions: prSessions.value,
+            }),
+          });
+        } catch {
+          return say(prMessage, "Could not reach the server.", true);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return say(prMessage, data.error || "Could not save that week.", true);
+
+        const blank = !prPhase.value.trim() && !prTitle.value.trim() &&
+          !prMilestones.value.trim() && !prSessions.value.trim();
+        say(prMessage, blank ? "Week " + prWeek.value + " cleared." : "Week " + prWeek.value + " saved.", false);
+        loadProgramme();
+      });
+
       load();
       loadDeadlines();
+      loadProgramme();
     </script>
   </body>
 </html>

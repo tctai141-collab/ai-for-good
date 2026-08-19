@@ -321,6 +321,24 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // The cohort's programme, one row per week.
+  //
+  // This used to be a TypeScript file, which meant a moved session needed a code
+  // change and a deploy, and meant the previous cohort's content was still being
+  // read to founders months later. Milestones and sessions are newline-separated
+  // text rather than child tables: a week has a handful of each, they are always
+  // edited together, and two more tables would buy nothing but CRUD.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS programme_weeks (
+      week INTEGER PRIMARY KEY CHECK(week BETWEEN 1 AND 15),
+      phase TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      milestones TEXT NOT NULL DEFAULT '',
+      sessions TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   // What has already been said to whom, so a reminder is a reminder and not a
   // daily nag. One row per (deadline, founder, kind); the primary key is what
   // makes a second send impossible rather than merely unlikely.
