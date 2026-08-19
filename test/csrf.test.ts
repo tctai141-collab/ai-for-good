@@ -89,6 +89,41 @@ describe("cross-site protection", () => {
     expect(response.status).toBe(200);
   });
 
+  test("allows a write from a second hostname the service also answers on", async () => {
+    /*
+     * The regression this exists for. This service answers on its custom domain
+     * and on its onrender.com address. An earlier version of the check trusted
+     * only PUBLIC_BASE_URL, so every state-changing request from the second host
+     * was rejected with a 403 that produced no log line — the app looked broken
+     * with a silent server. Chat, check-in, deadlines and login all went through
+     * that path.
+     */
+    const response = await post(
+      "/api/deadlines",
+      { action: "create", title: "Second host", dueDate: "2026-10-04" },
+      {
+        cookie: organizer.cookie,
+        origin: "https://sprint-buddy-0gon.onrender.com",
+        "x-forwarded-host": "sprint-buddy-0gon.onrender.com",
+        "x-forwarded-proto": "https",
+      },
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("still rejects an origin that matches no host it answers on", async () => {
+    const response = await post(
+      "/api/deadlines",
+      { action: "create", title: "Nope", dueDate: "2026-10-05" },
+      {
+        cookie: organizer.cookie,
+        origin: "https://sprint-buddy-0gon.onrender.com.evil.example",
+        "x-forwarded-host": "aaltofoundersprint.com",
+      },
+    );
+    expect(response.status).toBe(403);
+  });
+
   test("leaves reads alone", async () => {
     // A GET changes nothing, and blocking it would break ordinary navigation.
     expect((await get(h, "/api/session", founder.cookie)).status).toBe(200);
