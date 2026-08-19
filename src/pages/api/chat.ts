@@ -112,21 +112,27 @@ function buildSystem(body: {
   userEmail?: string;
   founderName?: string;
   founderTz?: string;
-}): string {
+}): { persona: string; variable: string } {
   // "paul" — the retired contrarian archetype — still arrives from threads
   // saved before it was removed. It falls through to the house voice rather
   // than being special-cased, which is what removing a persona should mean.
-  let p: string;
-  if (body.personality === "marten") {
-    p = MARTEN_SYSTEM;
-  } else {
-    p = FOUNDER_VOICE_SYSTEM + "\n\n" + STYLE_GUARDRAILS;
-  }
+  const persona =
+    body.personality === "marten"
+      ? MARTEN_SYSTEM
+      : FOUNDER_VOICE_SYSTEM + "\n\n" + STYLE_GUARDRAILS;
 
+  /*
+   * Kept separate from the persona rather than concatenated onto it, because
+   * the persona is cached upstream and a cached prefix has to be byte-identical
+   * every time. The check-in framing carries the current server time, so
+   * folding it in would change the prefix on every single request and the cache
+   * would never hit.
+   */
+  let variable = "";
 
   if (body.kind === "checkin") {
     const last = body.userEmail ? getLastCheckin(body.userEmail) : null;
-    p += "\n\n" + buildCheckinPrompt({
+    variable = buildCheckinPrompt({
       serverTime: new Date().toISOString(),
       founderTz: body.founderTz || "UTC",
       lastCheckinAt: last?.created_at ?? null,
@@ -134,10 +140,10 @@ function buildSystem(body: {
       founderName: body.founderName ?? null,
     });
   } else if (body.posture && POSTURE_PROMPTS[body.posture]) {
-    p += "\n\n" + POSTURE_PROMPTS[body.posture];
+    variable = POSTURE_PROMPTS[body.posture]!;
   }
 
-  return p;
+  return { persona, variable };
 }
 
 export const POST: APIRoute = async ({ cookies, request }) => {
@@ -182,8 +188,11 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     // so this only needs to be high enough to avoid truncating mid-sentence.
     const maxTokens = personality === "marten" ? 500 : 550;
 
+    const { persona, variable } = buildSystem(body);
+
     const advisorRequest = {
-      system: buildSystem(body),
+      persona,
+      system: variable,
       // Trimmed to the most recent turns under a character budget. A 500
       // message / ~1 MB history was forwarded upstream verbatim before this.
       messages: capHistory(body.messages),

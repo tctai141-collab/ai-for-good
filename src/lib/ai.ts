@@ -89,6 +89,13 @@ function normalize(messages: ChatMessage[]): {
 }
 
 type AdvisorRequest = {
+  /**
+   * The stable half of the system prompt — the persona, identical for every
+   * message from every founder using it. Cached upstream so it is not re-billed
+   * at full rate on each turn.
+   */
+  persona: string;
+  /** The per-request half: posture, check-in framing. Never cached. */
   system: string;
   messages: ChatMessage[];
   maxTokens: number;
@@ -98,9 +105,29 @@ function buildParams(request: AdvisorRequest): Anthropic.MessageCreateParamsNonS
   const { turns, inlineSystem } = normalize(request.messages);
   if (turns.length === 0) throw new Error("No user message to respond to.");
 
-  const system = [request.system, ...inlineSystem, OUTPUT_GUARDRAIL]
+  const variable = [request.system, ...inlineSystem, OUTPUT_GUARDRAIL]
     .filter(Boolean)
     .join("\n\n");
+
+  /*
+   * The persona goes in its own block with a cache breakpoint, and everything
+   * that changes per request goes after it.
+   *
+   * Order is the whole trick: a prefix is only reusable if it is byte-identical
+   * and comes first, so the posture line or the check-in framing appearing
+   * before the persona would make the cache miss every time. The grounded
+   * Mårten prompt is around 3k tokens and was previously re-billed in full on
+   * every turn of every conversation.
+   *
+   * A block below the provider's minimum cacheable length is simply not cached,
+   * which is why the shorter house voice needs no special handling.
+   */
+  const system: Anthropic.TextBlockParam[] = request.persona
+    ? [
+        { type: "text", text: request.persona, cache_control: { type: "ephemeral" } },
+        ...(variable ? [{ type: "text" as const, text: variable }] : []),
+      ]
+    : [{ type: "text", text: variable }];
 
   return {
     model: MODEL,

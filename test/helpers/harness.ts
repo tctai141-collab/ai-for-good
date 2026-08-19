@@ -34,7 +34,13 @@ export type Harness = {
   /** Everything the server has logged, for diagnosing a failing test. */
   serverOutput(): string;
   /** What was actually forwarded to the advisor API, system prompt included. */
-  advisorCalls: { system: string; messages: { role: string; content: string }[] }[];
+  advisorCalls: {
+    /** Every system block joined, i.e. what the model actually reads. */
+    system: string;
+    /** The blocks as sent, so caching breakpoints can be asserted. */
+    systemBlocks: { type: string; text: string; cache_control?: { type: string } }[];
+    messages: { role: string; content: string }[];
+  }[];
   stop(): void;
 };
 
@@ -114,15 +120,27 @@ export async function startServer(
   // without reaching the real service. Returns a minimal non-streaming
   // Messages response; tests that care about the rate limit or the history cap
   // sit in front of this anyway.
-  const advisorCalls: { system: string; messages: { role: string; content: string }[] }[] = [];
+  const advisorCalls: Harness["advisorCalls"] = [];
   const advisor = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      const body = (await request.json()) as { system?: string; messages: { role: string; content: string }[] };
+      const body = (await request.json()) as {
+        system?: string | { type: string; text: string; cache_control?: { type: string } }[];
+        messages: { role: string; content: string }[];
+      };
       // The system prompt is captured too: what the advisor is told about the
-      // cohort is exactly the thing that went wrong once.
-      advisorCalls.push({ system: body.system ?? "", messages: body.messages ?? [] });
+      // cohort is exactly the thing that went wrong once. It is sent as blocks
+      // so the persona can carry a cache breakpoint, so keep both the blocks
+      // and the flattened text the model actually reads.
+      const blocks = typeof body.system === "string"
+        ? [{ type: "text", text: body.system }]
+        : (body.system ?? []);
+      advisorCalls.push({
+        system: blocks.map((b) => b.text).join("\n\n"),
+        systemBlocks: blocks,
+        messages: body.messages ?? [],
+      });
       if (options.advisorFails) {
         // The shape the audit caught being relayed to the browser verbatim.
         return new Response(
