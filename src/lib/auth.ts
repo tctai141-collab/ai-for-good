@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import {
   createSessionRow,
   deleteSessionRow,
+  touchSessionRow,
   deleteSessionsForUser,
   getSessionRow,
   purgeExpiredSessions,
@@ -25,7 +26,29 @@ export type SessionUser = {
 
 export const SESSION_COOKIE = "sb_session";
 
-const SESSION_DAYS = 30;
+/*
+ * Session lifetime: a rolling idle window plus an absolute ceiling.
+ *
+ * This was a single fixed 30 days from login, with no idle expiry at all — so a
+ * founder who signed in on a shared university machine and walked away left a
+ * working session behind for a month. That is a long time to leave other
+ * people's private reflections reachable.
+ *
+ * Two timers is the ordinary shape for this, and it is what the numbers are
+ * chosen around:
+ *
+ *   IDLE (24h, slides forward on use) — a founder checking in daily never sees
+ *   a login screen. A session forgotten in a lab is dead by the next morning.
+ *
+ *   ABSOLUTE (14 days from login, never slides) — even someone using the app
+ *   every day re-authenticates fortnightly, which bounds how long a stolen
+ *   cookie is worth anything.
+ *
+ * Neither is a substitute for signing out, which now works; they are the
+ * backstop for when nobody does.
+ */
+const SESSION_IDLE_HOURS = 24;
+const SESSION_ABSOLUTE_DAYS = 14;
 const INVITE_DAYS = 14;
 export const MIN_PASSWORD_LENGTH = 10;
 
@@ -42,8 +65,12 @@ function isoInDays(days: number): string {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+function isoInHours(hours: number): string {
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+}
+
 export function sessionExpiry(): string {
-  return isoInDays(SESSION_DAYS);
+  return isoInHours(SESSION_IDLE_HOURS);
 }
 
 export function inviteExpiry(): string {
@@ -95,7 +122,10 @@ export function startSession(
     path: "/",
     httpOnly: true,
     sameSite: "lax",
-    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    // The browser may hold the cookie up to the absolute ceiling; the server
+    // decides whether it still means anything. A cookie outliving its session
+    // simply stops authenticating.
+    maxAge: SESSION_ABSOLUTE_DAYS * 24 * 60 * 60,
     secure: isHttps(request),
   });
   // Opportunistic cleanup; there is no scheduler on a single-instance deploy.
@@ -118,6 +148,25 @@ export function endAllSessions(email: string): void {
  * The single source of truth for "who is making this request". Every protected
  * endpoint must go through here rather than reading the cookie directly.
  */
+/**
+ * Parses a timestamp out of the database.
+ *
+ * Two formats reach this column. SQLite's own datetime('now') default writes
+ * "YYYY-MM-DD HH:MM:SS" in UTC with no zone marker, and Date parses that as
+ * *local* time — hours out, and in the wrong direction in Helsinki, which is
+ * enough to expire a session early or keep a stale one alive. Anything written
+ * from application code is a full ISO string that already carries a zone.
+ *
+ * So: add the UTC marker only when there is not one already. Appending it
+ * blindly turns a valid ISO string into an unparseable one, which fails open —
+ * the deadline silently stops being enforced.
+ */
+function parseStoredTime(value: string): number {
+  const trimmed = value.trim();
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  return Date.parse(hasZone ? trimmed : trimmed.replace(" ", "T") + "Z");
+}
+
 export function getSessionUser(cookies: AstroCookies): SessionUser | null {
   const token = cookies.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -125,9 +174,31 @@ export function getSessionUser(cookies: AstroCookies): SessionUser | null {
   const row = getSessionRow(token);
   if (!row) return null;
 
-  if (new Date(row.expires_at).getTime() <= Date.now()) {
+  const now = Date.now();
+
+  // Idle deadline: has this session gone unused for too long?
+  if (new Date(row.expires_at).getTime() <= now) {
     deleteSessionRow(token);
     return null;
+  }
+
+  // Absolute deadline: has it existed for too long, however busy it has been?
+  const createdAt = parseStoredTime(row.created_at);
+  if (Number.isFinite(createdAt) && now - createdAt >= SESSION_ABSOLUTE_DAYS * 24 * 60 * 60 * 1000) {
+    deleteSessionRow(token);
+    return null;
+  }
+
+  /*
+   * Slide the idle window forward, but not on every single request — that
+   * would be a write per API call, and this app makes several per screen.
+   * Extending only once the window is more than half gone keeps the guarantee
+   * (a session in continuous use never expires) at roughly one write per
+   * twelve hours per person.
+   */
+  const remaining = new Date(row.expires_at).getTime() - now;
+  if (remaining < (SESSION_IDLE_HOURS * 60 * 60 * 1000) / 2) {
+    touchSessionRow(token, sessionExpiry());
   }
 
   return { email: row.user_email, name: row.name, role: row.role };
