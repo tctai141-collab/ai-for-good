@@ -30,12 +30,12 @@ Builds with `bunx astro build`, serves `dist/server/entry.mjs` with `bun`.
 |---|---|
 | `src/pages/` | Astro pages |
 | `src/components/` | React components (`.tsx`) |
-| `src/components/App.tsx` | Root app — login + mascot landing, then mounts FounderOS |
+| `src/components/App.tsx` | Root app — login + mascot landing, then mounts SprintBuddy |
 | `src/components/SprintBuddyCube.tsx` | 3D cube mascot (login + landing) |
-| `src/components/FounderOS.tsx` | Founder + coach shell (sidebar, chat, reflections, cohort, founder card). Calls `/api/founder-os/chat` with local mock fallback |
-| `src/pages/api/` | Astro API routes for session, persistence, and Founder OS chat |
+| `src/components/SprintBuddy.tsx` | Founder + coach shell (sidebar, chat, reflections, cohort, founder card). Calls `/api/chat` |
+| `src/pages/api/` | Astro API routes for session, persistence, and chat |
 | `src/db/` | Bun SQLite schema and persistence helpers |
-| `src/lib/sprint-context.ts` | Program context injected into Founder OS prompts |
+| `src/lib/sprint-context.ts` | Program context injected into Sprint Buddy prompts |
 | `docs/` | Wiki index, product docs, design, ops, program, track |
 | `docs/advisors/` | Processed advisor corpora for OpenClaw memory |
 | `scripts/sync-openclaw-advisors.sh` | Sync `docs/advisors/` to OpenClaw and rebuild advisor memory |
@@ -49,7 +49,7 @@ Builds with `bunx astro build`, serves `dist/server/entry.mjs` with `bun`.
 - **SQLite persistence exists.** Default DB path is `./data/sprint-buddy.db` locally and `/app/data/sprint-buddy.db` in production.
 - **Demo login is hardcoded in `src/components/App.tsx`.** It is not production auth.
 - **Session storage is prototype-grade.** `/api/session` stores a JSON cookie with `httpOnly: false` so the browser app can restore demo users.
-- **Founder OS chat uses OpenClaw-compatible chat completions.** Defaults live in `src/pages/api/founder-os/chat.ts`: `OPENCLAW_URL`, `OPENCLAW_TOKEN`, and optional founder-specific URLs such as `OPENCLAW_URL_FOUNDER2`.
+- **Chat calls the Anthropic Messages API.** `src/lib/ai.ts` translates between it and the OpenAI-style SSE shape the browser still speaks. Config: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_EFFORT`. The OpenClaw gateway this once used no longer exists.
 - **Privacy-first** is the core UX constraint. `.impeccable.md` has design/brand context (Aalto palette, dark mode, Inter font).
 - **No CI workflows, no linter/formatter config** exists yet.
 - **`astro.config.mjs`:** `output: "server"`, `@astrojs/node` (standalone) + `@astrojs/react`.
@@ -60,7 +60,7 @@ Builds with `bunx astro build`, serves `dist/server/entry.mjs` with `bun`.
 - Use **separate OpenClaw VMs** for advisor/runtime isolation. The shared/default OpenClaw can serve most users; user-specific OpenClaws should get their own instances and be routed with env vars such as `OPENCLAW_URL_FOUNDER2`.
 - Do not deploy the app onto an OpenClaw VM unless explicitly asked.
 - Current app VM: `sprint-buddy-app` (`135.181.71.36`, `CPU.4V.16G`, port `3000`).
-- Current shared OpenClaw VM: `founder-os-openclaw` (`135.181.71.10`, OpenClaw gateway port `18789`).
+- The self-hosted gateway VM is retired; there is no host to reach.
 - App service on the app VM is `sprint-buddy.service`, running from `/opt/sprint-buddy` with data at `/opt/sprint-buddy-data/sprint-buddy.db`.
 - App bootstrap script lives at `scripts/verda-app-startup.sh`.
 

@@ -152,6 +152,11 @@ export async function setThreadShared(userEmail: string, threadId: string, share
   await post({ action: "set-thread-shared", userEmail, threadId, shared });
 }
 
+/** Removes a conversation for good. The server scopes this to the caller. */
+export async function deleteThread(userEmail: string, threadId: string) {
+  await post({ action: "delete-thread", userEmail, threadId });
+}
+
 export async function saveThread(userEmail: string, thread: Thread) {
   await post({
     action: "save-thread",

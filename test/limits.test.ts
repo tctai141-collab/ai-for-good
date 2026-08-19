@@ -125,7 +125,7 @@ describe("advisor rate limit (H-3)", () => {
     // The advisor call itself fails (no real API key), which is fine — the
     // throttle sits in front of it and is what we are asserting on.
     for (let i = 0; i < 40; i++) {
-      const res = await post(h, "/api/founder-os/chat", {
+      const res = await post(h, "/api/chat", {
         messages: [{ role: "user", content: "hello" }],
         userEmail: alice.email,
       }, alice.cookie);
@@ -146,7 +146,7 @@ describe("advisor rate limit (H-3)", () => {
     const failing = await startServer({ advisorFails: true });
     try {
       const users = await twoFounders(failing);
-      const res = await post(failing, "/api/founder-os/chat", {
+      const res = await post(failing, "/api/chat", {
         messages: [{ role: "user", content: "hello" }],
         userEmail: users.alice.email,
       }, users.alice.cookie);
@@ -178,7 +178,7 @@ describe("history cap (H-3)", () => {
         content: "x".repeat(500),
       }));
 
-      await post(fresh, "/api/founder-os/chat", {
+      await post(fresh, "/api/chat", {
         messages, userEmail: users.alice.email,
       }, users.alice.cookie);
 

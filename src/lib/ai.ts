@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
  * Advisor model backend.
  *
  * Replaces the original self-hosted OpenClaw gateway, which was a VM that no
- * longer exists. The browser app and `/api/founder-os/chat` still speak the
+ * longer exists. The browser app and `/api/chat` still speak the
  * OpenAI-style `choices[].delta.content` SSE shape, so this module translates
  * between that wire format and the Anthropic Messages API.
  */

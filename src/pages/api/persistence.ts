@@ -4,6 +4,7 @@ import {
   getThreads,
   getSharedThreads,
   setThreadShared,
+  deleteThread,
   upsertDecision,
   getDecisions,
   upsertCheckin,
@@ -130,6 +131,18 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         // was requested — a write that matched no row used to report success.
         const shared = setThreadShared(body.threadId, session!.email, Boolean(body.shared));
         return json({ ok: true, shared });
+      }
+
+      // Removing a conversation the founder no longer wants. Their own only —
+      // requireSelf plus a user-scoped DELETE, the same discipline as every
+      // other write here.
+      case "delete-thread": {
+        const authError = requireSelf(session, body.userEmail);
+        if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
+        if (!body.threadId || !body.userEmail) return err("threadId + userEmail required");
+        const deleted = deleteThread(body.threadId, session!.email);
+        if (!deleted) return err("No such conversation.", 404);
+        return json({ ok: true });
       }
 
       case "save-decision": {

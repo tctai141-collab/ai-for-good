@@ -127,7 +127,7 @@ describe("privacy boundary — organizer", () => {
   });
 
   test("cannot chat inside a founder's account", async () => {
-    const res = await post(h, "/api/founder-os/chat", {
+    const res = await post(h, "/api/chat", {
       messages: [{ role: "user", content: "hi" }],
       userEmail: alice.email,
     }, organizer.cookie);

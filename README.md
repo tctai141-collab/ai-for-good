@@ -1,6 +1,6 @@
 # Sprint Buddy — AI-for-Good Hackathon
 
-**Track:** Founder OS — Aalto Founder Sprint
+**Track:** Aalto Founder Sprint
 **Prize:** €1,000
 **Duration:** 48 hours
 
