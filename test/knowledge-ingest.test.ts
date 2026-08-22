@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createFounder, createOrganizer, post, startServer, type Harness, type Session } from "./helpers/harness";
+import { createFounder, createOrganizer, get, post, startServer, type Harness, type Session } from "./helpers/harness";
 import { chunkTranscript } from "../src/lib/extract";
 
 /**
@@ -176,5 +176,22 @@ describe("ingest API", () => {
       founder.cookie,
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("the admin page itself", () => {
+  test("renders the panel and its inline script parses", async () => {
+    // The admin script is one inline block: a syntax error anywhere in it takes
+    // out people, deadlines, programme and knowledge at once, silently, and no
+    // typecheck looks inside it. This is the only thing that would catch that.
+    const res = await get(h, "/admin", organizer.cookie);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Add knowledge from a transcript");
+
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    const inline = scripts.find((block) => block.includes("ingest-form"));
+    expect(inline).toBeTruthy();
+    expect(() => new Function(inline!)).not.toThrow();
   });
 });
