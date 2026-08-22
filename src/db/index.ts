@@ -967,6 +967,28 @@ export function upsertKnowledge(entry: {
   return id;
 }
 
+/**
+ * Archives every active entry from one source in a single statement.
+ *
+ * A transcript import adds dozens of rows at once, so undoing one must not mean
+ * dozens of clicks. Archives rather than deletes: the entries stay visible in
+ * the admin table and can be restored, which is the difference between changing
+ * your mind and losing the work.
+ */
+export function archiveKnowledgeBySource(persona: string, source: string): number {
+  const db = getDb();
+  const before = db
+    .query("SELECT COUNT(*) AS n FROM knowledge_entries WHERE persona = $persona AND source = $source AND status = 'active'")
+    .get({ $persona: persona, $source: source }) as { n: number };
+  if (before.n === 0) return 0;
+  db.run(
+    `UPDATE knowledge_entries SET status = 'archived', updated_at = datetime('now')
+     WHERE persona = $persona AND source = $source AND status = 'active'`,
+    { $persona: persona, $source: source },
+  );
+  return before.n;
+}
+
 export function setKnowledgeStatus(id: string, status: "active" | "archived"): boolean {
   const db = getDb();
   const existing = db

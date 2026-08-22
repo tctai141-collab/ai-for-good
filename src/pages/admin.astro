@@ -369,6 +369,32 @@
 
           <div id="knowledge-list"></div>
         </section>
+
+        <section class="panel">
+          <h2>Add knowledge from a transcript</h2>
+          <p class="note" style="margin-top:0">
+            Paste a mentor session. It is read in pieces and comes back as draft
+            entries for you to approve — nothing reaches Mårten until you tick it
+            and add it. The transcript itself is never stored, only the entries
+            you keep. Anything about a founder or their company is left out.
+          </p>
+
+          <form id="ingest-form" class="row">
+            <label>
+              <span class="label-text">Who was speaking</span>
+              <input id="ingest-source" maxlength="120" placeholder="Atte — Singa" required />
+            </label>
+            <label style="flex:1 1 100%">
+              <span class="label-text">Transcript</span>
+              <textarea id="ingest-text" rows="8" placeholder="Paste the whole session. Long ones are split automatically."></textarea>
+            </label>
+            <button type="submit" id="ingest-go">Read it</button>
+            <button type="button" id="ingest-cancel" hidden>Stop</button>
+          </form>
+          <p class="message" id="ingest-message" hidden></p>
+
+          <div id="ingest-review"></div>
+        </section>
       </div>
     </main>
 
@@ -380,6 +406,18 @@
       const linksPanel = document.getElementById("links-panel");
       const linksBox = document.getElementById("links");
       let me = null;
+
+      // Entry text now originates in a pasted transcript by way of the model,
+      // so it reaches this page as untrusted content and must never be parsed
+      // as markup on the way into the DOM.
+      function esc(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
 
       function say(el, text, isError) {
         el.textContent = text;
@@ -855,21 +893,46 @@
         kbPosition.value = String(highest + 10);
       }
 
+      // A transcript import lands dozens of entries under one source, so the
+      // way out has to be as cheap as the way in.
+      function sourceSummary() {
+        const counts = new Map();
+        for (const e of knowledgeEntries) {
+          if (e.status === "archived" || !e.source) continue;
+          counts.set(e.source, (counts.get(e.source) || 0) + 1);
+        }
+        if (counts.size === 0) return "";
+        return (
+          '<p class="note" style="margin:0 0 10px">Active by source. Archiving a source puts all of its entries back in the drawer; each one can still be restored on its own.</p>' +
+          '<div class="row" style="gap:8px;margin-bottom:14px">' +
+          [...counts.entries()]
+            .map(
+              ([source, n]) =>
+                '<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:3px 6px 3px 10px">' +
+                esc(source) + ' <span class="note" style="margin:0">' + n + "</span>" +
+                '<button type="button" data-archive-source="' + esc(source) + '">Archive all</button>' +
+                "</span>",
+            )
+            .join("") +
+          "</div>"
+        );
+      }
+
       function renderKnowledge() {
         if (!knowledgeEntries.length) {
           knowledgeList.innerHTML = '<p class="note">Nothing yet.</p>';
           return;
         }
-        knowledgeList.innerHTML = knowledgeEntries
+        knowledgeList.innerHTML = sourceSummary() + knowledgeEntries
           .map((e) => {
             const archived = e.status === "archived";
-            const preview = e.body.length > 130 ? e.body.slice(0, 130) + "…" : e.body;
+            const preview = esc(e.body.length > 130 ? e.body.slice(0, 130) + "…" : e.body);
             return (
               '<div style="padding:10px 0;border-bottom:1px solid var(--border);opacity:' + (archived ? "0.5" : "1") + '">' +
               '<div class="row" style="align-items:baseline;gap:10px">' +
               '<strong style="min-width:44px">' + e.position + "</strong>" +
-              '<span style="flex:1"><strong>' + (e.topic || "(no topic)") + "</strong>" +
-              (e.source ? ' <span class="note" style="margin:0">· ' + e.source + "</span>" : "") +
+              '<span style="flex:1"><strong>' + esc(e.topic || "(no topic)") + "</strong>" +
+              (e.source ? ' <span class="note" style="margin:0">· ' + esc(e.source) + "</span>" : "") +
               (archived ? ' <span class="note" style="margin:0">· archived</span>' : "") +
               "</span>" +
               '<button type="button" data-edit="' + e.id + '">Edit</button>' +
@@ -893,6 +956,28 @@
             kbTopic.focus();
           });
         });
+        knowledgeList.querySelectorAll("button[data-archive-source]").forEach((b) => {
+          b.addEventListener("click", async () => {
+            const source = b.dataset.archiveSource;
+            // Deliberately a two-step rather than a confirm() dialog: a modal
+            // blocks the page, and this is reversible anyway.
+            if (b.dataset.armed !== "yes") {
+              b.dataset.armed = "yes";
+              b.textContent = "Sure?";
+              setTimeout(() => {
+                if (!b.isConnected) return;
+                b.dataset.armed = "";
+                b.textContent = "Archive all";
+              }, 4000);
+              return;
+            }
+            const { ok, data } = await knowledgeApi({ action: "archiveSource", source });
+            if (!ok) return;
+            say(kbMessage, "Archived " + data.archived + " from " + source + ".", false);
+            loadKnowledge();
+          });
+        });
+
         knowledgeList.querySelectorAll("button[data-toggle]").forEach((b) => {
           b.addEventListener("click", async () => {
             const entry = knowledgeEntries.find((e) => e.id === b.dataset.toggle);
@@ -955,6 +1040,149 @@
         say(kbMessage, "Saved. Mårten uses it on the next message.", false);
         kbId.value = data.id || "";
         loadKnowledge();
+      });
+
+      // ---- Transcript ingest ------------------------------------------------
+      //
+      // The transcript is split here rather than server-side so each request
+      // stays short. One call per piece keeps every request well inside any
+      // proxy timeout, and gives the operator a progress count instead of a
+      // spinner that might be dead. Nothing is written until "Add selected".
+
+      const ingestSource = document.getElementById("ingest-source");
+      const ingestText = document.getElementById("ingest-text");
+      const ingestMessage = document.getElementById("ingest-message");
+      const ingestReview = document.getElementById("ingest-review");
+      const ingestGo = document.getElementById("ingest-go");
+      const ingestCancel = document.getElementById("ingest-cancel");
+
+      const CHUNK_CHARS = 24000;
+      let candidates = [];
+      let stopRequested = false;
+
+      function splitTranscript(text) {
+        const paragraphs = text.split(/\n\s*\n/);
+        const chunks = [];
+        let current = "";
+        const push = () => {
+          if (current.trim().length >= 200) chunks.push(current.trim());
+          current = "";
+        };
+        for (const paragraph of paragraphs) {
+          if (paragraph.length > CHUNK_CHARS) {
+            push();
+            for (let i = 0; i < paragraph.length; i += CHUNK_CHARS) {
+              chunks.push(paragraph.slice(i, i + CHUNK_CHARS));
+            }
+            continue;
+          }
+          if (current.length + paragraph.length + 2 > CHUNK_CHARS) push();
+          current += (current ? "\n\n" : "") + paragraph;
+        }
+        push();
+        return chunks;
+      }
+
+      function renderCandidates() {
+        if (!candidates.length) {
+          ingestReview.innerHTML = "";
+          return;
+        }
+        const chosen = candidates.filter((c) => c.keep).length;
+        ingestReview.innerHTML =
+          '<p class="note" style="margin:14px 0 6px"><strong>' + candidates.length +
+          " draft entries.</strong> Untick anything that is not his to say, edit the wording, then add them.</p>" +
+          candidates
+            .map((c, i) =>
+              '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
+              '<div class="row" style="align-items:baseline;gap:10px">' +
+              '<input type="checkbox" data-keep="' + i + '"' + (c.keep ? " checked" : "") + " />" +
+              '<input data-topic="' + i + '" maxlength="120" value="' + esc(c.topic) + '" style="flex:1" />' +
+              "</div>" +
+              '<textarea data-body="' + i + '" rows="3" maxlength="8000" style="width:100%;margin-top:6px">' +
+              esc(c.body) + "</textarea>" +
+              "</div>",
+            )
+            .join("") +
+          '<div class="row" style="margin-top:12px">' +
+          '<button type="button" id="ingest-add">Add ' + chosen + " selected</button>" +
+          '<button type="button" id="ingest-discard">Discard all</button>' +
+          "</div>";
+
+        ingestReview.querySelectorAll("input[data-keep]").forEach((el) => {
+          el.addEventListener("change", () => {
+            candidates[Number(el.dataset.keep)].keep = el.checked;
+            const n = candidates.filter((c) => c.keep).length;
+            const button = document.getElementById("ingest-add");
+            if (button) button.textContent = "Add " + n + " selected";
+          });
+        });
+        ingestReview.querySelectorAll("input[data-topic]").forEach((el) => {
+          el.addEventListener("input", () => { candidates[Number(el.dataset.topic)].topic = el.value; });
+        });
+        ingestReview.querySelectorAll("textarea[data-body]").forEach((el) => {
+          el.addEventListener("input", () => { candidates[Number(el.dataset.body)].body = el.value; });
+        });
+
+        document.getElementById("ingest-discard").addEventListener("click", () => {
+          candidates = [];
+          renderCandidates();
+          say(ingestMessage, "Drafts discarded. Nothing was saved.", false);
+        });
+
+        document.getElementById("ingest-add").addEventListener("click", async () => {
+          const keep = candidates.filter((c) => c.keep && c.body.trim());
+          if (!keep.length) { say(ingestMessage, "Nothing ticked.", true); return; }
+          const { ok, data } = await knowledgeApi({
+            action: "importBatch",
+            source: ingestSource.value.trim(),
+            entries: keep.map((c) => ({ topic: c.topic, body: c.body })),
+          });
+          if (!ok) { say(ingestMessage, (data && data.error) || "Could not add those.", true); return; }
+          candidates = [];
+          renderCandidates();
+          say(ingestMessage, "Added " + data.saved + ". Mårten uses them on the next message.", false);
+          loadKnowledge();
+        });
+      }
+
+      ingestCancel.addEventListener("click", () => { stopRequested = true; });
+
+      document.getElementById("ingest-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const source = ingestSource.value.trim();
+        const text = ingestText.value.trim();
+        if (!source) { say(ingestMessage, "Name who was speaking first.", true); return; }
+        if (text.length < 200) { say(ingestMessage, "That is too short to be a session.", true); return; }
+
+        const chunks = splitTranscript(text);
+        candidates = [];
+        stopRequested = false;
+        ingestGo.disabled = true;
+        ingestCancel.hidden = false;
+
+        for (let i = 0; i < chunks.length; i++) {
+          if (stopRequested) break;
+          say(ingestMessage, "Reading piece " + (i + 1) + " of " + chunks.length + "…", false);
+          const { ok, data } = await knowledgeApi({ action: "extract", source, transcript: chunks[i] });
+          if (!ok) {
+            // One bad piece should not throw away the pieces that worked.
+            say(ingestMessage, (data && data.error) || "That piece could not be read. Carrying on.", true);
+            continue;
+          }
+          for (const c of data.candidates || []) candidates.push({ topic: c.topic, body: c.body, keep: true });
+          renderCandidates();
+        }
+
+        ingestGo.disabled = false;
+        ingestCancel.hidden = true;
+        if (stopRequested) {
+          say(ingestMessage, "Stopped. " + candidates.length + " drafts so far, nothing saved yet.", false);
+        } else if (!candidates.length) {
+          say(ingestMessage, "Nothing in there was worth adding.", false);
+        } else {
+          say(ingestMessage, "Done. " + candidates.length + " drafts to review below.", false);
+        }
       });
 
       load();
