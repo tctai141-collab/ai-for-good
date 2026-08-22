@@ -286,6 +286,7 @@
           <button type="button" class="tab" data-tab="people">People</button>
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
           <button type="button" class="tab" data-tab="programme">Programme</button>
+          <button type="button" class="tab" data-tab="shared">Shared</button>
           <button type="button" class="tab" data-tab="knowledge">Knowledge</button>
           <button type="button" class="tab" data-tab="transcript">Add transcript</button>
         </nav>
@@ -426,6 +427,25 @@
 
           <div id="programme-list"></div>
         </section>
+        </div>
+
+        <div class="tabpanel" id="tab-shared" hidden>
+          <section class="panel">
+            <h2>Shared with you</h2>
+            <p class="note" style="margin-top:0">
+              Conversations a founder chose to hand over. Nothing else is
+              readable: everything a founder has not shared stays private to
+              them, and unsharing takes it out of this list immediately.
+            </p>
+            <p class="note" style="margin-top:0">
+              Opening one tells the founder it was read, once. They are not
+              shown how often, and re-reading changes nothing — sharing
+              something difficult and hearing nothing back is worse than not
+              sharing at all.
+            </p>
+            <p class="message" id="shared-message" hidden></p>
+            <div id="shared-list"></div>
+          </section>
         </div>
 
         <div class="tabpanel" id="tab-knowledge" hidden>
@@ -1143,6 +1163,7 @@
             if (!ok) return;
             say(kbMessage, "Archived " + data.archived + " from " + source + ".", false);
             loadKnowledge();
+      loadShared();
           });
         });
 
@@ -1170,6 +1191,7 @@
             if (kbId.value === entry.id) kbClear();
             say(kbMessage, "Deleted " + (entry.topic || "that entry") + ". That one is gone for good.", false);
             loadKnowledge();
+      loadShared();
           });
         });
 
@@ -1192,6 +1214,7 @@
             if (!entry) return;
             await knowledgeApi({ action: entry.status === "archived" ? "restore" : "archive", id: entry.id });
             loadKnowledge();
+      loadShared();
           });
         });
       }
@@ -1255,6 +1278,7 @@
         }
         kbId.value = data.id || "";
         loadKnowledge();
+      loadShared();
       });
 
       // ---- Transcript ingest ------------------------------------------------
@@ -1393,6 +1417,7 @@
           ingestText.hidden = false;
           say(ingestMessage, "Added " + data.saved + ". Sprint Buddy uses them on the next message.", false);
           loadKnowledge();
+      loadShared();
         });
       }
 
@@ -1445,10 +1470,110 @@
         }
       });
 
+      // ---- Shared conversations -------------------------------------------
+      //
+      // The read half of a feature that only ever had a write half. Founders
+      // could hand a conversation over and no screen ever showed it.
+
+      const sharedList = document.getElementById("shared-list");
+      const sharedMessage = document.getElementById("shared-message");
+      let sharedThreads = [];
+      const sharedOpen = new Set();
+
+      function relativeDay(iso) {
+        if (!iso) return "";
+        const then = Date.parse(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
+        if (Number.isNaN(then)) return "";
+        const days = Math.floor((Date.now() - then) / 86400000);
+        if (days <= 0) return "today";
+        if (days === 1) return "yesterday";
+        if (days < 7) return days + "d ago";
+        return Math.floor(days / 7) + "w ago";
+      }
+
+      function renderShared() {
+        if (!sharedThreads.length) {
+          sharedList.innerHTML =
+            '<p class="note">Nothing shared yet. A founder has to hand a conversation over from their own sidebar.</p>';
+          return;
+        }
+        sharedList.innerHTML =
+          '<p class="note" style="margin:0 0 10px">' + sharedThreads.length +
+          " conversation" + (sharedThreads.length === 1 ? "" : "s") + " shared.</p>" +
+          '<div class="scroller">' +
+          sharedThreads
+            .map((t) => {
+              const open = sharedOpen.has(t.id);
+              const transcript = (t.messages || [])
+                .map((m) =>
+                  '<p style="margin:0 0 10px"><strong style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em">' +
+                  (m.role === "user" ? esc(t.founderName || "Founder") : "Sprint Buddy") +
+                  "</strong><br />" + esc(m.content).replace(/\n/g, "<br />") + "</p>")
+                .join("");
+              return (
+                '<div class="rowline">' +
+                '<span class="grow"><strong>' + esc(t.founderName || t.founderEmail) + "</strong>" +
+                ' <span class="note" style="margin:0">· ' + esc(t.title || "Untitled") + "</span>" +
+                (t.seenAt ? "" : ' <span style="color:var(--accent);font-size:0.75rem">· new</span>') +
+                "</span>" +
+                '<span class="note" style="margin:0">' + esc(relativeDay(t.updatedAt)) + "</span>" +
+                '<button type="button" class="disclose" data-shared="' + t.id + '">' +
+                (open ? "Close" : "Read") + "</button>" +
+                "</div>" +
+                (open
+                  ? '<div class="expanded" style="max-width:62ch">' + transcript + "</div>"
+                  : "")
+              );
+            })
+            .join("") +
+          "</div>";
+
+        sharedList.querySelectorAll("button[data-shared]").forEach((b) => {
+          b.addEventListener("click", async () => {
+            const id = b.dataset.shared;
+            if (sharedOpen.has(id)) {
+              sharedOpen.delete(id);
+              renderShared();
+              return;
+            }
+            sharedOpen.add(id);
+            renderShared();
+            // Stamped on first open only. The founder learns it landed, not
+            // how often it is read.
+            const entry = sharedThreads.find((t) => t.id === id);
+            if (entry && !entry.seenAt) {
+              try {
+                await fetch("/api/admin/shared", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "seen", id }),
+                });
+                entry.seenAt = new Date().toISOString();
+              } catch { /* the read still happened; the stamp can wait */ }
+            }
+          });
+        });
+      }
+
+      async function loadShared() {
+        let res;
+        try {
+          res = await fetch("/api/admin/shared");
+        } catch {
+          say(sharedMessage, "Could not reach the server.", true);
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        sharedThreads = data.threads || [];
+        renderShared();
+      }
+
       load();
       loadDeadlines();
       loadProgramme();
       loadKnowledge();
+      loadShared();
     </script>
   </body>
 </html>

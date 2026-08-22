@@ -242,6 +242,10 @@ export function initSchema(db: Database) {
   addColumn(db, "users", "created_at", "TEXT");
   // Founders opt in per conversation; organizers can never read the rest.
   addColumn(db, "threads", "shared_with_coach", "INTEGER NOT NULL DEFAULT 0");
+  // When the operating team first opened it. Sharing something difficult and
+  // hearing nothing back is worse than not sharing, so the founder is told it
+  // landed. Null means nobody has read it yet.
+  addColumn(db, "threads", "shared_seen_at", "TEXT");
 
   // Server-side sessions. The cookie holds an opaque random token and nothing
   // else, so a client cannot forge a role the way it could with the previous

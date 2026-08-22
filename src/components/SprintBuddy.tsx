@@ -217,6 +217,7 @@ type Thread = {
   kind?: "checkin";
   /** Founder has opted this one conversation in to coach visibility. */
   sharedWithCoach?: boolean;
+  sharedSeenAt?: string | null;
 };
 
 type ThemeArc = { name: string; arc: number[] };
@@ -756,7 +757,22 @@ const wordmarkType: React.CSSProperties = {
    founder writes reaches the operating team verbatim, and it is reversible at
    any moment — so the control states plainly which of the two is currently
    true rather than being a bare switch. */
-function ShareToggle({ shared, onChange }: { shared: boolean; onChange: (next: boolean) => void }) {
+function seenAgo(iso: string): string {
+  const then = Date.parse(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
+  if (Number.isNaN(then)) return "";
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return `${Math.floor(days / 7)} weeks ago`;
+}
+
+/*
+ * Sharing something difficult and hearing nothing back is worse than not
+ * sharing, so once the team has opened it the founder is told. First read
+ * only — they learn it landed, not how often it is looked at.
+ */
+function ShareToggle({ shared, seenAt, onChange }: { shared: boolean; seenAt?: string | null; onChange: (next: boolean) => void }) {
   const [confirming, setConfirming] = useState(false);
 
   if (confirming) {
@@ -777,7 +793,7 @@ function ShareToggle({ shared, onChange }: { shared: boolean; onChange: (next: b
     );
   }
 
-  return (
+  const button = (
     <button
       type="button"
       onClick={() => (shared ? onChange(false) : setConfirming(true))}
@@ -795,6 +811,15 @@ function ShareToggle({ shared, onChange }: { shared: boolean; onChange: (next: b
     >
       {shared ? "Shared with your coach" : "Private"}
     </button>
+  );
+
+  if (!shared || !seenAt) return button;
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {button}
+      <span style={{ fontSize: 11.5, color: C.faint }}>Read by the team {seenAgo(seenAt)}</span>
+    </span>
   );
 }
 
@@ -1083,6 +1108,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
         {threadId && userEmail && (
           <ShareToggle
             shared={Boolean(existing?.sharedWithCoach)}
+            seenAt={existing?.sharedSeenAt}
             onChange={(next) => {
               // Update immediately so the control feels honest, then persist.
               setThreads((prev) => prev.map((t) => t.id === threadId ? { ...t, sharedWithCoach: next } : t));
