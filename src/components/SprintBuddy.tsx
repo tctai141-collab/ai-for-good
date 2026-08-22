@@ -821,7 +821,123 @@ type ChatProps = {
   userEmail?: string;
 };
 
+/*
+ * The composer's idle prompt, in the cohort's own register.
+ *
+ * Replaces the single "What are you turning over?" — Tai's list, deduplicated
+ * ("Let them cook." was in it twice). A new one is drawn each time the app is
+ * opened, and again every hour if it is left sitting there, so the same line
+ * does not go stale in front of someone who lives in this tab.
+ *
+ * Only the neutral prompt rotates. Panic and venting keep their own wording:
+ * a founder who has told the app they are panicking should not be met with
+ * "We're cooked."
+ */
+const IDLE_PROMPTS = [
+  "Who are you cooking?",
+  "What are you cooking?",
+  "Let them cook.",
+  "Who let them cook?",
+  "What are they cooking?",
+  "What are you serving?",
+  "What are they serving?",
+  "What's the vibe?",
+  "What's the move?",
+  "What's good?",
+  "What's the tea?",
+  "Spill the tea.",
+  "They cooked.",
+  "You cooked.",
+  "We're cooking.",
+  "Cook harder.",
+  "You ate.",
+  "Ate and left no crumbs.",
+  "It's giving…",
+  "Say less.",
+  "Bet.",
+  "No cap.",
+  "That's cap.",
+  "Be so for real.",
+  "Bffr.",
+  "We're cooked.",
+  "Are we cooked?",
+  "We're so back.",
+  "They're locked in.",
+  "Stop yapping.",
+  "Let them yap.",
+  "Stop glazing.",
+  "That's wild.",
+  "That's crazy.",
+  "Out of pocket.",
+  "Lowkey.",
+  "Highkey.",
+  "Real.",
+  "Valid.",
+  "Based.",
+  "Mid.",
+  "Fire.",
+  "Bussin'.",
+  "Hits different.",
+  "Absolute cinema.",
+  "Main character energy.",
+  "Touch grass.",
+  "Drop the lore.",
+  "What's the lore?",
+  "Canon event.",
+  "Side quest.",
+  "Plot twist.",
+  "Aura check.",
+  "+100 aura.",
+  "Negative aura.",
+  "W or L?",
+  "Common W.",
+  "Massive L.",
+  "Lock in.",
+  "Stay locked in.",
+  "Built different.",
+  "Rent free.",
+  "Say it louder.",
+  "Be fr.",
+  "I fear…",
+  "We listen and we don't judge.",
+  "Chat, are we cooked?",
+  "Chat, what are we doing?",
+  "Chat, be honest.",
+  "Chat, is this real?",
+  "Nah, no way.",
+  "No shot.",
+  "You're wildin'.",
+  "Why are they…",
+  "Who invited them?",
+  "Nobody asked.",
+  "Not the…",
+  "The audacity.",
+  "I'm crying.",
+  "I'm dead.",
+  "I can't 😭",
+  "It's over.",
+  "We're finished.",
+  "Pack it up.",
+  "Go touch grass.",
+] as const;
+
+/** Drawn on mount rather than at module load, so a reload is a fresh draw. */
+function drawPrompt(): string {
+  return IDLE_PROMPTS[Math.floor(Math.random() * IDLE_PROMPTS.length)]!;
+}
+
+/** A new line on open, and again every hour the tab stays put. */
+const PROMPT_ROTATE_MS = 60 * 60 * 1000;
+
 function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail }: ChatProps) {
+  /* The component is mounted client:only, so drawing at first render cannot
+     desync from a server-rendered value — there is no server render. */
+  const [idlePrompt, setIdlePrompt] = useState(drawPrompt);
+  useEffect(() => {
+    const timer = setInterval(() => setIdlePrompt(drawPrompt()), PROMPT_ROTATE_MS);
+    return () => clearInterval(timer);
+  }, []);
+
   const existingFromActive = active.id ? threads.find((t) => t.id === active.id) : null;
   /* createdThreadId keeps subsequent sends updating the same thread rather
      than spawning duplicates after each user reply. */
@@ -1016,7 +1132,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 24px 18px" }}>
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
-              placeholder={mode === "panic" ? "Say it plainly. One thing at a time." : mode === "venting" ? "Let it out, nobody's grading this." : "What are you turning over?"}
+              placeholder={mode === "panic" ? "Say it plainly. One thing at a time." : mode === "venting" ? "Let it out, nobody's grading this." : idlePrompt}
               style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
             <button
               onClick={() => send()}
