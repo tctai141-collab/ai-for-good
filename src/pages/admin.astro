@@ -1217,7 +1217,14 @@
           source: kbSource.value,
         });
         if (!ok) return;
-        say(kbMessage, "Saved. Sprint Buddy uses it on the next message.", false);
+        if (data.warning && data.warning.length) {
+          say(kbMessage,
+            "Saved, but the text still contains: " + data.warning.join(", ") +
+            ". Sprint Buddy will say that to the cohort. Edit it out unless you meant it.",
+            true);
+        } else {
+          say(kbMessage, "Saved. Sprint Buddy uses it on the next message.", false);
+        }
         kbId.value = data.id || "";
         loadKnowledge();
       });

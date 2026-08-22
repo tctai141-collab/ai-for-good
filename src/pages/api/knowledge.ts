@@ -99,7 +99,12 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         source: cap(body.source, MAX_TOPIC).trim(),
       });
       recordAdminAction(session!.email, "knowledge:save", null, `${id} ${topic}`.slice(0, 120));
-      return json({ ok: true, id });
+      // A hand-typed body is not filtered — there is no reliable way to know
+      // every name, and blocking a deliberate edit would be the wrong call
+      // anyway. But if the entry repeats the source it was filed under, that
+      // is almost certainly a slip, and it is the one case worth catching.
+      const leaks = nameLeaks(`${topic} ${text}`, cap(body.source, MAX_TOPIC).trim());
+      return json({ ok: true, id, ...(leaks.length ? { warning: leaks } : {}) });
     }
 
     if (body.action === "extract") {

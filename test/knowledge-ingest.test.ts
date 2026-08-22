@@ -182,6 +182,37 @@ describe("ingest API", () => {
   });
 });
 
+describe("hand-typed entries", () => {
+  test("saving a body that repeats its own source comes back with a warning", async () => {
+    // Not blocked. There is no reliable way to know every name, and refusing a
+    // deliberate edit would be the wrong call. But repeating the source you
+    // just filed the entry under is almost always a slip.
+    const res = await post(h, "/api/knowledge", {
+      action: "save",
+      topic: "HIRING",
+      body: "Annu Nieminen argues you should hire slowly.",
+      position: 700,
+      source: "Annu Nieminen",
+    }, organizer.cookie);
+    const data = await res.json() as { ok: boolean; warning?: string[] };
+    expect(res.status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(data.warning?.sort()).toEqual(["Annu", "Nieminen"]);
+  });
+
+  test("a clean entry saves without one", async () => {
+    const res = await post(h, "/api/knowledge", {
+      action: "save",
+      topic: "HIRING PACE",
+      body: "Hire slowly; a wrong hire costs more than an empty seat.",
+      position: 710,
+      source: "Annu Nieminen",
+    }, organizer.cookie);
+    const data = await res.json() as { warning?: string[] };
+    expect(data.warning).toBeUndefined();
+  });
+});
+
 describe("the admin page itself", () => {
   test("renders the panel and its inline script parses", async () => {
     // The admin script is one inline block: a syntax error anywhere in it takes
