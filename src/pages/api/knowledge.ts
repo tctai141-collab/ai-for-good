@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { archiveKnowledgeBySource, listKnowledge, recordAdminAction, setKnowledgeStatus, upsertKnowledge } from "../../db/index";
+import { archiveKnowledgeBySource, deleteKnowledge, listKnowledge, recordAdminAction, setKnowledgeStatus, upsertKnowledge } from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import { assembleKnowledge, KNOWLEDGE_BUDGET_CHARS, PERSONA } from "../../lib/knowledge";
@@ -81,6 +81,21 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       const status = body.action === "archive" ? "archived" : "active";
       if (!setKnowledgeStatus(body.id, status)) return json({ error: "No such entry." }, 404);
       recordAdminAction(session!.email, `knowledge:${body.action}`, null, body.id);
+      return json({ ok: true });
+    }
+
+    if (body.action === "delete") {
+      if (typeof body.id !== "string" || !body.id) return json({ error: "id required." }, 400);
+      // Recorded before the row is gone, so the audit log keeps what was
+      // removed. Afterwards there is nothing left to describe.
+      const entry = listKnowledge(persona, true).find((row) => row.id === body.id);
+      if (!deleteKnowledge(body.id)) return json({ error: "No such entry." }, 404);
+      recordAdminAction(
+        session!.email,
+        "knowledge:delete",
+        null,
+        `${entry?.topic ?? "(unknown)"} — ${entry?.source || "no source"}`.slice(0, 120),
+      );
       return json({ ok: true });
     }
 

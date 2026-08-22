@@ -455,7 +455,7 @@
             </label>
             <label>
               <span class="label-text">Source (who said it)</span>
-              <input id="kb-source" maxlength="120" placeholder="Atte — Singa" />
+              <input id="kb-source" maxlength="120" placeholder="Mentor session, 12 Sept" />
             </label>
             <label style="flex:1 1 100%">
               <span class="label-text">What they said</span>
@@ -489,7 +489,7 @@
             <form id="ingest-form" class="row">
               <label>
                 <span class="label-text">Whose session (for your records only)</span>
-                <input id="ingest-source" maxlength="120" placeholder="Atte — Singa" required />
+                <input id="ingest-source" maxlength="120" placeholder="Mentor session, 12 Sept" required />
               </label>
               <label style="flex:1 1 100%">
                 <span class="label-text">Transcript</span>
@@ -1085,6 +1085,7 @@
               '<button type="button" class="disclose" data-open="' + e.id + '">' + (open ? "Hide" : "Show") + "</button>" +
               '<button type="button" data-edit="' + e.id + '">Edit</button>' +
               '<button type="button" data-toggle="' + e.id + '">' + (archived ? "Restore" : "Archive") + "</button>" +
+              '<button type="button" data-delete="' + e.id + '" title="Remove permanently">Delete</button>' +
               "</div>" +
               (open ? '<p class="note expanded" style="margin:0">' + esc(e.body) + "</p>" : "")
             );
@@ -1141,6 +1142,33 @@
             const { ok, data } = await knowledgeApi({ action: "archiveSource", source });
             if (!ok) return;
             say(kbMessage, "Archived " + data.archived + " from " + source + ".", false);
+            loadKnowledge();
+          });
+        });
+
+        knowledgeList.querySelectorAll("button[data-delete]").forEach((b) => {
+          b.addEventListener("click", async () => {
+            const entry = knowledgeEntries.find((e) => e.id === b.dataset.delete);
+            if (!entry) return;
+            // Two-step rather than confirm(): a modal blocks the page, and this
+            // matches how Archive all already asks. Unlike archiving, there is
+            // no way back from this one, so the armed label says so.
+            if (b.dataset.armed !== "yes") {
+              b.dataset.armed = "yes";
+              b.textContent = "Delete for good?";
+              setTimeout(() => {
+                if (!b.isConnected) return;
+                b.dataset.armed = "";
+                b.textContent = "Delete";
+              }, 4000);
+              return;
+            }
+            const { ok } = await knowledgeApi({ action: "delete", id: entry.id });
+            if (!ok) return;
+            kbOpen.delete(entry.id);
+            // Clear the edit form if it was holding the row that just went.
+            if (kbId.value === entry.id) kbClear();
+            say(kbMessage, "Deleted " + (entry.topic || "that entry") + ". That one is gone for good.", false);
             loadKnowledge();
           });
         });

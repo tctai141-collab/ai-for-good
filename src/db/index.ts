@@ -989,6 +989,31 @@ export function archiveKnowledgeBySource(persona: string, source: string): numbe
   return before.n;
 }
 
+/**
+ * Removes an entry outright.
+ *
+ * Archiving exists because most "get rid of this" moments are reversible ones,
+ * and it stays the default the UI offers. This is for the other kind: an entry
+ * that should not be in the database at all — something a mentor asked to have
+ * taken out, or material that turned out to be a participant's.
+ *
+ * A real DELETE rather than a status, because "archived" still keeps the text
+ * on disk and in every backup, which is exactly what a removal request is
+ * about. Returns false if the row was already gone, so a double-click reports
+ * honestly rather than claiming a second deletion.
+ */
+export function deleteKnowledge(id: string): boolean {
+  const db = getDb();
+  const existing = db
+    .query("SELECT id FROM knowledge_entries WHERE id = $id")
+    .get({ $id: id }) as { id: string } | null;
+  if (!existing) return false;
+  // db.run() returns void here, so existence is established before the write
+  // rather than inferred from a changes count that this driver does not give.
+  db.run("DELETE FROM knowledge_entries WHERE id = $id", { $id: id });
+  return true;
+}
+
 export function setKnowledgeStatus(id: string, status: "active" | "archived"): boolean {
   const db = getDb();
   const existing = db
