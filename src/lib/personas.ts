@@ -20,16 +20,16 @@
  * flying home after the Oracle/InnoDB acquisition, in his voice, unprompted.
  *
  * The attempt to grow that persona from six mentors' transcripts is what made
- * the shape of the mistake obvious. Atte's positions and Annu's positions
- * cannot both be Mårten's without the software claiming a life it did not
+ * the shape of the mistake obvious. Six different mentors' positions cannot
+ * all be one named person's without the software claiming a life it did not
  * live. Every fix considered was a way of hiding the seam.
  *
  * So the seam is gone instead. Sprint Buddy is openly software. It has no
  * biography to protect and therefore nothing to invent.
  *
- * It also names nobody. An earlier draft of this had it citing mentors — "Atte
- * from Singa puts it this way" — on the reasoning that credit beats an
- * uncredited aphorism. Tai's call, and the right one: those sessions were
+ * It also names nobody. An earlier draft of this had it citing mentors by name
+ * and firm, on the reasoning that credit beats an uncredited aphorism. Tai's
+ * call, and the right one: those sessions were
  * closed rooms. A mentor talking to twenty founders for an afternoon has not
  * agreed to be quoted by name by a piece of software for the rest of the
  * programme, and an off-the-cuff line is a poor thing to pin to somebody

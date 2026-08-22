@@ -190,14 +190,14 @@ describe("hand-typed entries", () => {
     const res = await post(h, "/api/knowledge", {
       action: "save",
       topic: "HIRING",
-      body: "Annu Nieminen argues you should hire slowly.",
+      body: "Lea Virtanen argues you should hire slowly.",
       position: 700,
-      source: "Annu Nieminen",
+      source: "Lea Virtanen",
     }, organizer.cookie);
     const data = await res.json() as { ok: boolean; warning?: string[] };
     expect(res.status).toBe(200);
     expect(data.ok).toBe(true);
-    expect(data.warning?.sort()).toEqual(["Annu", "Nieminen"]);
+    expect(data.warning?.sort()).toEqual(["Lea", "Virtanen"]);
   });
 
   test("a clean entry saves without one", async () => {
@@ -206,7 +206,7 @@ describe("hand-typed entries", () => {
       topic: "HIRING PACE",
       body: "Hire slowly; a wrong hire costs more than an empty seat.",
       position: 710,
-      source: "Annu Nieminen",
+      source: "Lea Virtanen",
     }, organizer.cookie);
     const data = await res.json() as { warning?: string[] };
     expect(data.warning).toBeUndefined();
@@ -241,6 +241,31 @@ describe("the admin page itself", () => {
     expect(buttons.slice().sort()).toEqual(panels.slice().sort());
   });
 
+  test("every entry row offers delete alongside edit and archive", async () => {
+    // The row used to offer Show, Edit and Archive only. Archiving keeps the
+    // text on disk, which is the wrong answer when a mentor asks for something
+    // to be taken out.
+    await post(h, "/api/knowledge", {
+      action: "save", topic: "ROW BUTTONS", body: "An entry to render a row for.", position: 900,
+    }, organizer.cookie);
+
+    const html = await (await get(h, "/admin", organizer.cookie)).text();
+    const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+    const inline = scripts.find((block) => block.includes("renderKnowledge"))!;
+    for (const attr of ["data-open", "data-edit", "data-toggle", "data-delete"]) {
+      expect(inline).toContain(attr);
+    }
+  });
+
+  test("the source placeholder does not name a real mentor", async () => {
+    // Sessions are closed rooms; a real name should not sit in the UI as
+    // furniture, least of all in a public repository.
+    const html = await (await get(h, "/admin", organizer.cookie)).text();
+    for (const name of ["Atte", "Singa", "Bastian", "Annu", "Nieminen", "Miku", "Kuusi", "Wolt", "Pauliina"]) {
+      expect(html).not.toContain(name);
+    }
+  });
+
   test("all five areas are present", async () => {
     const html = await (await get(h, "/admin", organizer.cookie)).text();
     for (const slug of ["people", "deadlines", "programme", "knowledge", "transcript"]) {
@@ -257,15 +282,15 @@ describe("the name-leak guard", () => {
    * does not edit — the operating team decides.
    */
   test("catches the speaker's name in a body", () => {
-    expect(nameLeaks("Bastian bets on people before markets.", "Bastian — Index Venture")).toEqual(["Bastian"]);
+    expect(nameLeaks("Kim bets on people before markets.", "Kim — Harbour Venture")).toEqual(["Kim"]);
   });
 
   test("catches the company as well as the person", () => {
-    expect(nameLeaks("At Singa they price by usage.", "Atte — Singa").sort()).toEqual(["Singa"]);
+    expect(nameLeaks("At Northbound they price by usage.", "Riku — Northbound").sort()).toEqual(["Northbound"]);
   });
 
   test("passes a clean entry", () => {
-    expect(nameLeaks("Back the people before the market.", "Bastian — Index Venture")).toEqual([]);
+    expect(nameLeaks("Back the people before the market.", "Kim — Harbour Venture")).toEqual([]);
   });
 
   test("matches whole words only, so a short name does not light up every entry", () => {
@@ -276,16 +301,16 @@ describe("the name-leak guard", () => {
   test("ignores generic corporate words in a firm name", () => {
     // "Index Venture" must not make every entry mentioning venture capital
     // light up. An alarm that fires constantly is one nobody reads.
-    expect(nameLeaks("Venture funds need variance, not consistency.", "Bastian — Index Venture")).toEqual([]);
+    expect(nameLeaks("Venture funds need variance, not consistency.", "Kim — Harbour Venture")).toEqual([]);
     expect(nameLeaks("Most capital is patient until it isn't.", "Someone — Growth Capital Partners")).toEqual([]);
   });
 
   test("still catches the distinctive part of a firm name", () => {
-    expect(nameLeaks("Index ran the numbers differently.", "Bastian — Index Venture")).toEqual(["Index"]);
+    expect(nameLeaks("Harbour ran the numbers differently.", "Kim — Harbour Venture")).toEqual(["Harbour"]);
   });
 
   test("is case-insensitive", () => {
-    expect(nameLeaks("annu argues for bootstrapping.", "Annu Nieminen")).toEqual(["Annu"]);
+    expect(nameLeaks("lea argues for bootstrapping.", "Lea Virtanen")).toEqual(["Lea"]);
   });
 
   test("an unnamed speaker flags nothing", () => {

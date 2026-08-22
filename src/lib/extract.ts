@@ -16,8 +16,8 @@ import { AdvisorNotConfiguredError } from "./ai";
  * of the programme. The session is recorded against the entry as `source` for
  * the operating team, and `assembleKnowledge()` never sends that to the model —
  * but the name has to stay out of the body too, or it reaches the cohort
- * anyway. An earlier run produced entries reading "Bastian bets on people
- * first", which is exactly the leak.
+ * anyway. An earlier run produced entries naming the speaker in the
+ * body — "X bets on people first" — which is exactly the leak.
  *
  * No borrowed first person. Sprint Buddy states these as the programme's
  * positions, so a raw quote hands it a life it has not lived. "We walk in the
@@ -53,7 +53,7 @@ DO NOT EXTRACT:
 
 FORM — this part matters most:
 
-1. NO NAMES. Never write the speaker's name, their company's name, or any other person's name in the entry. Not as attribution, not as "X argues that", not in passing. "Bastian bets on people before markets" must become "Back the people before the market — the market is almost always underestimated anyway." If a claim cannot be stated without naming someone, drop it.
+1. NO NAMES. Never write the speaker's name, their company's name, or any other person's name in the entry. Not as attribution, not as "X argues that", not in passing. A sentence of the form "<name> bets on people before markets" must become "Back the people before the market — the market is almost always underestimated anyway." If a claim cannot be stated without naming someone, drop it.
 
 2. NO BORROWED FIRST PERSON. The coach has not lived any of this. "We walk in the front door and demo it" becomes "Walking into a prospect's office and demonstrating in person still beats a cold email." "I didn't feel pressure to find a cofounder" becomes "Not every company needs a cofounder; some are better started alone and staffed as the work demands." No "I", "we", "our" or "my" carried over from the speaker.
 

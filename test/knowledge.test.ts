@@ -124,18 +124,18 @@ describe("attribution never leaks to the cohort", () => {
       topic: "ESTIMATES",
       body: "Promise a quarter when you think a month.",
       position: 40,
-      source: "Atte — Singa",
+      source: "Riku — Northbound",
     });
     const system = (await systemPrompt()).system;
     expect(system).toContain("Promise a quarter when you think a month.");
-    for (const fragment of ["Atte", "Singa"]) {
+    for (const fragment of ["Riku", "Northbound"]) {
       expect(system).not.toContain(fragment);
     }
   });
 
   test("no source from any entry appears in the prompt", async () => {
-    await save({ topic: "TEAM", body: "Back people before markets.", position: 42, source: "Annu Nieminen" });
-    await save({ topic: "PACE", body: "Ship before it is ready.", position: 43, source: "Miku Kuusi — Wolt" });
+    await save({ topic: "TEAM", body: "Back people before markets.", position: 42, source: "Lea Virtanen" });
+    await save({ topic: "PACE", body: "Ship before it is ready.", position: 43, source: "Sami Aalto — Fleetly" });
 
     const system = (await systemPrompt()).system;
     const { entries } = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
@@ -151,7 +151,7 @@ describe("attribution never leaks to the cohort", () => {
   test("the source is still there for the operating team", async () => {
     const { entries } = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
       { entries: { topic: string; source: string }[] };
-    expect(entries.find((e) => e.topic === "ESTIMATES")?.source).toBe("Atte — Singa");
+    expect(entries.find((e) => e.topic === "ESTIMATES")?.source).toBe("Riku — Northbound");
   });
 
   test("an entry with no source still works", async () => {
@@ -214,6 +214,58 @@ describe("size", () => {
     expect(body.size.approxTokens).toBeGreaterThan(0);
     expect(body.size.budgetChars).toBeGreaterThan(body.size.chars);
     expect(body.size.truncated).toBe(false);
+  });
+});
+
+describe("deleting outright", () => {
+  /*
+   * Archiving stays the default the UI offers, because most "get rid of this"
+   * moments are reversible ones. This is for the other kind: an entry a mentor
+   * asked to have removed, or material that turned out to be a participant's.
+   * Archiving would leave that text on disk and in every backup.
+   */
+  test("a deleted entry leaves the prompt and the database", async () => {
+    const { body } = await save({ topic: "MISTAKE", body: "Something that should never have been added.", position: 800 });
+    expect((await systemPrompt()).system).toContain("should never have been added");
+
+    const res = await post(h, "/api/knowledge", { action: "delete", id: body.id }, organizer.cookie);
+    expect(res.status).toBe(200);
+
+    expect((await systemPrompt()).system).not.toContain("should never have been added");
+
+    const rows = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
+      { entries: { id: string }[] };
+    // Not merely hidden — archived entries still come back from this endpoint.
+    expect(rows.entries.find((e) => e.id === body.id)).toBeUndefined();
+  });
+
+  test("deleting the same entry twice reports honestly the second time", async () => {
+    const { body } = await save({ topic: "ONCE", body: "Here and then not.", position: 810 });
+    expect((await post(h, "/api/knowledge", { action: "delete", id: body.id }, organizer.cookie)).status).toBe(200);
+    expect((await post(h, "/api/knowledge", { action: "delete", id: body.id }, organizer.cookie)).status).toBe(404);
+  });
+
+  test("an unknown id is a 404, not a silent success", async () => {
+    const res = await post(h, "/api/knowledge", { action: "delete", id: "no-such-entry" }, organizer.cookie);
+    expect(res.status).toBe(404);
+  });
+
+  test("delete needs an id", async () => {
+    const res = await post(h, "/api/knowledge", { action: "delete" }, organizer.cookie);
+    expect(res.status).toBe(400);
+  });
+
+  test("a founder cannot delete", async () => {
+    const { body } = await save({ topic: "PROTECTED", body: "Only organizers may remove this.", position: 820 });
+    const res = await post(h, "/api/knowledge", { action: "delete", id: body.id }, founder.cookie);
+    expect(res.status).toBe(403);
+    expect((await systemPrompt()).system).toContain("Only organizers may remove this");
+  });
+
+  test("an anonymous caller cannot delete", async () => {
+    const { body } = await save({ topic: "ALSO PROTECTED", body: "Not without a session.", position: 830 });
+    const res = await post(h, "/api/knowledge", { action: "delete", id: body.id });
+    expect(res.status).toBe(401);
   });
 });
 
