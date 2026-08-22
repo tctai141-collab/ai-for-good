@@ -235,8 +235,8 @@ describe("invite redemption", () => {
     try {
       db.run("INSERT INTO users (email,name,role,created_at) VALUES ('once@example.test','Once','founder',datetime('now'))");
       token = crypto.randomUUID().replace(/-/g, "");
-      db.run("INSERT INTO invites (token,user_email,expires_at) VALUES ($t,'once@example.test',$e)", {
-        $t: token, $e: new Date(Date.now() + 864e5).toISOString(),
+      db.run("INSERT INTO invites (token_hash,user_email,expires_at) VALUES ($t,'once@example.test',$e)", {
+        $t: new Bun.CryptoHasher("sha256").update(token).digest("hex"), $e: new Date(Date.now() + 864e5).toISOString(),
       });
     } finally {
       db.close();
@@ -257,8 +257,8 @@ describe("invite redemption", () => {
     let token: string;
     try {
       token = crypto.randomUUID().replace(/-/g, "");
-      db.run("INSERT INTO invites (token,user_email,expires_at) VALUES ($t,$u,$e)", {
-        $t: token, $u: user.email, $e: new Date(Date.now() + 864e5).toISOString(),
+      db.run("INSERT INTO invites (token_hash,user_email,expires_at) VALUES ($t,$u,$e)", {
+        $t: new Bun.CryptoHasher("sha256").update(token).digest("hex"), $u: user.email, $e: new Date(Date.now() + 864e5).toISOString(),
       });
     } finally {
       db.close();

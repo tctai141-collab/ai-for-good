@@ -1,12 +1,16 @@
 import type { APIRoute } from "astro";
 import { getUserRow } from "../../db/index";
 import {
+  clearIpFailures,
   clearLoginFailures,
+  clientIp,
   endSession,
   equalizeVerifyCost,
   getSessionUser,
   isLockedOut,
   normalizeEmail,
+  isIpLockedOut,
+  recordIpFailure,
   recordLoginFailure,
   startSession,
   verifyPassword,
@@ -39,7 +43,11 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     return Response.json({ error: INVALID_CREDENTIALS }, { status: 401 });
   }
 
-  if (isLockedOut(email)) {
+  // Two limits, deliberately. The per-email one stops somebody grinding a
+  // single account; the per-address one stops the attack that actually fits
+  // this app — one password tried against all two dozen known addresses.
+  const ip = clientIp(request);
+  if (isLockedOut(email) || isIpLockedOut(ip)) {
     return Response.json(
       { error: "Too many failed attempts. Try again in 15 minutes." },
       { status: 429 },
@@ -55,15 +63,18 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     // not reveal whether the account exists.
     await equalizeVerifyCost(password);
     recordLoginFailure(email);
+    recordIpFailure(ip);
     return Response.json({ error: INVALID_CREDENTIALS }, { status: 401 });
   }
 
   if (!(await verifyPassword(password, user.password_hash))) {
     recordLoginFailure(email);
+    recordIpFailure(ip);
     return Response.json({ error: INVALID_CREDENTIALS }, { status: 401 });
   }
 
   clearLoginFailures(email);
+  clearIpFailures(ip);
   startSession(cookies, request, user.email);
 
   return Response.json({

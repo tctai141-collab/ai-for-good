@@ -1,0 +1,16 @@
+# Two ecosystems, both of which have already produced findings: Bun packages
+# carried transitive advisories, and unpinned Actions are a supply-chain path
+# into CI. Weekly is often enough for an app this size.
+version: 2
+updates:
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

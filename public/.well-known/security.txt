@@ -1,0 +1,13 @@
+# Sprint Buddy — how to report a security problem.
+#
+# A small app for one ~24-person cohort at Aalto. There is no bounty and no
+# formal SLA; there is a person who will read your email and act on it.
+
+Contact: mailto:tai.tran@aalto.fi
+Preferred-Languages: en, fi
+Canonical: https://aaltofoundersprint.com/.well-known/security.txt
+Expires: 2027-08-22T00:00:00.000Z
+
+# If you find something, please do not test it against real cohort accounts —
+# the data is students' private reflections. Describe it and we will reproduce
+# it ourselves against a scratch database.

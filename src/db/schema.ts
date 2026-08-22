@@ -252,7 +252,10 @@ export function initSchema(db: Database) {
   // plain-JSON cookie. Deleting a row revokes access immediately.
   db.run(`
     CREATE TABLE IF NOT EXISTS sessions (
-      token TEXT PRIMARY KEY,
+      -- SHA-256 of the cookie value, never the value itself. Anyone who can
+      -- read this table or a backup would otherwise hold live credentials for
+      -- every signed-in person.
+      token_hash TEXT PRIMARY KEY,
       user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       expires_at TEXT NOT NULL
@@ -263,7 +266,9 @@ export function initSchema(db: Database) {
   // team never sees or handles the password itself.
   db.run(`
     CREATE TABLE IF NOT EXISTS invites (
-      token TEXT PRIMARY KEY,
+      -- SHA-256 of the emailed token. A setup link claims an account, so a
+      -- readable copy of this column is an account-takeover kit.
+      token_hash TEXT PRIMARY KEY,
       user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       expires_at TEXT NOT NULL,
@@ -377,6 +382,29 @@ export function initSchema(db: Database) {
     db.run(
       "UPDATE knowledge_entries SET status = 'archived', updated_at = datetime('now') WHERE source = 'shipped default'",
     );
+  });
+
+  /*
+   * Sessions stopped storing the cookie value itself.
+   *
+   * The column held the raw token, so a leaked backup — gzipped, unencrypted,
+   * thirty days of them in object storage — handed an attacker a live session
+   * for every signed-in user until it idled out. It now holds SHA-256 of the
+   * token, which is useless to anybody holding only the database.
+   *
+   * Existing rows are dropped rather than migrated: their contents are raw
+   * tokens, and hashing them here would preserve exactly the sessions whose
+   * secrets may already have been copied. Everybody signs in again once.
+   */
+  migrate(db, 3, () => {
+    for (const table of ["sessions", "invites"]) {
+      const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+      if (!columns.some((c) => c.name === "token")) continue;
+      // Dropped rather than hashed in place. Hashing would preserve exactly
+      // the credentials whose plaintext may already sit in a backup.
+      db.run(`DELETE FROM ${table}`);
+      db.run(`ALTER TABLE ${table} RENAME COLUMN token TO token_hash`);
+    }
   });
 
   // The cohort's programme, one row per week.

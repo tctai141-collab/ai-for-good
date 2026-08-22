@@ -104,7 +104,21 @@ export function normalizeEmail(email: unknown): string {
   return typeof email === "string" ? email.trim().toLowerCase() : "";
 }
 
-function isHttps(request: Request): boolean {
+/*
+ * Whether to mark the cookie Secure.
+ *
+ * Production is always yes, regardless of what the request looks like. Behind
+ * Render the app is spoken to over plain HTTP on an internal host, so the only
+ * evidence of TLS is `X-Forwarded-Proto` — and deciding on that alone means a
+ * single missing header silently downgrades every session cookie to one that
+ * will travel over cleartext. The deployment is HTTPS-only; that is a fact
+ * about the deployment, not something to rediscover per request.
+ *
+ * Outside production the header check remains, so a local http:// server still
+ * sets a usable cookie.
+ */
+function wantsSecureCookie(request: Request): boolean {
+  if (process.env.NODE_ENV === "production") return true;
   return (
     new URL(request.url).protocol === "https:" ||
     request.headers.get("x-forwarded-proto") === "https"
@@ -116,6 +130,12 @@ export function startSession(
   request: Request,
   email: string,
 ): string {
+  // Retire whatever this browser was carrying before minting a new one.
+  // Without it every sign-in leaves a live row behind, so a shared or stolen
+  // laptop accumulates valid sessions that logging out never reaches.
+  const previous = cookies.get(SESSION_COOKIE)?.value;
+  if (previous) deleteSessionRow(previous);
+
   const token = randomToken();
   createSessionRow(token, email, sessionExpiry());
   cookies.set(SESSION_COOKIE, token, {
@@ -126,7 +146,7 @@ export function startSession(
     // decides whether it still means anything. A cookie outliving its session
     // simply stops authenticating.
     maxAge: SESSION_ABSOLUTE_DAYS * 24 * 60 * 60,
-    secure: isHttps(request),
+    secure: wantsSecureCookie(request),
   });
   // Opportunistic cleanup; there is no scheduler on a single-instance deploy.
   purgeExpiredSessions();
@@ -237,6 +257,89 @@ function evictStaleFailures(now: number): void {
       failures.delete(email);
     }
   }
+}
+
+/**
+ * The caller's IP, as far as it can be trusted.
+ *
+ * Render terminates TLS and appends the real client to `X-Forwarded-For`, so
+ * the first hop is the client and the rest are proxies. Taking the first entry
+ * is the standard read, and the header is only meaningful because nothing
+ * reaches this process except through Render — stated here because that is the
+ * assumption the throttle rests on. Direct access to the container would let a
+ * caller forge this, and would also let them bypass every other proxy-level
+ * control, so it is not a limit worth engineering around.
+ *
+ * Returns null rather than a placeholder when there is no header: lumping every
+ * unknown caller under one key would let one of them lock out the others.
+ */
+export function clientIp(request: Request): string | null {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const first = forwarded?.split(",")[0]?.trim();
+  return first && first.length <= 45 ? first : null;
+}
+
+/*
+ * Per-address throttle, alongside the per-email one.
+ *
+ * The per-email limit alone stops somebody grinding one account, and does
+ * nothing about the attack that actually fits this app: twenty-four known
+ * addresses, ten tries each, one common password. That is 240 guesses from a
+ * single machine without ever tripping a limit. This caps the machine.
+ *
+ * Deliberately looser than the per-email limit. A shared office NAT can put
+ * the whole cohort behind one address, and locking out a room of founders
+ * because one of them fumbled a password is a worse failure than the attack.
+ */
+const IP_FAILURE_LIMIT = 30;
+const ipFailures = new Map<string, { count: number; firstAt: number }>();
+const MAX_TRACKED_IPS = 5_000;
+
+function bumpWindow(
+  map: Map<string, { count: number; firstAt: number }>,
+  key: string,
+  now: number,
+): void {
+  const record = map.get(key);
+  if (!record || now - record.firstAt > LOCKOUT_MS) {
+    map.set(key, { count: 1, firstAt: now });
+    return;
+  }
+  record.count += 1;
+}
+
+export function isIpLockedOut(ip: string | null): boolean {
+  if (!ip) return false;
+  const record = ipFailures.get(ip);
+  if (!record) return false;
+  if (Date.now() - record.firstAt > LOCKOUT_MS) {
+    ipFailures.delete(ip);
+    return false;
+  }
+  return record.count >= IP_FAILURE_LIMIT;
+}
+
+export function recordIpFailure(ip: string | null): void {
+  if (!ip) return;
+  const now = Date.now();
+  if (ipFailures.size >= MAX_TRACKED_IPS) {
+    for (const [key, record] of ipFailures) {
+      if (now - record.firstAt > LOCKOUT_MS) ipFailures.delete(key);
+    }
+    // Still full of live windows: that is the attack, so stop adding keys
+    // rather than letting the map grow without bound.
+    if (ipFailures.size >= MAX_TRACKED_IPS) return;
+  }
+  bumpWindow(ipFailures, ip, now);
+}
+
+export function clearIpFailures(ip: string | null): void {
+  if (ip) ipFailures.delete(ip);
+}
+
+/** Test seam. */
+export function resetIpFailures(): void {
+  ipFailures.clear();
 }
 
 export function isLockedOut(email: string): boolean {

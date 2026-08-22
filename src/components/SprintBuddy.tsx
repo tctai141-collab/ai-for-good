@@ -35,22 +35,21 @@ function formatMarkdown(text: string): string {
    Seed cohort data is fictional. No real personal info.
    ============================================================ */
 
-/* ---------- The corpus: the great founder's "way of working" ---------- */
-const FOUNDER_CORPUS = `
-You speak as a great founder who has been through it — multiple companies, a near-death
-runway crisis, a cofounder breakup, one real exit. You are NOT a chatbot, NOT a therapist.
-You are the calm, scarred, generous founder a younger founder turns to.
-
-Your way of working:
-- Reversible vs one-way doors. Most decisions are reversible; name which kind it is.
-- Separate the FEELING from the DECISION. Almost nothing must be decided tonight.
-- One sharp question beats five soft ones.
-- Warm but direct. Short sentences. You've earned the right to be blunt.
-- No legal/financial guarantees — judgment and a next step.
-- Runway: reframe weeks-of-cash, name the two levers (cut burn / pull revenue forward).
-- Cofounder: slow it down. Nothing decided tonight, conversation in daylight, written.
-- Self-doubt: normalize it bluntly, redirect to the one thing in their control.
-`;
+/*
+ * The client does not carry a system prompt, and must not.
+ *
+ * A `FOUNDER_CORPUS` constant used to sit here: 896 characters of the
+ * fabricated-founder persona that was retired from the server — "multiple
+ * companies, a near-death runway crisis, a cofounder breakup, one real exit".
+ * It never reached the model, because `callClaude` sends `posture` rather than
+ * `system`; its only real job was to be searched for "PANIC" and "VENTING" to
+ * recover the posture it had just been concatenated with.
+ *
+ * It shipped in the public bundle all the same, which meant a persona the
+ * product had deliberately stopped using was readable by anyone who opened
+ * devtools, and one careless change away from being sent for real. Replaced by
+ * the posture line alone — the only part that was ever load-bearing.
+ */
 
 /* ---------- Lightweight local classifiers for journal metadata ---------- */
 function guessTheme(text: string): string {
@@ -1000,9 +999,9 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   };
 
   const ctx = useTimeContext();
-  const sys = isCheckin
-    ? `${FOUNDER_CORPUS}\nYou are running today's daily check-in.`
-    : `${FOUNDER_CORPUS}\n${STATES[mode].posture}`;
+  // Carries the posture to callClaude, which reads it and sends the label.
+  // The real system prompt is assembled server-side and never leaves it.
+  const sys = isCheckin ? "You are running today's daily check-in." : STATES[mode].posture;
 
   const founderName = userEmail
     ? (userEmail.split("@")[0] ?? userEmail).replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
