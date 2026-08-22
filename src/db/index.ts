@@ -29,6 +29,9 @@ export type ThreadRow = {
   personality: string;
   /** 1 when the founder has opted this conversation in to coach visibility. */
   shared_with_coach?: number;
+  shared_seen_at?: string | null;
+  /** Present on `SELECT *`; the shared list orders by it. */
+  updated_at?: string;
 };
 
 export type MessageRow = {
@@ -685,9 +688,19 @@ export function redeemInvite(token: string, passwordHash: string): boolean {
  */
 export function setThreadShared(threadId: string, userEmail: string, shared: boolean): boolean {
   const db = getDb();
+  /*
+   * Unsharing clears the seen stamp.
+   *
+   * Taking it back and handing it over again is a fresh act, and the founder
+   * should not be told the new share was already read because an older one
+   * was. Sharing does not clear it explicitly — the column is only ever set
+   * while a thread is shared, so it is already null by the time it matters.
+   */
   db.run(
-    "UPDATE threads SET shared_with_coach = $shared WHERE id = $id AND user_email = $email",
-    { $shared: shared ? 1 : 0, $id: threadId, $email: userEmail },
+    shared
+      ? "UPDATE threads SET shared_with_coach = 1 WHERE id = $id AND user_email = $email"
+      : "UPDATE threads SET shared_with_coach = 0, shared_seen_at = NULL WHERE id = $id AND user_email = $email",
+    { $id: threadId, $email: userEmail },
   );
   // Read the flag back rather than echoing the request. The scoping above
   // means a call naming somebody else's thread updates nothing, and returning
@@ -696,6 +709,64 @@ export function setThreadShared(threadId: string, userEmail: string, shared: boo
     .query("SELECT shared_with_coach FROM threads WHERE id = $id AND user_email = $email")
     .get({ $id: threadId, $email: userEmail }) as { shared_with_coach: number } | null;
   return row?.shared_with_coach === 1;
+}
+
+/**
+ * Every conversation the cohort has shared, newest first.
+ *
+ * The share toggle has worked since it shipped — it writes the flag, and
+ * `getSharedThreads` reads it back correctly — but nothing ever called that
+ * function from a screen, so founders were sharing into a void. This is the
+ * read side the feature was missing.
+ *
+ * Scoped by the flag, not by the caller: a thread appears here only because a
+ * founder chose to hand it over. Everything else stays unreadable to
+ * organizers, which is the line the whole persistence layer is built around.
+ */
+export function listSharedThreads(): (ThreadRow & {
+  founderName: string;
+  messages: { role: string; content: string }[];
+})[] {
+  const db = getDb();
+  const threads = db
+    .query(
+      `SELECT t.*, u.name AS founder_name
+         FROM threads t
+         JOIN users u ON u.email = t.user_email
+        WHERE t.shared_with_coach = 1
+        ORDER BY t.updated_at DESC`,
+    )
+    .all() as (ThreadRow & { founder_name: string })[];
+
+  const getMsgs = db.prepare(
+    "SELECT role, content FROM messages WHERE thread_id = $tid ORDER BY id ASC",
+  );
+
+  return threads.map((t) => ({
+    ...t,
+    founderName: t.founder_name,
+    messages: getMsgs.all({ $tid: t.id }) as { role: string; content: string }[],
+  }));
+}
+
+/**
+ * Records that the team has read a shared conversation.
+ *
+ * First read only — the founder is told it landed, not watched. Re-reading it
+ * does not move the timestamp, so the signal stays "someone saw this" rather
+ * than becoming a log of how often it is opened.
+ */
+export function markSharedThreadSeen(threadId: string): boolean {
+  const db = getDb();
+  const row = db
+    .query("SELECT shared_with_coach, shared_seen_at FROM threads WHERE id = $id")
+    .get({ $id: threadId }) as { shared_with_coach: number; shared_seen_at: string | null } | null;
+  // Never stamp a thread that was not shared: that would leak the fact it had
+  // been read into a founder's private conversation.
+  if (!row || row.shared_with_coach !== 1) return false;
+  if (row.shared_seen_at) return true;
+  db.run("UPDATE threads SET shared_seen_at = datetime('now') WHERE id = $id", { $id: threadId });
+  return true;
 }
 
 /** The only raw-transcript view organizers get: threads founders chose to share. */

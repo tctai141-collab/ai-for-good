@@ -9,6 +9,8 @@ export type Thread = {
   messages: Msg[];
   /** Founder has opted this one conversation in to coach visibility. */
   sharedWithCoach?: boolean;
+  /** When the operating team first opened it. Null until somebody has. */
+  sharedSeenAt?: string | null;
 };
 
 export type Decision = {
@@ -83,6 +85,7 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
     id: string; title: string; theme: string; state: string;
     last_at: string; personality: string; messages: Msg[];
     shared_with_coach?: number;
+    shared_seen_at?: string | null;
   }>;
 
   const rawDecisions = (dData.decisions || []) as Array<{
@@ -108,6 +111,7 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       lastAt: t.last_at,
       messages: t.messages || [],
       sharedWithCoach: Boolean(t.shared_with_coach),
+      sharedSeenAt: t.shared_seen_at ?? null,
     })),
     decisions: rawDecisions.map((d) => ({
       id: d.id,
