@@ -424,6 +424,7 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         onNew={newChat}
         onThread={(id) => { setView("chat"); setActive({ id }); }}
         onDeleteThread={removeThread}
+        decisions={decisions}
         onReflections={() => setView("reflections")}
         onSignOut={onSignOut}
         signOutLabel={signOutLabel}
@@ -532,14 +533,30 @@ type SidebarProps = {
   onNew: () => void;
   onThread: (id: string) => void;
   onDeleteThread: (id: string) => void;
+  /** Only so the delete warning can say how many go with the conversation. */
+  decisions: Decision[];
   onReflections: () => void;
   onSignOut?: () => void;
   signOutLabel: string;
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
+  const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
+
+  /*
+   * Escape closes it. A destructive dialog a keyboard cannot dismiss is a
+   * dialog people click through to get rid of.
+   */
+  useEffect(() => {
+    if (!pending) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setConfirmDelete(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pending]);
+
 
   return (
     <aside
@@ -599,33 +616,6 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           <div style={{ flex: 1, minHeight: 96, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
             {threads.map((t) => {
               const on = view === "chat" && active.id === t.id;
-              const confirming = confirmDelete === t.id;
-
-              /* Confirming replaces the row rather than opening a dialog. A
-                 modal here would be heavier than the action deserves, and a
-                 native confirm() blocks the whole page. */
-              if (confirming) {
-                return (
-                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", margin: "2px 0", borderRadius: 10, background: "rgba(255,90,90,0.10)", border: "1px solid rgba(255,90,90,0.30)" }}>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      Delete this conversation?
-                    </span>
-                    <button
-                      onClick={() => { setConfirmDelete(null); onDeleteThread(t.id); }}
-                      style={{ background: C.red, color: "oklch(98% 0 0)", border: "none", borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minHeight: 32 }}
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete(null)}
-                      style={{ background: "transparent", color: C.sub, border: `1px solid ${C.line}`, borderRadius: 7, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", minHeight: 32 }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                );
-              }
-
               return (
                 <div key={t.id} className="threadrow" style={{ position: "relative", display: "flex", alignItems: "center" }}>
                   <button onClick={() => onThread(t.id)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 34px 12px 12px", fontSize: 14 }}>
@@ -690,6 +680,59 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         </>
       )}
       </div>
+      {pending && (
+        /*
+         * A real dialog rather than the row-replacement this used to be.
+         * Deleting a conversation is irreversible and now takes the decisions
+         * captured from it as well, so it deserves a moment of friction and a
+         * plain statement of what goes. A native confirm() would block the
+         * page and cannot list any of this.
+         */
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-title"
+          onClick={() => setConfirmDelete(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.55)", display: "grid", placeItems: "center", padding: 20 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: "min(420px, 100%)", background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22, boxShadow: "0 18px 50px rgba(0,0,0,0.45)" }}
+          >
+            <h2 id="delete-title" style={{ margin: "0 0 10px", fontSize: 17, fontWeight: 700, color: C.ink }}>
+              Delete this conversation?
+            </h2>
+            <p style={{ margin: "0 0 4px", fontSize: 13.5, lineHeight: 1.55, color: C.sub }}>
+              <strong style={{ color: C.ink }}>This cannot be undone.</strong> Deleting
+              {" "}<span style={{ color: C.ink }}>{pending.title}</span> removes:
+            </p>
+            <ul style={{ margin: "8px 0 14px", paddingLeft: 18, fontSize: 13.5, lineHeight: 1.7, color: C.sub }}>
+              <li>{pending.messages.length} message{pending.messages.length === 1 ? "" : "s"}</li>
+              {pendingDecisions > 0 && (
+                <li style={{ color: C.ink }}>
+                  {pendingDecisions} decision{pendingDecisions === 1 ? "" : "s"} captured here
+                </li>
+              )}
+            </ul>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                style={{ background: "transparent", color: C.sub, border: `1px solid ${C.line}`, borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", minHeight: 40 }}
+              >
+                Cancel
+              </button>
+              <button
+                autoFocus
+                onClick={() => { const id = pending.id; setConfirmDelete(null); onDeleteThread(id); }}
+                style={{ background: C.red, color: "oklch(98% 0 0)", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", minHeight: 40 }}
+              >
+                Delete for good
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </aside>
   );
 }

@@ -277,11 +277,51 @@ export function deleteThread(id: string, userEmail: string): boolean {
   if (owner === null) return false;
   if (owner !== userEmail) throw new NotOwnerError("thread");
 
-  db.run("DELETE FROM threads WHERE id = $id AND user_email = $email", {
-    $id: id,
-    $email: userEmail,
-  });
+  /*
+   * Decisions captured from this conversation go with it.
+   *
+   * The foreign key is ON DELETE SET NULL, which kept the decision and merely
+   * unlinked it — so a founder who deleted a conversation about a cofounder
+   * problem still had a sentence about that cofounder problem in the database,
+   * with no thread left to explain where it came from. Tai's call is that
+   * delete means delete: everything the conversation produced goes with it.
+   *
+   * Done explicitly rather than by changing the key to CASCADE, because SQLite
+   * cannot alter a foreign key and rebuilding the table to express something
+   * one statement says plainly is a poor trade. Both statements run inside a
+   * transaction so a crash between them cannot leave the decisions orphaned
+   * against a thread that no longer exists.
+   */
+  db.transaction(() => {
+    db.run("DELETE FROM decisions WHERE thread_id = $id AND user_email = $email", {
+      $id: id,
+      $email: userEmail,
+    });
+    db.run("DELETE FROM threads WHERE id = $id AND user_email = $email", {
+      $id: id,
+      $email: userEmail,
+    });
+  })();
+
   return true;
+}
+
+/**
+ * How much a founder is about to destroy, so the warning can say it.
+ *
+ * "This cannot be undone" is only a fair warning if it names what "this" is.
+ * Counted before the delete, from the same ownership rules, so the numbers the
+ * dialog shows are the numbers that actually go.
+ */
+export function threadDeletionImpact(id: string, userEmail: string): { messages: number; decisions: number } {
+  const db = getDb();
+  const messages = db
+    .query("SELECT COUNT(*) AS n FROM messages WHERE thread_id = $id")
+    .get({ $id: id }) as { n: number };
+  const decisions = db
+    .query("SELECT COUNT(*) AS n FROM decisions WHERE thread_id = $id AND user_email = $email")
+    .get({ $id: id, $email: userEmail }) as { n: number };
+  return { messages: messages.n, decisions: decisions.n };
 }
 
 export function getVisits(userEmail: string): number {
