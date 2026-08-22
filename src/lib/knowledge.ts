@@ -46,22 +46,20 @@ export function assembleKnowledge(persona: string = PERSONA): AssembledKnowledge
   for (const row of rows) {
     const topic = row.topic.trim();
     const body = row.body.trim();
-    const source = row.source.trim();
     if (!topic && !body) continue;
 
     /*
-     * The source is part of the prompt, not just an admin-table column.
+     * `row.source` is deliberately not here.
      *
-     * It used to be stored and then dropped here, which was invisible until an
-     * A/B run measured a prompt with attributions against production behaviour
-     * that had none. Sending it is now the point: Sprint Buddy is supposed to
-     * say whose idea this is, and it cannot do that from a column it never
-     * sees. Entries with no source still work — they simply get cited as
-     * nobody's, which is honest.
+     * It records which session an entry came from, which is what lets the
+     * operating team archive a whole mentor in one click and trace an entry
+     * back. It is not credit, and it must not reach a founder: those sessions
+     * were closed rooms and nobody in them agreed to be quoted by name for the
+     * rest of the programme. What the sessions produce becomes the programme's
+     * position. `test/knowledge.test.ts` guards this — a source is saved and
+     * the prompt is checked for any trace of the name.
      */
-    const head = topic ? `${topic.toUpperCase()}. ` : "";
-    const tail = source ? ` — ${source}` : "";
-    const block = `${head}${body}${tail}`;
+    const block = topic ? `${topic.toUpperCase()}. ${body}` : body;
 
     if (chars + block.length > KNOWLEDGE_BUDGET_CHARS) {
       // Stop rather than send a half sentence. Entries are ordered, so what
@@ -78,9 +76,7 @@ export function assembleKnowledge(persona: string = PERSONA): AssembledKnowledge
   }
 
   return {
-    text:
-      "WHAT THE PROGRAMME'S MENTORS HAVE SAID — attribute these when you use them\n\n" +
-      parts.join("\n\n"),
+    text: "WHAT THIS PROGRAMME TEACHES\n\n" + parts.join("\n\n"),
     entries: parts.length,
     chars,
     truncated,

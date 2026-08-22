@@ -1,8 +1,10 @@
 import type { APIRoute } from "astro";
-import { listKnowledge, recordAdminAction, setKnowledgeStatus, upsertKnowledge } from "../../db/index";
+import { archiveKnowledgeBySource, listKnowledge, recordAdminAction, setKnowledgeStatus, upsertKnowledge } from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import { assembleKnowledge, KNOWLEDGE_BUDGET_CHARS, PERSONA } from "../../lib/knowledge";
+import { AdvisorNotConfiguredError } from "../../lib/ai";
+import { extractKnowledge, MAX_TRANSCRIPT_CHARS, nameLeaks } from "../../lib/extract";
 import { cap } from "../../lib/limits";
 
 /**
@@ -16,6 +18,8 @@ import { cap } from "../../lib/limits";
 const PERSONAS = new Set([PERSONA]);
 const MAX_TOPIC = 120;
 const MAX_BODY = 8_000;
+/** One import is a session, not a library. */
+const MAX_IMPORT_ENTRIES = 60;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -96,6 +100,75 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       });
       recordAdminAction(session!.email, "knowledge:save", null, `${id} ${topic}`.slice(0, 120));
       return json({ ok: true, id });
+    }
+
+    if (body.action === "extract") {
+      const transcript = cap((body as { transcript?: unknown }).transcript, MAX_TRANSCRIPT_CHARS);
+      const speaker = cap(body.source, MAX_TOPIC).trim();
+      if (!transcript.trim()) return json({ error: "Paste some transcript first." }, 400);
+      try {
+        const candidates = await extractKnowledge(transcript, speaker);
+        // Flagged, not filtered. The prompt forbids naming the speaker and
+        // mostly obeys; "mostly" is the wrong standard for something twenty
+        // founders will read, so anything that slipped through is marked and
+        // the operating team decides.
+        const flagged = candidates.map((entry) => ({
+          ...entry,
+          leaks: nameLeaks(`${entry.topic} ${entry.body}`, speaker),
+        }));
+        // Deliberately not recorded as an admin action: nothing changed. The
+        // audit log tracks writes, and a suggestion is not one until imported.
+        return json({ ok: true, candidates: flagged });
+      } catch (err) {
+        if (err instanceof AdvisorNotConfiguredError) {
+          return json({ error: "The API key is not set on this service." }, 503);
+        }
+        reportError(err, { where: "knowledge.extract" });
+        return json({ error: "That piece could not be read. Nothing was saved." }, 502);
+      }
+    }
+
+    if (body.action === "importBatch") {
+      const entries = (body as { entries?: unknown }).entries;
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return json({ error: "Nothing selected." }, 400);
+      }
+      if (entries.length > MAX_IMPORT_ENTRIES) {
+        return json({ error: `That is more than ${MAX_IMPORT_ENTRIES} entries in one go.` }, 400);
+      }
+      const source = cap(body.source, MAX_TOPIC).trim();
+
+      // New entries go after everything already there, so an import never
+      // reshuffles the order the team has arranged.
+      const existing = listKnowledge(persona, true);
+      let position = existing.reduce((highest, row) => Math.max(highest, row.position), 0) + 10;
+
+      let saved = 0;
+      for (const raw of entries) {
+        const entry = raw as { topic?: unknown; body?: unknown };
+        const text = cap(entry.body, MAX_BODY).trim();
+        if (!text) continue;
+        upsertKnowledge({
+          persona,
+          topic: cap(entry.topic, MAX_TOPIC).trim(),
+          body: text,
+          position,
+          source,
+        });
+        position += 10;
+        saved += 1;
+      }
+
+      recordAdminAction(session!.email, "knowledge:import", null, `${saved} from ${source}`.slice(0, 120));
+      return json({ ok: true, saved });
+    }
+
+    if (body.action === "archiveSource") {
+      const source = cap(body.source, MAX_TOPIC).trim();
+      if (!source) return json({ error: "Which source?" }, 400);
+      const archived = archiveKnowledgeBySource(persona, source);
+      recordAdminAction(session!.email, "knowledge:archiveSource", null, `${archived} from ${source}`.slice(0, 120));
+      return json({ ok: true, archived });
     }
 
     return json({ error: `Unknown action: ${String(body.action)}` }, 400);

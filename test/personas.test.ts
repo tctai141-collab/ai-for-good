@@ -53,12 +53,22 @@ describe("Sprint Buddy — what it claims to be", () => {
 });
 
 describe("Sprint Buddy — attribution and fabrication", () => {
-  test("is told to say whose idea it is quoting", () => {
-    expect(lower).toContain("say whose it is");
+  test("is told never to name a mentor", () => {
+    // Those sessions were closed rooms. An earlier draft told it to cite by
+    // name; this is the assertion that stops that coming back.
+    expect(lower).toContain("never name an individual mentor");
+    expect(lower).toContain("never say who said what");
   });
 
-  test("is told what to do when the mentors have not covered something", () => {
-    expect(lower).toContain("have not covered something");
+  test("is given something true to say when asked where a position came from", () => {
+    // Without this the model has nothing honest to answer with, and that is
+    // exactly where it starts inventing a plausible name.
+    expect(lower).toContain("do not attribute to individuals");
+    expect(lower).toContain("do not guess at a name");
+  });
+
+  test("is told what to do when the programme has not covered something", () => {
+    expect(lower).toContain("has not covered something");
   });
 
   test("forbids inventing a mentor, a quote or a specific", () => {

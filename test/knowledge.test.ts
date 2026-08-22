@@ -108,12 +108,18 @@ describe("editing it", () => {
   });
 });
 
-describe("attribution", () => {
-  test("the source reaches the model, not just the admin table", async () => {
-    // This was the defect. `source` was stored and displayed but dropped when
-    // the pack was assembled, so an A/B run measured a prompt with credits
-    // against production behaviour that had none. Sprint Buddy is told to say
-    // whose idea it is quoting; it cannot do that from a column it never sees.
+describe("attribution never leaks to the cohort", () => {
+  test("the substance reaches the model and the mentor's name does not", async () => {
+    /*
+     * The guard that matters. `source` records which closed session an entry
+     * came from, so the operating team can archive a whole mentor in one click
+     * and trace an entry back. Nobody in those rooms agreed to be quoted by
+     * name to the cohort for the rest of the programme.
+     *
+     * An earlier version of this test asserted the opposite — the design then
+     * was to cite mentors — so this is the assertion to read carefully if it
+     * ever fails. It is not a stale expectation; it is the requirement.
+     */
     await save({
       topic: "ESTIMATES",
       body: "Promise a quarter when you think a month.",
@@ -122,7 +128,30 @@ describe("attribution", () => {
     });
     const system = (await systemPrompt()).system;
     expect(system).toContain("Promise a quarter when you think a month.");
-    expect(system).toContain("Atte — Singa");
+    for (const fragment of ["Atte", "Singa"]) {
+      expect(system).not.toContain(fragment);
+    }
+  });
+
+  test("no source from any entry appears in the prompt", async () => {
+    await save({ topic: "TEAM", body: "Back people before markets.", position: 42, source: "Annu Nieminen" });
+    await save({ topic: "PACE", body: "Ship before it is ready.", position: 43, source: "Miku Kuusi — Wolt" });
+
+    const system = (await systemPrompt()).system;
+    const { entries } = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
+      { entries: { source: string }[] };
+
+    const sources = entries.map((e) => e.source).filter(Boolean);
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(system).not.toContain(source);
+    }
+  });
+
+  test("the source is still there for the operating team", async () => {
+    const { entries } = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
+      { entries: { topic: string; source: string }[] };
+    expect(entries.find((e) => e.topic === "ESTIMATES")?.source).toBe("Atte — Singa");
   });
 
   test("an entry with no source still works", async () => {
@@ -130,8 +159,10 @@ describe("attribution", () => {
     expect((await systemPrompt()).system).toContain("Nobody claims this one.");
   });
 
-  test("the pack is headed as other people's words", async () => {
-    expect((await systemPrompt()).system).toContain("WHAT THE PROGRAMME'S MENTORS HAVE SAID");
+  test("the pack is headed as the programme's own, not as anyone's words", async () => {
+    const system = (await systemPrompt()).system;
+    expect(system).toContain("WHAT THIS PROGRAMME TEACHES");
+    expect(system).not.toContain("MENTORS HAVE SAID");
   });
 });
 
