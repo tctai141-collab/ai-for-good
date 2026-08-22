@@ -2,12 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createFounder, createOrganizer, get, post, startServer, type Harness, type Session } from "./helpers/harness";
 
 /**
- * The advisor's knowledge, in the database.
+ * What Sprint Buddy knows, in the database.
  *
- * It used to be a string literal, so adding something Mårten said meant a code
- * change, a review and a deploy. The point of moving it is that the operating
- * team can improve it continuously — which only works if an edit actually
- * reaches the next message, and if a mistake can be taken back.
+ * It used to be a string literal, so adding something a mentor said meant a
+ * code change, a review and a deploy. The point of moving it is that the
+ * operating team can improve it continuously — which only works if an edit
+ * actually reaches the next message, and if a mistake can be taken back.
  *
  * Assembled in full rather than retrieved. There is no search step here, so
  * these tests are about the pack being complete and correctly ordered rather
@@ -21,7 +21,6 @@ let founder: Session;
 async function systemPrompt() {
   const res = await post(h, "/api/chat", {
     messages: [{ role: "user", content: "Where do I start?" }],
-    personality: "marten",
     posture: "thinking",
   }, founder.cookie);
   expect(res.status).toBe(200);
@@ -42,20 +41,18 @@ beforeAll(async () => {
 afterAll(() => h?.stop());
 
 describe("what ships", () => {
-  test("a fresh install is not born ignorant", async () => {
-    // The shipped pack is seeded into the table on first boot, so the team has
-    // something to edit rather than an empty box.
+  test("a fresh install starts empty rather than with a hardcoded pack", async () => {
+    // Deliberate. A stand-in pack would hide the state the operating team most
+    // needs to see: that the coach has nothing of the programme's to draw on.
     const body = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
       { entries: { topic: string; source: string }[] };
-    expect(body.entries.length).toBeGreaterThan(10);
-    expect(body.entries.every((e) => e.source === "shipped default")).toBe(true);
-    expect(body.entries.map((e) => e.topic)).toContain("SELLING AND PRODUCT-MARKET FIT");
+    expect(body.entries).toEqual([]);
   });
 
-  test("and the advisor is actually given it", async () => {
+  test("with nothing to draw on it still answers, and says nothing is there", async () => {
     const call = await systemPrompt();
-    expect(call.system).toContain("WHAT YOU KNOW");
-    expect(call.system).toContain("sell before you build");
+    expect(call.system).toContain("You are Sprint Buddy");
+    expect(call.system).not.toContain("WHAT THE PROGRAMME'S MENTORS HAVE SAID");
   });
 });
 
@@ -93,7 +90,7 @@ describe("editing it", () => {
     expect((await systemPrompt()).system).toContain("Actually that was right");
   });
 
-  test("order is respected, because it is the order he reads them in", async () => {
+  test("order is respected, because it is the order they are read in", async () => {
     await save({ topic: "ZZZ LAST", body: "Read me last.", position: 100000 });
     await save({ topic: "AAA FIRST", body: "Read me first.", position: -100 });
 
@@ -108,6 +105,54 @@ describe("editing it", () => {
   test("the id is server-generated, never taken from the caller", async () => {
     const { body } = await save({ id: "", topic: "NEW", body: "Fresh entry.", position: 50 });
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+});
+
+describe("attribution", () => {
+  test("the source reaches the model, not just the admin table", async () => {
+    // This was the defect. `source` was stored and displayed but dropped when
+    // the pack was assembled, so an A/B run measured a prompt with credits
+    // against production behaviour that had none. Sprint Buddy is told to say
+    // whose idea it is quoting; it cannot do that from a column it never sees.
+    await save({
+      topic: "ESTIMATES",
+      body: "Promise a quarter when you think a month.",
+      position: 40,
+      source: "Atte — Singa",
+    });
+    const system = (await systemPrompt()).system;
+    expect(system).toContain("Promise a quarter when you think a month.");
+    expect(system).toContain("Atte — Singa");
+  });
+
+  test("an entry with no source still works", async () => {
+    await save({ topic: "UNSOURCED", body: "Nobody claims this one.", position: 41 });
+    expect((await systemPrompt()).system).toContain("Nobody claims this one.");
+  });
+
+  test("the pack is headed as other people's words", async () => {
+    expect((await systemPrompt()).system).toContain("WHAT THE PROGRAMME'S MENTORS HAVE SAID");
+  });
+});
+
+describe("the retired voice picker", () => {
+  test("an old thread's personality changes nothing about the prompt", async () => {
+    // Threads saved when there was a picker still send personality: "marten".
+    // There is one voice now, and no branch left to map it to.
+    const ask = async (personality?: string) => {
+      const res = await post(h, "/api/chat", {
+        messages: [{ role: "user", content: "Where do I start?" }],
+        posture: "thinking",
+        ...(personality ? { personality } : {}),
+      }, founder.cookie);
+      expect(res.status).toBe(200);
+      return h.advisorCalls[h.advisorCalls.length - 1]!.system;
+    };
+
+    const plain = await ask();
+    expect(await ask("marten")).toBe(plain);
+    expect(await ask("paul")).toBe(plain);
+    expect(await ask("nonsense")).toBe(plain);
   });
 });
 
@@ -133,6 +178,7 @@ describe("size", () => {
   test("the pack size is reported so the ceiling is visible before it is hit", async () => {
     const body = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
       { size: { chars: number; approxTokens: number; budgetChars: number; truncated: boolean } };
+    // Entries added by the tests above are still in place.
     expect(body.size.chars).toBeGreaterThan(0);
     expect(body.size.approxTokens).toBeGreaterThan(0);
     expect(body.size.budgetChars).toBeGreaterThan(body.size.chars);

@@ -1,5 +1,4 @@
 export type Msg = { role: "user" | "assistant"; content: string };
-export type Personality = "none" | "marten";
 
 export type Thread = {
   id: string;
@@ -8,7 +7,6 @@ export type Thread = {
   state: "panic" | "thinking" | "venting";
   lastAt: string;
   messages: Msg[];
-  personality?: Personality;
   /** Founder has opted this one conversation in to coach visibility. */
   sharedWithCoach?: boolean;
 };
@@ -108,7 +106,6 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
         ? (t.state as Thread["state"])
         : "thinking",
       lastAt: t.last_at,
-      personality: (t.personality || "none") as Personality,
       messages: t.messages || [],
       sharedWithCoach: Boolean(t.shared_with_coach),
     })),
@@ -167,7 +164,8 @@ export async function saveThread(userEmail: string, thread: Thread) {
       theme: thread.theme,
       state: thread.state,
       lastAt: thread.lastAt,
-      personality: thread.personality || "none",
+      // Retired: the column outlives the picker so old threads still load.
+      personality: "none",
       messages: thread.messages,
     },
   });

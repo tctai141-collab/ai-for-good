@@ -335,12 +335,14 @@
         </section>
 
         <section class="panel">
-          <h2>What Mårten knows</h2>
+          <h2>What Sprint Buddy knows</h2>
           <p class="note" style="margin-top:0">
-            The advisor's knowledge, one entry per topic. All of it is sent with
-            every message — there is no search step to miss the right passage.
-            Order matters: it is the order he reads them in. Archive rather than
-            delete so you can put something back.
+            What the programme's mentors have said, one entry per topic. All of
+            it is sent with every message — there is no search step to miss the
+            right passage. Order matters: it is the order they are read in.
+            Fill in the source: Sprint Buddy quotes it by name, so a founder can
+            go and ask that mentor directly. Archive rather than delete so you
+            can put something back.
           </p>
           <p class="note" id="kb-size" style="margin-top:0"></p>
 
@@ -355,12 +357,12 @@
               <input id="kb-position" type="number" step="10" value="0" />
             </label>
             <label>
-              <span class="label-text">Source (optional)</span>
-              <input id="kb-source" maxlength="120" placeholder="Quora, 2015" />
+              <span class="label-text">Source (who said it)</span>
+              <input id="kb-source" maxlength="120" placeholder="Atte — Singa" />
             </label>
             <label style="flex:1 1 100%">
-              <span class="label-text">What he thinks about it</span>
-              <textarea id="kb-body" rows="6" maxlength="8000" placeholder="Sell before you build; you can start selling before you have a prototype. (Jyri Engeström's formulation — credit him.) Pre-PMF the metric is not revenue, it is learning."></textarea>
+              <span class="label-text">What they said</span>
+              <textarea id="kb-body" rows="6" maxlength="8000" placeholder="Promise a quarter when you think a month. Being early beats being precise."></textarea>
             </label>
             <button type="submit">Save entry</button>
             <button type="button" id="kb-new">New entry</button>
@@ -952,7 +954,7 @@
           source: kbSource.value,
         });
         if (!ok) return;
-        say(kbMessage, "Saved. Mårten uses it on the next message.", false);
+        say(kbMessage, "Saved. Sprint Buddy uses it on the next message.", false);
         kbId.value = data.id || "";
         loadKnowledge();
       });

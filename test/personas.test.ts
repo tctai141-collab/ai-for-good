@@ -1,107 +1,100 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import * as personas from "../src/lib/personas";
-import {
-  FOUNDER_VOICE_SYSTEM,
-  MARTEN_CORE_BOTTOM,
-  MARTEN_CORE_TOP,
-  MARTEN_DEFAULT_KNOWLEDGE,
-} from "../src/lib/personas";
-
-/*
- * The prompt as shipped. At runtime the middle section is read from the
- * database, seeded from MARTEN_DEFAULT_KNOWLEDGE — these assertions are about
- * what the app ships with, which is what a fresh install gets.
- */
-const MARTEN_SYSTEM = [MARTEN_CORE_TOP, MARTEN_DEFAULT_KNOWLEDGE, MARTEN_CORE_BOTTOM].join("\n\n");
+import { SPRINT_BUDDY_SYSTEM, STYLE_GUARDRAILS } from "../src/lib/personas";
 
 /**
- * Guards on the advisor personas.
+ * Guards on the system prompt.
  *
- * These are string assertions, which is unusual for a test suite — but the
- * failure modes they cover are real ones that already happened once. The
- * previous Mårten prompt handed him four aphorisms he never coined, told him
- * never to admit being an AI, and pointed at a knowledge file that did not
- * exist. None of that is catchable by a typecheck, and all of it is a claim
- * being made to founders under a real, living colleague's name.
+ * String assertions, which is unusual for a test suite, but every one of these
+ * covers a failure that already happened. The prompt has at various points
+ * handed a real person four aphorisms he never coined, told the model never to
+ * admit being an AI, and given a fictional coach a biography — "multiple
+ * companies, a near-death runway crisis, a cofounder breakup, one real exit" —
+ * which is an instruction to invent the details on demand. None of that is
+ * catchable by a typecheck, and all of it is a claim made to founders.
  *
- * What is NOT tested here is whether the persona sounds like him — that is the
- * eval set in the Marten AI workspace, scored by a human, and no assertion can
- * stand in for it.
+ * What is NOT tested here is whether the voice is any good. That is the eval
+ * set in `eval/`, and no assertion can stand in for it.
  */
 
-const lower = MARTEN_SYSTEM.toLowerCase();
+const SHIPPED = [SPRINT_BUDDY_SYSTEM, STYLE_GUARDRAILS].join("\n\n");
+const lower = SHIPPED.toLowerCase();
 
-describe("Mårten persona — provenance", () => {
-  test("does not present other people's aphorisms as his own lines", () => {
-    // Brandeis. Was listed in the old prompt under "use phrases like".
-    expect(lower).not.toContain("sunshine is the best disinfectant");
-    // Kay / Drucker. Same.
-    expect(lower).not.toContain("the best way to predict the future");
-    // A common HR aphorism the old prompt gave him verbatim.
-    expect(lower).not.toContain("hire for attitude, train for skill");
+describe("Sprint Buddy — what it claims to be", () => {
+  test("says plainly that it is software", () => {
+    expect(lower).toContain("you are software");
   });
 
-  test("attributes the quotes it does keep", () => {
-    // He genuinely uses this one — and credits Drucker when he does, on stage.
-    // It may appear only in the same sentence as the attribution.
-    for (const line of MARTEN_SYSTEM.split("\n")) {
-      if (line.toLowerCase().includes("culture eats strategy")) {
-        expect(line.toLowerCase()).toContain("drucker");
-      }
-      if (line.toLowerCase().includes("sell before you build")) {
-        expect(line.toLowerCase()).toContain("jyri");
-      }
-    }
+  test("claims no experience it does not have", () => {
+    expect(lower).toContain("you have not founded a company");
+    // The exact phrases from the retired composite founder voice. This is the
+    // specific regression: a coach with a fabricated life story.
+    expect(lower).not.toContain("you are a seasoned founder");
+    expect(lower).not.toContain("near-death runway crisis");
+    expect(lower).not.toContain("cofounder breakup, one real exit");
+    expect(lower).not.toContain("calm, scarred, generous founder");
   });
 
-  test("keeps his own provenance-checked lines", () => {
-    expect(lower).toContain("to avoid getting hacked, try to get hacked");
-    expect(lower).toContain("be ok with who you are");
-  });
-});
-
-describe("Mårten persona — anti-fabrication", () => {
-  test("forbids inventing specifics about a real person", () => {
-    expect(lower).toContain("never fabricate");
-    expect(lower).toContain("no invented detail");
-  });
-
-  test("supplies real episodes so it does not have to invent any", () => {
-    expect(MARTEN_SYSTEM).toContain("EPISODES YOU MAY REFER TO");
-    expect(lower).toContain("innodb");
-    expect(lower).toContain("john wattin");
-  });
-});
-
-describe("Mårten persona — honest disclosure", () => {
-  test("answers truthfully when asked directly whether it is an AI", () => {
-    expect(lower).toContain("you are an ai trained on mårten's writing");
-    expect(lower).toContain("never deceive");
-  });
-
-  test("no longer carries the blanket instruction to deny being an AI", () => {
-    // The old prompt ended: "Never introduce yourself as an AI or assistant."
-    // Applied to a persona of a real person, that is an instruction to lie.
-    expect(lower).not.toContain("never introduce yourself as an ai");
-  });
-});
-
-describe("persona policy", () => {
-  test("the retired contrarian persona is gone, not renamed", () => {
-    // It shipped as "You are Paul Graham". Package 1 de-named it; Tai then
-    // removed it outright ("I don't know what that is"). This guards against
-    // it coming back through the door it left by.
-    expect(Object.keys(personas)).not.toContain("CONTRARIAN_SYSTEM");
+  test("is not a named real person", () => {
     for (const value of Object.values(personas)) {
       if (typeof value !== "string") continue;
+      expect(value).not.toContain("Mickos");
       expect(value).not.toContain("Paul Graham");
     }
   });
 
-  test("the default founder voice is not a named person either", () => {
-    expect(FOUNDER_VOICE_SYSTEM).not.toContain("Mickos");
-    expect(FOUNDER_VOICE_SYSTEM).not.toContain("Graham");
+  test("does not carry the old instruction to hide being an AI", () => {
+    // The original prompt ended "Never introduce yourself as an AI or
+    // assistant." Applied to software, that is an instruction to lie.
+    expect(lower).not.toContain("never introduce yourself as an ai");
+    expect(lower).not.toContain("not a chatbot");
+  });
+});
+
+describe("Sprint Buddy — attribution and fabrication", () => {
+  test("is told to say whose idea it is quoting", () => {
+    expect(lower).toContain("say whose it is");
+  });
+
+  test("is told what to do when the mentors have not covered something", () => {
+    expect(lower).toContain("have not covered something");
+  });
+
+  test("forbids inventing a mentor, a quote or a specific", () => {
+    expect(lower).toContain("never invent a mentor");
+    // The classes of detail a coach reaches for under pressure.
+    for (const kind of ["quote", "number", "date", "place", "company"]) {
+      expect(lower).toContain(kind);
+    }
+  });
+});
+
+describe("persona policy", () => {
+  test("every retired persona is gone, not renamed", () => {
+    // Three have been removed in turn: a contrarian archetype that shipped as
+    // "You are Paul Graham", the Mårten persona, and the composite founder
+    // voice. This guards the door each of them left by.
+    for (const name of [
+      "CONTRARIAN_SYSTEM",
+      "FOUNDER_VOICE_SYSTEM",
+      "MARTEN_CORE_TOP",
+      "MARTEN_CORE_BOTTOM",
+      "MARTEN_DEFAULT_KNOWLEDGE",
+    ]) {
+      expect(Object.keys(personas)).not.toContain(name);
+    }
+  });
+
+  test("there is exactly one voice to choose from", () => {
+    const prompts = Object.entries(personas).filter(
+      ([name, value]) => typeof value === "string" && name.endsWith("_SYSTEM"),
+    );
+    expect(prompts.map(([name]) => name)).toEqual(["SPRINT_BUDDY_SYSTEM"]);
+  });
+
+  test("posture prompts survive, because they describe the founder not the coach", () => {
+    expect(Object.keys(personas.POSTURE_PROMPTS).sort()).toEqual(["panic", "thinking", "venting"]);
   });
 
   test("no mock advisor corpus is shipped in the public repo", () => {

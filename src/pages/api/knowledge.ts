@@ -2,18 +2,18 @@ import type { APIRoute } from "astro";
 import { listKnowledge, recordAdminAction, setKnowledgeStatus, upsertKnowledge } from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
-import { assembleKnowledge, KNOWLEDGE_BUDGET_CHARS } from "../../lib/knowledge";
+import { assembleKnowledge, KNOWLEDGE_BUDGET_CHARS, PERSONA } from "../../lib/knowledge";
 import { cap } from "../../lib/limits";
 
 /**
- * What the advisor knows, editable by organizers.
+ * What Sprint Buddy knows, editable by organizers.
  *
  * Organizer-only both ways. Founders never read this: the pack reaches them
  * inside the advisor's reply, and exposing the whole thing over an API would
  * publish the operating team's working notes to the cohort.
  */
 
-const PERSONAS = new Set(["marten"]);
+const PERSONAS = new Set([PERSONA]);
 const MAX_TOPIC = 120;
 const MAX_BODY = 8_000;
 
@@ -36,7 +36,7 @@ export const GET: APIRoute = async ({ cookies, request }) => {
     const { error } = guard(cookies);
     if (error) return error;
 
-    const persona = new URL(request.url).searchParams.get("persona") ?? "marten";
+    const persona = new URL(request.url).searchParams.get("persona") ?? PERSONA;
     if (!PERSONAS.has(persona)) return json({ error: "Unknown persona." }, 400);
 
     const assembled = assembleKnowledge(persona);
@@ -70,7 +70,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       return json({ error: "Malformed request." }, 400);
     }
 
-    const persona = typeof body.persona === "string" && PERSONAS.has(body.persona) ? body.persona : "marten";
+    const persona = typeof body.persona === "string" && PERSONAS.has(body.persona) ? body.persona : PERSONA;
 
     if (body.action === "archive" || body.action === "restore") {
       if (typeof body.id !== "string" || !body.id) return json({ error: "id required." }, 400);
