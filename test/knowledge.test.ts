@@ -216,3 +216,44 @@ describe("size", () => {
     expect(body.size.truncated).toBe(false);
   });
 });
+
+describe("the budget ceiling", () => {
+  test("going over drops entries from across the pack, not the tail", async () => {
+    /*
+     * Loading six mentor sessions hit the ceiling and lost 14 entries, all of
+     * them from the session imported last. Rows are ordered by position and an
+     * import appends, so "over budget" used to mean "the newest mentor is
+     * silently absent". Skipping an entry that does not fit, rather than
+     * stopping at it, spreads the loss instead of amputating the tail.
+     *
+     * A single body is capped at 8k by the API, so the ceiling has to be built
+     * out of several large entries rather than one enormous one.
+     */
+    /*
+     * The budget comes from the API rather than an import. Importing
+     * `src/lib/knowledge` here pulls in the database module, which binds
+     * DB_PATH the first time it loads — and `reminders.test.ts` sets DB_PATH in
+     * its own beforeAll and then finds the binding already taken, so it silently
+     * runs against another file's database and reports zero reminders sent.
+     * Reading the value over HTTP keeps this file free of that dependency.
+     */
+    const before = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
+      { size: { budgetChars: number } };
+    const BIG = 7_900;
+    const needed = Math.ceil(before.size.budgetChars / BIG) + 1;
+
+    for (let i = 0; i < needed; i++) {
+      await save({ topic: `BULK ${i}`, body: "x".repeat(BIG), position: 5000 + i * 10, source: "Bulk" });
+    }
+    // Imported after everything above, exactly as a new mentor session would be.
+    await save({ topic: "LATE ARRIVAL", body: "Loaded last, still matters.", position: 9000, source: "Late" });
+
+    const system = (await systemPrompt()).system;
+    expect(system).toContain("Loaded last, still matters.");
+
+    const body = await (await get(h, "/api/knowledge", organizer.cookie)).json() as
+      { size: { truncated: boolean } };
+    // And the operating team is told, rather than left to notice.
+    expect(body.size.truncated).toBe(true);
+  });
+});

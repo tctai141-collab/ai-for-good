@@ -62,10 +62,24 @@ export function assembleKnowledge(persona: string = PERSONA): AssembledKnowledge
     const block = topic ? `${topic.toUpperCase()}. ${body}` : body;
 
     if (chars + block.length > KNOWLEDGE_BUDGET_CHARS) {
-      // Stop rather than send a half sentence. Entries are ordered, so what
-      // drops is what the operating team ranked lowest.
+      /*
+       * Skip this one and keep going, rather than stopping here.
+       *
+       * The old version broke out of the loop, and the comment claimed what
+       * dropped was "what the operating team ranked lowest". It was not. Rows
+       * come back ordered by `position`, and an import appends after
+       * everything already there, so what actually dropped was whatever was
+       * loaded most recently — the seventh mentor added in October, entirely,
+       * for no reason but arriving last. Loading six sessions hit this: 14
+       * entries vanished and all 14 belonged to the last one in.
+       *
+       * Continuing means a long entry near the ceiling is skipped while
+       * shorter later ones still fit, so the loss is spread across the pack
+       * instead of amputating its tail. Neither is a substitute for the
+       * operating team noticing — `truncated` is reported in /admin for that.
+       */
       truncated = true;
-      break;
+      continue;
     }
     parts.push(block);
     chars += block.length;
