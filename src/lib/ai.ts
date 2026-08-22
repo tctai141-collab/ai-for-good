@@ -115,12 +115,13 @@ function buildParams(request: AdvisorRequest): Anthropic.MessageCreateParamsNonS
    *
    * Order is the whole trick: a prefix is only reusable if it is byte-identical
    * and comes first, so the posture line or the check-in framing appearing
-   * before the persona would make the cache miss every time. The grounded
-   * Mårten prompt is around 3k tokens and was previously re-billed in full on
-   * every turn of every conversation.
+   * before the persona would make the cache miss every time. The voice plus the
+   * mentor pack was previously re-billed in full on every turn of every
+   * conversation, and the pack grows as sessions are added.
    *
    * A block below the provider's minimum cacheable length is simply not cached,
-   * which is why the shorter house voice needs no special handling.
+   * so an install with an empty knowledge base needs no special handling —
+   * it just does not benefit yet.
    */
   const system: Anthropic.TextBlockParam[] = request.persona
     ? [

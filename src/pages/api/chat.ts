@@ -4,14 +4,10 @@ import { getLastCheckin, upsertCheckin } from "../../db";
 import { advisorReply, advisorReplyStream } from "../../lib/ai";
 import { getSessionUser } from "../../lib/auth";
 import { buildProgrammeContext } from "../../lib/programme";
-import { martenPersona } from "../../lib/knowledge";
+import { sprintBuddyPersona } from "../../lib/knowledge";
 import { capHistory, chatLimiter } from "../../lib/limits";
 import { reportError } from "../../lib/errors";
-import {
-  FOUNDER_VOICE_SYSTEM,
-  POSTURE_PROMPTS,
-  STYLE_GUARDRAILS,
-} from "../../lib/personas";
+import { POSTURE_PROMPTS } from "../../lib/personas";
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
@@ -114,13 +110,10 @@ function buildSystem(body: {
   founderName?: string;
   founderTz?: string;
 }): { persona: string; variable: string } {
-  // "paul" — the retired contrarian archetype — still arrives from threads
-  // saved before it was removed. It falls through to the house voice rather
-  // than being special-cased, which is what removing a persona should mean.
-  const persona =
-    body.personality === "marten"
-      ? martenPersona()
-      : FOUNDER_VOICE_SYSTEM + "\n\n" + STYLE_GUARDRAILS;
+  // One voice. `personality` still arrives on threads saved when there was a
+  // picker ("marten", "paul") and is ignored rather than mapped — there is
+  // nothing left to map it to.
+  const persona = sprintBuddyPersona();
 
   /*
    * Kept separate from the persona rather than concatenated onto it, because
@@ -191,11 +184,10 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       );
     }
 
-    const personality = body.personality || "none";
     // More headroom than the OpenClaw caps: the current model writes longer by
     // default. Brevity is enforced by the style guardrails in the system prompt,
     // so this only needs to be high enough to avoid truncating mid-sentence.
-    const maxTokens = personality === "marten" ? 500 : 550;
+    const maxTokens = 550;
 
     const { persona, variable } = buildSystem(body);
 

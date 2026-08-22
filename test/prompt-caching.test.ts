@@ -2,11 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createFounder, createOrganizer, post, startServer, type Harness, type Session } from "./helpers/harness";
 
 /**
- * Prompt caching on the persona.
+ * Prompt caching on the system prompt.
  *
- * The grounded Mårten prompt is around 3k tokens and was being re-billed in
- * full on every turn of every conversation. It is identical for every message
- * from every founder using that persona, so it belongs behind a cache
+ * The voice plus the mentor pack was being re-billed in full on every turn of
+ * every conversation. It is identical for every message from every founder, and
+ * it grows as mentor sessions are added, so it belongs behind a cache
  * breakpoint.
  *
  * The failure mode this guards is silent and expensive: caching only works if
@@ -39,15 +39,15 @@ afterAll(() => h?.stop());
 
 describe("the persona is cached", () => {
   test("it is the first block and carries a cache breakpoint", async () => {
-    const call = await chat({ personality: "marten", posture: "thinking" });
+    const call = await chat({ posture: "thinking" });
 
     expect(call.systemBlocks.length).toBeGreaterThan(0);
     expect(call.systemBlocks[0]!.cache_control).toEqual({ type: "ephemeral" });
-    expect(call.systemBlocks[0]!.text).toContain("Mårten Mickos");
+    expect(call.systemBlocks[0]!.text).toContain("You are Sprint Buddy");
   });
 
   test("the per-request half is a separate, uncached block", async () => {
-    const call = await chat({ personality: "marten", posture: "panic" });
+    const call = await chat({ posture: "panic" });
 
     // The posture must not be inside the cached prefix.
     expect(call.systemBlocks[0]!.text).not.toContain("PANIC");
@@ -60,19 +60,18 @@ describe("the persona is cached", () => {
 describe("the cached prefix is stable", () => {
   test("byte-identical across postures", async () => {
     // If the prefix changed with posture, every switch would cost a fresh write.
-    const thinking = await chat({ personality: "marten", posture: "thinking" });
-    const venting = await chat({ personality: "marten", posture: "venting" });
+    const thinking = await chat({ posture: "thinking" });
+    const venting = await chat({ posture: "venting" });
 
     expect(venting.systemBlocks[0]!.text).toBe(thinking.systemBlocks[0]!.text);
   });
 
   test("byte-identical across founders", async () => {
     const second = await createFounder(h, organizer, "second@example.test", "Bo", "second-password-11");
-    const first = await chat({ personality: "marten", posture: "thinking" });
+    const first = await chat({ posture: "thinking" });
 
     const res = await post(h, "/api/chat", {
       messages: [{ role: "user", content: "Same question." }],
-      personality: "marten",
       posture: "thinking",
     }, second.cookie);
     expect(res.status).toBe(200);
@@ -88,18 +87,21 @@ describe("the cached prefix is stable", () => {
      * serverTime, so concatenating it onto the persona would change the prefix
      * on literally every request and the cache would never once hit.
      */
-    const plain = await chat({ personality: "marten", posture: "thinking" });
-    const checkin = await chat({ personality: "marten", kind: "checkin", userEmail: founder.email });
+    const plain = await chat({ posture: "thinking" });
+    const checkin = await chat({ kind: "checkin", userEmail: founder.email });
 
     expect(checkin.systemBlocks[0]!.text).toBe(plain.systemBlocks[0]!.text);
     expect(checkin.systemBlocks[0]!.text).not.toContain("LAST_CHECKIN");
   });
 
-  test("each persona gets its own prefix", async () => {
-    const marten = await chat({ personality: "marten", posture: "thinking" });
-    const house = await chat({ personality: "none", posture: "thinking" });
-
-    expect(house.systemBlocks[0]!.text).not.toBe(marten.systemBlocks[0]!.text);
-    expect(house.systemBlocks[0]!.text).not.toContain("Mårten Mickos");
+  test("one prefix serves everyone, whatever a saved thread asks for", async () => {
+    // There used to be a persona per prefix, so a founder switching voices paid
+    // a fresh cache write. With one voice there is one entry, and the retired
+    // wire values threads still send must not fracture it.
+    const plain = await chat({ posture: "thinking" });
+    for (const personality of ["marten", "paul", "none"]) {
+      const call = await chat({ personality, posture: "thinking" });
+      expect(call.systemBlocks[0]!.text).toBe(plain.systemBlocks[0]!.text);
+    }
   });
 });

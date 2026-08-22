@@ -181,6 +181,81 @@
       }
       .back-link:hover { color: var(--accent); text-decoration: underline; }
       .back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+      /* Tabs. One area visible at a time so the page height stays constant
+         however much knowledge is loaded. */
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 24px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 12px;
+      }
+      .tab {
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        min-height: 40px;
+      }
+      .tab:hover { color: inherit; border-color: var(--border); }
+      .tab[aria-selected="true"] {
+        background: var(--accent);
+        border-color: transparent;
+        color: #0b1020;
+      }
+
+      /* Long lists scroll inside their own box rather than growing the page. */
+      .scroller {
+        max-height: 52vh;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 4px 12px;
+      }
+      .rowline {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .rowline:last-child { border-bottom: none; }
+      .rowline .grow {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .disclose {
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.8125rem;
+        padding: 4px 8px;
+      }
+      .expanded { padding: 0 0 12px 26px; }
+      .expanded textarea, .expanded input { width: 100%; }
+      .flagged { color: #f7768e; font-size: 0.75rem; margin: 4px 0 0 26px; }
+
+      /* The action bar sits above a long review list, not after it. */
+      .stickybar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--panel);
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 8px;
+      }
     </style>
   </head>
   <body>
@@ -202,6 +277,20 @@
       </div>
 
       <div id="app" hidden>
+        <!-- One area at a time. Eight stacked panels plus a review list plus a
+             hundred knowledge entries made this page something you scrolled
+             through to find anything. The sections all stay in the DOM and are
+             only shown or hidden, so the inline script below keeps working
+             unchanged — every getElementById still resolves. -->
+        <nav class="tabs" id="tabs" aria-label="Admin sections">
+          <button type="button" class="tab" data-tab="people">People</button>
+          <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
+          <button type="button" class="tab" data-tab="programme">Programme</button>
+          <button type="button" class="tab" data-tab="knowledge">Knowledge</button>
+          <button type="button" class="tab" data-tab="transcript">Add transcript</button>
+        </nav>
+
+        <div class="tabpanel" id="tab-people" hidden>
         <section class="panel">
           <h2>People</h2>
           <table>
@@ -264,7 +353,9 @@
           </p>
           <div class="links" id="links"></div>
         </section>
+        </div>
 
+        <div class="tabpanel" id="tab-deadlines" hidden>
         <section class="panel">
           <h2>Deadlines</h2>
           <p class="note" style="margin-top:0">
@@ -296,7 +387,9 @@
 
           <div id="deadline-list"></div>
         </section>
+        </div>
 
+        <div class="tabpanel" id="tab-programme" hidden>
         <section class="panel">
           <h2>Programme</h2>
           <p class="note" style="margin-top:0">
@@ -333,14 +426,20 @@
 
           <div id="programme-list"></div>
         </section>
+        </div>
 
+        <div class="tabpanel" id="tab-knowledge" hidden>
         <section class="panel">
-          <h2>What Mårten knows</h2>
+          <h2>What Sprint Buddy knows</h2>
           <p class="note" style="margin-top:0">
-            The advisor's knowledge, one entry per topic. All of it is sent with
-            every message — there is no search step to miss the right passage.
-            Order matters: it is the order he reads them in. Archive rather than
-            delete so you can put something back.
+            What the programme's mentors have said, one entry per topic. All of
+            it is sent with every message — there is no search step to miss the
+            right passage. Order matters: it is the order they are read in.
+            Fill in the source: it is for your records and lets you archive a
+            whole session in one click. It is never sent to Sprint Buddy and
+            never shown to the cohort — what a mentor said in a closed room
+            becomes the programme's position, not a quote with their name on it.
+            Archive rather than delete so you can put something back.
           </p>
           <p class="note" id="kb-size" style="margin-top:0"></p>
 
@@ -355,12 +454,12 @@
               <input id="kb-position" type="number" step="10" value="0" />
             </label>
             <label>
-              <span class="label-text">Source (optional)</span>
-              <input id="kb-source" maxlength="120" placeholder="Quora, 2015" />
+              <span class="label-text">Source (who said it)</span>
+              <input id="kb-source" maxlength="120" placeholder="Atte — Singa" />
             </label>
             <label style="flex:1 1 100%">
-              <span class="label-text">What he thinks about it</span>
-              <textarea id="kb-body" rows="6" maxlength="8000" placeholder="Sell before you build; you can start selling before you have a prototype. (Jyri Engeström's formulation — credit him.) Pre-PMF the metric is not revenue, it is learning."></textarea>
+              <span class="label-text">What they said</span>
+              <textarea id="kb-body" rows="6" maxlength="8000" placeholder="Promise a quarter when you think a month. Being early beats being precise."></textarea>
             </label>
             <button type="submit">Save entry</button>
             <button type="button" id="kb-new">New entry</button>
@@ -369,6 +468,41 @@
 
           <div id="knowledge-list"></div>
         </section>
+        </div>
+
+        <div class="tabpanel" id="tab-transcript" hidden>
+          <section class="panel">
+            <h2>Add knowledge from a transcript</h2>
+            <p class="note" style="margin-top:0">
+              Paste a mentor session. It is read in pieces and comes back as
+              draft entries for you to approve — nothing reaches Sprint Buddy
+              until you tick it and add it. The transcript itself is never
+              stored, only the entries you keep.
+            </p>
+            <p class="note" style="margin-top:0">
+              Entries come back with no names in them: not the speaker's, not
+              their company's. What the session teaches becomes the programme's
+              position. Anything about a founder or their company is left out
+              entirely. If a name slips through, the draft is flagged.
+            </p>
+
+            <form id="ingest-form" class="row">
+              <label>
+                <span class="label-text">Whose session (for your records only)</span>
+                <input id="ingest-source" maxlength="120" placeholder="Atte — Singa" required />
+              </label>
+              <label style="flex:1 1 100%">
+                <span class="label-text">Transcript</span>
+                <textarea id="ingest-text" rows="8" placeholder="Paste the whole session. Long ones are split automatically."></textarea>
+              </label>
+              <button type="submit" id="ingest-go">Read it</button>
+              <button type="button" id="ingest-cancel" hidden>Stop</button>
+            </form>
+            <p class="message" id="ingest-message" hidden></p>
+
+            <div id="ingest-review"></div>
+          </section>
+        </div>
       </div>
     </main>
 
@@ -380,6 +514,51 @@
       const linksPanel = document.getElementById("links-panel");
       const linksBox = document.getElementById("links");
       let me = null;
+
+      // Entry text originates in a pasted transcript by way of the model, so it
+      // reaches this page as untrusted content and must never be parsed as
+      // markup on the way into the DOM.
+      function esc(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      // ---- Tabs ---------------------------------------------------------
+      //
+      // Show/hide only. Every section stays in the DOM so the rest of this
+      // script keeps working without knowing tabs exist.
+
+      const TAB_KEY = "sprintbuddy.admin.tab";
+      function showTab(slug) {
+        const panels = document.querySelectorAll(".tabpanel");
+        let matched = false;
+        panels.forEach((panel) => {
+          const on = panel.id === "tab-" + slug;
+          panel.hidden = !on;
+          if (on) matched = true;
+        });
+        if (!matched && panels.length) {
+          // A stored tab that no longer exists must not leave a blank page.
+          panels[0].hidden = false;
+          slug = panels[0].id.replace(/^tab-/, "");
+        }
+        document.querySelectorAll(".tab").forEach((button) => {
+          button.setAttribute("aria-selected", String(button.dataset.tab === slug));
+        });
+        try { localStorage.setItem(TAB_KEY, slug); } catch { /* private mode */ }
+      }
+
+      document.querySelectorAll(".tab").forEach((button) => {
+        button.addEventListener("click", () => showTab(button.dataset.tab));
+      });
+
+      let storedTab = "people";
+      try { storedTab = localStorage.getItem(TAB_KEY) || "people"; } catch { /* private mode */ }
+      showTab(storedTab);
 
       function say(el, text, isError) {
         el.textContent = text;
@@ -855,31 +1034,116 @@
         kbPosition.value = String(highest + 10);
       }
 
+      // A transcript import lands dozens of entries under one source, so the
+      // way out has to be as cheap as the way in.
+      function sourceChips() {
+        const counts = new Map();
+        for (const e of knowledgeEntries) {
+          if (e.status === "archived" || !e.source) continue;
+          counts.set(e.source, (counts.get(e.source) || 0) + 1);
+        }
+        if (counts.size === 0) return "";
+        return (
+          '<div class="row" style="gap:8px;margin-bottom:12px">' +
+          [...counts.entries()]
+            .map(([source, n]) =>
+              '<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:999px;padding:3px 6px 3px 10px;font-size:0.8125rem">' +
+              esc(source) + ' <span class="note" style="margin:0">' + n + "</span>" +
+              '<button type="button" class="disclose" data-archive-source="' + esc(source) + '">Archive all</button>' +
+              "</span>")
+            .join("") +
+          "</div>"
+        );
+      }
+
+      let kbFilter = "";
+      const kbOpen = new Set();
+
       function renderKnowledge() {
         if (!knowledgeEntries.length) {
-          knowledgeList.innerHTML = '<p class="note">Nothing yet.</p>';
+          knowledgeList.innerHTML = '<p class="note">Nothing yet. Add one below, or paste a session under <strong>Add transcript</strong>.</p>';
           return;
         }
-        knowledgeList.innerHTML = knowledgeEntries
+
+        const needle = kbFilter.trim().toLowerCase();
+        const shown = needle
+          ? knowledgeEntries.filter((e) =>
+              (e.topic + " " + e.body + " " + (e.source || "")).toLowerCase().includes(needle))
+          : knowledgeEntries;
+
+        const rows = shown
           .map((e) => {
             const archived = e.status === "archived";
-            const preview = e.body.length > 130 ? e.body.slice(0, 130) + "…" : e.body;
+            const open = kbOpen.has(e.id);
             return (
-              '<div style="padding:10px 0;border-bottom:1px solid var(--border);opacity:' + (archived ? "0.5" : "1") + '">' +
-              '<div class="row" style="align-items:baseline;gap:10px">' +
-              '<strong style="min-width:44px">' + e.position + "</strong>" +
-              '<span style="flex:1"><strong>' + (e.topic || "(no topic)") + "</strong>" +
-              (e.source ? ' <span class="note" style="margin:0">· ' + e.source + "</span>" : "") +
+              '<div class="rowline" style="opacity:' + (archived ? "0.5" : "1") + '">' +
+              '<strong style="min-width:38px;font-size:0.8125rem">' + e.position + "</strong>" +
+              '<span class="grow"><strong>' + esc(e.topic || "(no topic)") + "</strong>" +
+              (e.source ? ' <span class="note" style="margin:0">· ' + esc(e.source) + "</span>" : "") +
               (archived ? ' <span class="note" style="margin:0">· archived</span>' : "") +
               "</span>" +
+              '<button type="button" class="disclose" data-open="' + e.id + '">' + (open ? "Hide" : "Show") + "</button>" +
               '<button type="button" data-edit="' + e.id + '">Edit</button>' +
               '<button type="button" data-toggle="' + e.id + '">' + (archived ? "Restore" : "Archive") + "</button>" +
               "</div>" +
-              '<p class="note" style="margin:4px 0 0">' + preview + "</p>" +
-              "</div>"
+              (open ? '<p class="note expanded" style="margin:0">' + esc(e.body) + "</p>" : "")
             );
           })
           .join("");
+
+        const count = needle
+          ? shown.length + " of " + knowledgeEntries.length + " entries"
+          : knowledgeEntries.length + " entries";
+
+        knowledgeList.innerHTML =
+          sourceChips() +
+          '<div class="row" style="gap:10px;align-items:center;margin-bottom:10px">' +
+          '<input id="kb-filter" placeholder="Filter by topic, text or source" style="flex:1" value="' + esc(kbFilter) + '" />' +
+          '<span class="note" style="margin:0">' + count + "</span>" +
+          "</div>" +
+          (shown.length ? '<div class="scroller">' + rows + "</div>" : '<p class="note">Nothing matches that.</p>');
+
+        const filterBox = document.getElementById("kb-filter");
+        filterBox.addEventListener("input", () => {
+          kbFilter = filterBox.value;
+          const at = filterBox.selectionStart;
+          renderKnowledge();
+          // Re-rendering replaces the input, so put the caret back.
+          const again = document.getElementById("kb-filter");
+          again.focus();
+          again.setSelectionRange(at, at);
+        });
+
+        knowledgeList.querySelectorAll("button[data-open]").forEach((b) => {
+          b.addEventListener("click", () => {
+            const id = b.dataset.open;
+            if (kbOpen.has(id)) kbOpen.delete(id);
+            else kbOpen.add(id);
+            renderKnowledge();
+          });
+        });
+
+        knowledgeList.querySelectorAll("button[data-archive-source]").forEach((b) => {
+          b.addEventListener("click", async () => {
+            const source = b.dataset.archiveSource;
+            // A two-step rather than a confirm() dialog: a modal blocks the
+            // page, and this is reversible anyway.
+            if (b.dataset.armed !== "yes") {
+              b.dataset.armed = "yes";
+              b.textContent = "Sure?";
+              setTimeout(() => {
+                if (!b.isConnected) return;
+                b.dataset.armed = "";
+                b.textContent = "Archive all";
+              }, 4000);
+              return;
+            }
+            const { ok, data } = await knowledgeApi({ action: "archiveSource", source });
+            if (!ok) return;
+            say(kbMessage, "Archived " + data.archived + " from " + source + ".", false);
+            loadKnowledge();
+          });
+        });
 
         knowledgeList.querySelectorAll("button[data-edit]").forEach((b) => {
           b.addEventListener("click", () => {
@@ -893,6 +1157,7 @@
             kbTopic.focus();
           });
         });
+
         knowledgeList.querySelectorAll("button[data-toggle]").forEach((b) => {
           b.addEventListener("click", async () => {
             const entry = knowledgeEntries.find((e) => e.id === b.dataset.toggle);
@@ -952,9 +1217,204 @@
           source: kbSource.value,
         });
         if (!ok) return;
-        say(kbMessage, "Saved. Mårten uses it on the next message.", false);
+        if (data.warning && data.warning.length) {
+          say(kbMessage,
+            "Saved, but the text still contains: " + data.warning.join(", ") +
+            ". Sprint Buddy will say that to the cohort. Edit it out unless you meant it.",
+            true);
+        } else {
+          say(kbMessage, "Saved. Sprint Buddy uses it on the next message.", false);
+        }
         kbId.value = data.id || "";
         loadKnowledge();
+      });
+
+      // ---- Transcript ingest ------------------------------------------------
+      //
+      // The transcript is split here rather than server-side so each request
+      // stays short. One call per piece keeps every request well inside any
+      // proxy timeout and gives a progress count instead of a spinner that
+      // might be dead. Nothing is written until "Add selected".
+
+      const ingestSource = document.getElementById("ingest-source");
+      const ingestText = document.getElementById("ingest-text");
+      const ingestMessage = document.getElementById("ingest-message");
+      const ingestReview = document.getElementById("ingest-review");
+      const ingestGo = document.getElementById("ingest-go");
+      const ingestCancel = document.getElementById("ingest-cancel");
+
+      const CHUNK_CHARS = 24000;
+      let candidates = [];
+      let stopRequested = false;
+      const draftOpen = new Set();
+
+      function splitTranscript(text) {
+        const paragraphs = text.split(/\n\s*\n/);
+        const chunks = [];
+        let current = "";
+        const push = () => {
+          if (current.trim().length >= 200) chunks.push(current.trim());
+          current = "";
+        };
+        for (const paragraph of paragraphs) {
+          if (paragraph.length > CHUNK_CHARS) {
+            push();
+            for (let i = 0; i < paragraph.length; i += CHUNK_CHARS) {
+              chunks.push(paragraph.slice(i, i + CHUNK_CHARS));
+            }
+            continue;
+          }
+          if (current.length + paragraph.length + 2 > CHUNK_CHARS) push();
+          current += (current ? "\n\n" : "") + paragraph;
+        }
+        push();
+        return chunks;
+      }
+
+      function renderCandidates() {
+        if (!candidates.length) {
+          ingestReview.innerHTML = "";
+          return;
+        }
+        const chosen = candidates.filter((c) => c.keep).length;
+        const flaggedCount = candidates.filter((c) => (c.leaks || []).length).length;
+
+        // Collapsed by default: 25 drafts should fit on a screen, not fill
+        // several. The action bar goes above the list so it is reachable
+        // without scrolling to the end of it.
+        const rows = candidates
+          .map((c, i) => {
+            const open = draftOpen.has(i);
+            const leaks = c.leaks || [];
+            return (
+              '<div class="rowline">' +
+              '<input type="checkbox" data-keep="' + i + '"' + (c.keep ? " checked" : "") + " />" +
+              '<span class="grow"><strong>' + esc(c.topic || "(no topic)") + "</strong>" +
+              (leaks.length ? ' <span style="color:#f7768e">· name found</span>' : "") +
+              "</span>" +
+              '<button type="button" class="disclose" data-draft="' + i + '">' + (open ? "Hide" : "Show") + "</button>" +
+              "</div>" +
+              (leaks.length
+                ? '<p class="flagged">Looks like it still contains: ' + esc(leaks.join(", ")) +
+                  ". Edit it out or untick this one.</p>"
+                : "") +
+              (open
+                ? '<div class="expanded">' +
+                  '<input data-topic="' + i + '" maxlength="120" value="' + esc(c.topic) + '" />' +
+                  '<textarea data-body="' + i + '" rows="4" maxlength="8000" style="margin-top:6px">' +
+                  esc(c.body) + "</textarea></div>"
+                : "")
+            );
+          })
+          .join("");
+
+        ingestReview.innerHTML =
+          '<div class="stickybar">' +
+          '<div class="row" style="align-items:center;gap:10px">' +
+          '<button type="button" id="ingest-add">Add ' + chosen + " selected</button>" +
+          '<button type="button" id="ingest-discard">Discard all</button>' +
+          '<span class="note" style="margin:0">' + candidates.length + " drafts" +
+          (flaggedCount ? " · " + flaggedCount + " flagged" : "") + "</span>" +
+          "</div></div>" +
+          '<div class="scroller">' + rows + "</div>";
+
+        ingestReview.querySelectorAll("input[data-keep]").forEach((el) => {
+          el.addEventListener("change", () => {
+            candidates[Number(el.dataset.keep)].keep = el.checked;
+            const n = candidates.filter((c) => c.keep).length;
+            const button = document.getElementById("ingest-add");
+            if (button) button.textContent = "Add " + n + " selected";
+          });
+        });
+        ingestReview.querySelectorAll("button[data-draft]").forEach((el) => {
+          el.addEventListener("click", () => {
+            const i = Number(el.dataset.draft);
+            if (draftOpen.has(i)) draftOpen.delete(i);
+            else draftOpen.add(i);
+            renderCandidates();
+          });
+        });
+        ingestReview.querySelectorAll("input[data-topic]").forEach((el) => {
+          el.addEventListener("input", () => { candidates[Number(el.dataset.topic)].topic = el.value; });
+        });
+        ingestReview.querySelectorAll("textarea[data-body]").forEach((el) => {
+          el.addEventListener("input", () => { candidates[Number(el.dataset.body)].body = el.value; });
+        });
+
+        document.getElementById("ingest-discard").addEventListener("click", () => {
+          candidates = [];
+          draftOpen.clear();
+          renderCandidates();
+          ingestText.hidden = false;
+          say(ingestMessage, "Drafts discarded. Nothing was saved.", false);
+        });
+
+        document.getElementById("ingest-add").addEventListener("click", async () => {
+          const keep = candidates.filter((c) => c.keep && c.body.trim());
+          if (!keep.length) { say(ingestMessage, "Nothing ticked.", true); return; }
+          const { ok, data } = await knowledgeApi({
+            action: "importBatch",
+            source: ingestSource.value.trim(),
+            entries: keep.map((c) => ({ topic: c.topic, body: c.body })),
+          });
+          if (!ok) { say(ingestMessage, (data && data.error) || "Could not add those.", true); return; }
+          candidates = [];
+          draftOpen.clear();
+          renderCandidates();
+          ingestText.value = "";
+          ingestText.hidden = false;
+          say(ingestMessage, "Added " + data.saved + ". Sprint Buddy uses them on the next message.", false);
+          loadKnowledge();
+        });
+      }
+
+      ingestCancel.addEventListener("click", () => { stopRequested = true; });
+
+      document.getElementById("ingest-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const source = ingestSource.value.trim();
+        const text = ingestText.value.trim();
+        if (!source) { say(ingestMessage, "Name whose session it is first — for your records, not for the cohort.", true); return; }
+        if (text.length < 200) { say(ingestMessage, "That is too short to be a session.", true); return; }
+
+        const chunks = splitTranscript(text);
+        candidates = [];
+        draftOpen.clear();
+        stopRequested = false;
+        ingestGo.disabled = true;
+        ingestCancel.hidden = false;
+
+        for (let i = 0; i < chunks.length; i++) {
+          if (stopRequested) break;
+          say(ingestMessage, "Reading piece " + (i + 1) + " of " + chunks.length + "…", false);
+          const { ok, data } = await knowledgeApi({ action: "extract", source, transcript: chunks[i] });
+          if (!ok) {
+            // One bad piece should not throw away the pieces that worked.
+            say(ingestMessage, (data && data.error) || "That piece could not be read. Carrying on.", true);
+            continue;
+          }
+          for (const c of data.candidates || []) {
+            candidates.push({ topic: c.topic, body: c.body, leaks: c.leaks || [], keep: !(c.leaks || []).length });
+          }
+          renderCandidates();
+        }
+
+        ingestGo.disabled = false;
+        ingestCancel.hidden = true;
+        // 14k words are not useful while reviewing; fold the box away.
+        if (candidates.length) ingestText.hidden = true;
+
+        if (stopRequested) {
+          say(ingestMessage, "Stopped. " + candidates.length + " drafts so far, nothing saved yet.", false);
+        } else if (!candidates.length) {
+          say(ingestMessage, "Nothing in there was worth adding.", false);
+        } else {
+          const flagged = candidates.filter((c) => c.leaks.length).length;
+          say(ingestMessage,
+            "Done. " + candidates.length + " drafts to review." +
+            (flagged ? " " + flagged + " still contain a name and are unticked." : ""),
+            false);
+        }
       });
 
       load();

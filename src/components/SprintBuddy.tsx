@@ -106,7 +106,6 @@ async function callClaude(
   system: string,
   messages: Msg[],
   onChunk?: (chunk: string) => void,
-  personality: Personality = "none",
   kind?: "checkin",
   ctx?: { userEmail?: string; founderName?: string; founderTz?: string },
 ): Promise<ResponderResult> {
@@ -125,7 +124,6 @@ async function callClaude(
         messages,
         posture,
         stream: !!onChunk,
-        personality,
         kind,
         userEmail: ctx?.userEmail,
         founderName: ctx?.founderName,
@@ -193,23 +191,12 @@ const C = {
   bubble: "var(--bubble-user)",
 };
 
-type Personality = "none" | "marten";
-const PERSONALITIES: Record<Personality, { label: string; color: string; desc: string }> = {
-  none: { label: "None", color: C.faint, desc: "Just you — no persona overlay" },
-  marten: { label: "Mårten", color: C.blue, desc: "Mårten Mickos — MySQL CEO, servant leadership" },
-};
-
-/**
- * Threads saved before a persona was retired still carry its wire value —
- * "paul", the contrarian archetype. The column has no CHECK constraint, so
- * those rows are still there and still open fine; only the label lookup would
- * have thrown on them. Anything unrecognised reads as no persona at all, which
- * is also how the conversation now continues.
+/*
+ * The voice picker used to sit here: "None" and "Mårten", earlier also a
+ * contrarian archetype. There is one voice now and it is the app's own, so
+ * there is nothing to pick between. Threads saved under the old wire values
+ * still open — the server ignores the field rather than mapping it.
  */
-function personaLabel(value: string | undefined): string | null {
-  if (!value || value === "none") return null;
-  return (PERSONALITIES as Record<string, { label: string }>)[value]?.label ?? null;
-}
 type StateKey = "panic" | "thinking" | "venting";
 const STATES: Record<StateKey, { label: string; color: string; posture: string }> = {
   panic: { label: "Panicking", color: C.red, posture: "They are in PANIC. Take the temperature down. Be calm and very brief. Give exactly ONE next step. Help them not act rashly tonight." },
@@ -227,7 +214,6 @@ type Thread = {
   state: StateKey;
   lastAt: string;
   messages: Msg[];
-  personality?: Personality;
   kind?: "checkin";
   /** Founder has opted this one conversation in to coach visibility. */
   sharedWithCoach?: boolean;
@@ -644,7 +630,6 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
                 <div key={t.id} className="threadrow" style={{ position: "relative", display: "flex", alignItems: "center" }}>
                   <button onClick={() => onThread(t.id)} className="navitem" style={{ ...navItem, background: on ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: on ? 600 : 500, padding: "12px 34px 12px 12px", fontSize: 14 }}>
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                    {personaLabel(t.personality) && <span style={{ fontSize: 9.5, fontWeight: 800, color: C.faint, background: "rgba(255,255,255,0.10)", borderRadius: 4, padding: "2px 7px", flexShrink: 0, letterSpacing: 0.8, textTransform: "uppercase" }}>{personaLabel(t.personality)}</span>}
                     <span style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>{t.lastAt}</span>
                   </button>
                   {/* A sibling, not a child: a button cannot be nested inside a
@@ -807,7 +792,6 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const [msgs, setMsgs] = useState<Msg[]>(() => existing ? existing.messages : []);
   const [input, setInput] = useState("");
   const [mode] = useState<StateKey>(existing?.state || "thinking");
-  const [personality, setPersonality] = useState<Personality>("none");
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ kind: "logged"; text: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -853,7 +837,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       const exists = prev.some((x) => x.id === id);
       const base = exists
         ? prev.map((x) => x.id === id ? { ...x, messages: finalMsgs, lastAt: "now" } : x)
-        : [{ id, title, theme: isCheckin ? "Check-in" : (theme || "—"), state: mode, lastAt: "now", messages: finalMsgs, personality, ...(isCheckin ? { kind: "checkin" as const } : {}) }, ...prev];
+        : [{ id, title, theme: isCheckin ? "Check-in" : (theme || "—"), state: mode, lastAt: "now", messages: finalMsgs, ...(isCheckin ? { kind: "checkin" as const } : {}) }, ...prev];
       if (userEmail) {
         const saved = base.find((x) => x.id === id);
         if (saved) saveThread(userEmail, saved).catch(() => {});
@@ -873,7 +857,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
         const initiator: Msg[] = [{ role: "user", content: "Begin today's check-in." }];
         const r = await callClaude(sys, initiator, (full) => {
           setMsgs([{ role: "assistant", content: full }]);
-        }, personality, "checkin", callCtx);
+        }, "checkin", callCtx);
         const opener: Msg = { role: "assistant", content: r.voice || "Hey. What's been on top of your mind today?" };
         setMsgs([opener]);
         persistThread([opener], r.theme, "");
@@ -882,7 +866,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       }
       setBusy(false);
     })();
-  }, [isCheckin, msgs.length, busy, personality, sys]);
+  }, [isCheckin, msgs.length, busy, sys]);
 
   const send = async (text?: string) => {
     const t = (text ?? input).trim();
@@ -897,7 +881,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
     try {
       const r = await callClaude(sys, nextMsgs, (full) => {
         setMsgs((prev) => prev.map((m, i) => i === prev.length - 1 ? { role: "assistant" as const, content: full } : m));
-      }, personality, isCheckin ? "checkin" : undefined, callCtx);
+      }, isCheckin ? "checkin" : undefined, callCtx);
 
       setMsgs((prev) => prev.map((m, i) => i === prev.length - 1 ? { role: "assistant" as const, content: r.voice } : m));
 
@@ -987,18 +971,6 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       {/* composer */}
       <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, background: C.bg }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 24px 18px" }}>
-          {msgs.length === 0 && !isCheckin && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-              {(Object.entries(PERSONALITIES) as [Personality, typeof PERSONALITIES[Personality]][]).map(([k, s]) => {
-                const on = personality === k;
-                return (
-                  <button key={k} onClick={() => setPersonality(k)} title={s.desc} style={{ display: "inline-flex", alignItems: "center", gap: 7, minHeight: 44, border: `1px solid ${on ? "transparent" : C.line}`, background: on ? s.color : "transparent", color: on ? C.black : C.sub, borderRadius: 999, padding: "8px 14px", fontSize: 13, fontWeight: on ? 700 : 600, cursor: "pointer" }}>
-                    <span style={{ width: 7, height: 7, borderRadius: 9, background: on ? C.black : s.color }} />{s.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
               placeholder={mode === "panic" ? "Say it plainly. One thing at a time." : mode === "venting" ? "Let it out, nobody's grading this." : "What are you turning over?"}
