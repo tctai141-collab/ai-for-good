@@ -3,14 +3,15 @@ import { listProgrammeWeeks, recordAdminAction, upsertProgrammeWeek } from "../.
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import { cap } from "../../lib/limits";
-import { TOTAL_WEEKS } from "../../lib/sprint-calendar";
+import { currentSprintWeek, TOTAL_WEEKS } from "../../lib/sprint-calendar";
 
 /**
- * The cohort's programme, editable by organizers.
+ * The cohort's programme: readable by the cohort, editable by organizers.
  *
- * Organizer-only in both directions. Founders never read this endpoint — the
- * advisor is given the current week server-side — so there is no reason to
- * expose the whole schedule to them through an API.
+ * The read was organizers-only, on the reasoning that the advisor is handed the
+ * current week server-side so founders had no need for the endpoint. That was
+ * wrong about what founders need. It is their own schedule, and not being able
+ * to look up what is on this week was the most obvious gap in the product.
  */
 
 const MAX_SHORT = 200;
@@ -23,13 +24,24 @@ function json(data: unknown, status = 200) {
   });
 }
 
+/*
+ * Readable by the whole cohort, editable only by organizers.
+ *
+ * The read used to be organizers-only, which meant the one thing every founder
+ * would want to look up, what is on this week, was the one thing the product
+ * would not tell them. It is the cohort's own schedule; there is nothing in it
+ * that is not said out loud in the room.
+ */
 export const GET: APIRoute = async ({ cookies }) => {
   try {
     const session = getSessionUser(cookies);
     if (!session) return json({ error: "Not signed in." }, 401);
-    if (session.role !== "organizer") return json({ error: "Organizers only." }, 403);
 
-    return json({ totalWeeks: TOTAL_WEEKS, weeks: listProgrammeWeeks() });
+    return json({
+      totalWeeks: TOTAL_WEEKS,
+      weeks: listProgrammeWeeks(),
+      currentWeek: currentSprintWeek(),
+    });
   } catch (error) {
     reportError(error, { where: "programme.GET" });
     return json({ error: "Could not load the programme." }, 500);

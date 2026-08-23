@@ -11,9 +11,8 @@ import { createFounder, createOrganizer, post, startServer, type Harness, type S
  *
  * The failure mode this guards is silent and expensive: caching only works if
  * the cached prefix is byte-identical and comes first. Fold anything
- * per-request into it — the posture line, or the check-in framing, which
- * carries the current server time — and every request misses while still
- * looking completely normal. Nothing about the replies would tell you.
+ * per-request into it, such as the check-in framing, which carries the current
+ * server time, and every request misses while still looking completely normal. Nothing about the replies would tell you.
  */
 
 let h: Harness;
@@ -39,7 +38,7 @@ afterAll(() => h?.stop());
 
 describe("the persona is cached", () => {
   test("it is the first block and carries a cache breakpoint", async () => {
-    const call = await chat({ posture: "thinking" });
+    const call = await chat({});
 
     expect(call.systemBlocks.length).toBeGreaterThan(0);
     expect(call.systemBlocks[0]!.cache_control).toEqual({ type: "ephemeral" });
@@ -47,32 +46,38 @@ describe("the persona is cached", () => {
   });
 
   test("the per-request half is a separate, uncached block", async () => {
-    const call = await chat({ posture: "panic" });
+    /*
+     * The posture line used to be the per-request half this asserted on.
+     * Postures are gone: two of the three were unreachable from the interface,
+     * so the whole model was removed rather than wired up. The check-in
+     * framing is what occupies that half now, and it carries the current
+     * server time, which makes it the more dangerous thing to fold into a
+     * cached prefix anyway.
+     */
+    const call = await chat({ kind: "checkin", userEmail: founder.email });
 
-    // The posture must not be inside the cached prefix.
-    expect(call.systemBlocks[0]!.text).not.toContain("PANIC");
+    expect(call.systemBlocks[0]!.text).not.toContain("CURRENT_SERVER_TIME");
     const tail = call.systemBlocks.slice(1).map((b) => b.text).join("\n");
-    expect(tail).toContain("PANIC");
+    expect(tail).toContain("CURRENT_SERVER_TIME");
     expect(call.systemBlocks.slice(1).every((b) => b.cache_control === undefined)).toBe(true);
   });
 });
 
 describe("the cached prefix is stable", () => {
-  test("byte-identical across postures", async () => {
-    // If the prefix changed with posture, every switch would cost a fresh write.
-    const thinking = await chat({ posture: "thinking" });
-    const venting = await chat({ posture: "venting" });
+  test("byte-identical whatever the client sends", async () => {
+    // A stray field from an old client must not reach the cached prefix.
+    const plain = await chat({});
+    const noisy = await chat({ posture: "panic", personality: "marten" });
 
-    expect(venting.systemBlocks[0]!.text).toBe(thinking.systemBlocks[0]!.text);
+    expect(noisy.systemBlocks[0]!.text).toBe(plain.systemBlocks[0]!.text);
   });
 
   test("byte-identical across founders", async () => {
     const second = await createFounder(h, organizer, "second@example.test", "Bo", "second-password-11");
-    const first = await chat({ posture: "thinking" });
+    const first = await chat({});
 
     const res = await post(h, "/api/chat", {
       messages: [{ role: "user", content: "Same question." }],
-      posture: "thinking",
     }, second.cookie);
     expect(res.status).toBe(200);
     const other = h.advisorCalls[h.advisorCalls.length - 1]!;
@@ -87,7 +92,7 @@ describe("the cached prefix is stable", () => {
      * serverTime, so concatenating it onto the persona would change the prefix
      * on literally every request and the cache would never once hit.
      */
-    const plain = await chat({ posture: "thinking" });
+    const plain = await chat({});
     const checkin = await chat({ kind: "checkin", userEmail: founder.email });
 
     expect(checkin.systemBlocks[0]!.text).toBe(plain.systemBlocks[0]!.text);

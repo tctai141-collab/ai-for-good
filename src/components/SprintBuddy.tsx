@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import Tasks, { useDeadlines, type DeadlinesState } from "./Tasks";
-import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
+import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
+import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
 import {
   WORKING_GENIUS_ITEMS,
   WORKING_GENIUS_TYPES,
@@ -56,9 +56,34 @@ function formatMarkdown(text: string): string {
  *
  * It shipped in the public bundle all the same, which meant a persona the
  * product had deliberately stopped using was readable by anyone who opened
- * devtools, and one careless change away from being sent for real. Replaced by
- * the posture line alone — the only part that was ever load-bearing.
+ * devtools, and one careless change away from being sent for real.
+ *
+ * Nothing replaced it. The posture that survived that cleanup has since gone
+ * too, so the client now sends messages and a flag for which flow to run, and
+ * the server decides everything else.
  */
+
+/**
+ * The calendar day in Helsinki, as YYYY-MM-DD.
+ *
+ * The cohort is in one timezone and the server is UTC, so "today" has to mean
+ * the founder's today. en-CA is used only because it formats as ISO; no locale
+ * is implied by it.
+ */
+function asDate(stamp: string): Date {
+  // SQLite writes "2026-09-15 06:12:44" in UTC with no marker; an optimistic
+  // row written here is already a full ISO string. Both have to parse the same.
+  return new Date(/[TZ]/.test(stamp) ? stamp : stamp.replace(" ", "T") + "Z");
+}
+
+function helsinkiDay(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Helsinki",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
 
 /* ---------- Lightweight local classifiers for journal metadata ---------- */
 function guessTheme(text: string): string {
@@ -120,17 +145,12 @@ async function callClaude(
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
   const theme = guessTheme(lastUser);
 
-  let posture: "panic" | "thinking" | "venting" = "thinking";
-  if (system.includes("PANIC")) posture = "panic";
-  else if (system.includes("VENTING")) posture = "venting";
-
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages,
-        posture,
         stream: !!onChunk,
         kind,
         userEmail: ctx?.userEmail,
@@ -205,12 +225,27 @@ const C = {
  * there is nothing to pick between. Threads saved under the old wire values
  * still open — the server ignores the field rather than mapping it.
  */
+/*
+ * Threads still carry a state, and it is always "thinking".
+ *
+ * There were three: panic, thinking, venting, each with its own posture sent to
+ * the model. No founder could ever reach two of them. The mode was declared
+ * `const [mode] = useState(...)` with no setter and nothing in the interface
+ * set it, so every conversation ever started was "thinking" and the panic and
+ * venting postures were unreachable code that looked shipped and passed tests.
+ *
+ * Removed rather than wired up, deliberately. Making it work would have meant
+ * asking a founder in trouble to first classify their own emotional state,
+ * which is friction at the worst possible moment. The general prompt already
+ * handles distress: it names reversible decisions, separates the feeling from
+ * the decision, and says almost nothing has to be decided tonight.
+ *
+ * The column keeps its CHECK on all three values because threads saved before
+ * this are still in the database with the old ones.
+ */
 type StateKey = "panic" | "thinking" | "venting";
-const STATES: Record<StateKey, { label: string; color: string; posture: string }> = {
-  panic: { label: "Panicking", color: C.red, posture: "They are in PANIC. Take the temperature down. Be calm and very brief. Give exactly ONE next step. Help them not act rashly tonight." },
-  thinking: { label: "Thinking it through", color: C.blue, posture: "They are PLANNING. Give a little substance, name the key tradeoff, ask one sharp question. Still concise." },
-  venting: { label: "Venting", color: C.yellow, posture: "They are VENTING. Mostly witness and validate. One gentle reframe. Do not problem-solve hard." },
-};
+const THREAD_STATE: StateKey = "thinking";
+const CHAT_ACCENT = C.blue;
 
 const THEME_COLOR: Record<string, string> = { Runway: C.red, Hiring: C.blue, Cofounder: C.yellow, Product: C.blue, "Self-doubt": C.red, Fundraise: C.yellow, Growth: C.blue };
 const themeColor = (t: string) => THEME_COLOR[t] || C.blue;
@@ -356,22 +391,57 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
      because the collapsed-sidebar button needs the overdue count too. */
   const deadlines = useDeadlines(persona === "founder" ? userEmail : undefined);
 
-  /* Today's check-in: once a day, persists via date-keyed localStorage */
-  const todayKey = `sprintbuddy:checkin:${new Date().toISOString().slice(0, 10)}`;
-  const [checkinDoneToday, setCheckinDoneToday] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(todayKey) === "1";
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (checkinDoneToday) window.localStorage.setItem(todayKey, "1");
-  }, [checkinDoneToday, todayKey]);
+  /*
+   * Today's check-in, answered by the server's own record rather than by this
+   * browser's localStorage.
+   *
+   * Two things were wrong with the flag this replaces. It lived in
+   * localStorage, so a founder who checked in on a laptop was invited to check
+   * in again on their phone, and the record the server already held was never
+   * asked. And it was keyed on the UTC date while every other date in the
+   * product is computed in Helsinki, so for three hours every night the app
+   * and the reminders disagreed about what day it was.
+   */
+  const [locallyCheckedIn, setLocallyCheckedIn] = useState(false);
+  const checkinDoneToday = useMemo(() => {
+    if (locallyCheckedIn) return true;
+    const last = checkins[0]?.createdAt;
+    return Boolean(last && helsinkiDay(asDate(last)) === helsinkiDay(new Date()));
+  }, [checkins, locallyCheckedIn]);
   const startCheckin = () => {
     if (checkinDoneToday) return;
     setView("chat");
     setActive({ checkin: true, _t: Date.now() });
   };
-  const markCheckinDone = () => setCheckinDoneToday(true);
+  const markCheckinDone = () => setLocallyCheckedIn(true);
+
+  /*
+   * The five-second version.
+   *
+   * The full check-in is three questions answered in prose, which is two to
+   * four minutes. That is the right depth and the wrong price for a daily
+   * habit: a five-minute daily log is abandoned inside a fortnight while a
+   * five-second one survives for months. With no notification channel to lean
+   * on, the cheap path matters more, not less.
+   *
+   * It writes the same kind of row as the long version, so a founder who only
+   * ever taps still builds a trend, and the operating team still gets a signal.
+   * The scale is attention needed, not happiness, matching what the model emits
+   * from the full check-in: higher means more worth a conversation.
+   */
+  const quickCheckin = (mood: number, label: string, note: string) => {
+    const entry: Checkin = {
+      id: crypto.randomUUID(),
+      refDecisionId: null,
+      theme: "Check-in",
+      prompt: note.trim() ? `${label}. ${note.trim()}` : label,
+      mood,
+      createdAt: new Date().toISOString(),
+    };
+    setCheckins((prev) => [entry, ...prev]);
+    setLocallyCheckedIn(true);
+    if (userEmail) saveCheckin(userEmail, entry).catch(() => {});
+  };
 
   // An optimistic in-session bump so a theme appears as soon as it is talked
   // about; the server recomputes it properly on the next load. The increment
@@ -430,6 +500,7 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         checkinDone={checkinDoneToday}
         deadlines={deadlines}
         onStartCheckin={startCheckin}
+        onQuickCheckin={quickCheckin}
         onNew={newChat}
         onThread={(id) => { setView("chat"); setActive({ id }); }}
         onDeleteThread={removeThread}
@@ -441,6 +512,15 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
       />
 
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {persona === "founder" && (
+          <MobileActions
+            checkinDone={checkinDoneToday}
+            onStartCheckin={startCheckin}
+            onQuickCheckin={quickCheckin}
+            deadlines={deadlines}
+            onOpenSidebar={() => setSidebarOpen(true)}
+          />
+        )}
         {!sidebarOpen && (
           <button
             onClick={toggleSidebar}
@@ -507,6 +587,7 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
             setVisits={setVisits}
             markCheckinDone={markCheckinDone}
             userEmail={userEmail}
+            firstRun={threads.length === 0 && checkins.length === 0}
           />
         )}
         {persona === "founder" && view === "reflections" && (
@@ -537,6 +618,7 @@ type SidebarProps = {
   open: boolean;
   onToggle: () => void;
   checkinDone: boolean;
+  onQuickCheckin: (mood: number, label: string, note: string) => void;
   deadlines: DeadlinesState;
   onStartCheckin: () => void;
   onNew: () => void;
@@ -550,7 +632,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onQuickCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -616,6 +698,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               <span style={{ width: 8, height: 8, borderRadius: 9, background: C.red, flexShrink: 0 }} />
             </button>
           )}
+
+          {!checkinDone && <QuickCheckin onQuickCheckin={onQuickCheckin} />}
 
           <button onClick={onNew} className="newbtn" style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: C.white, color: C.black, border: "none", borderRadius: 12, padding: "14px 16px", fontWeight: 800, fontSize: 14.5, cursor: "pointer", letterSpacing: "0.01em" }}>
             <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 900, marginRight: 2 }}>+</span> New conversation
@@ -852,6 +936,8 @@ type ChatProps = {
   setVisits: React.Dispatch<React.SetStateAction<number>>;
   markCheckinDone: () => void;
   userEmail?: string;
+  /** No threads and no check-ins yet: they have never seen this screen. */
+  firstRun: boolean;
 };
 
 /*
@@ -865,6 +951,19 @@ type ChatProps = {
  * Only the neutral prompt rotates. Panic and venting keep their own wording:
  * a founder who has told the app they are panicking should not be met with
  * "We're cooked."
+ */
+/*
+ * Thirteen lines were cut from this list on 2026-08-23: "We're cooked.",
+ * "It's over.", "Pack it up.", "Massive L.", "Mid.", and the rest of the
+ * defeatist ones.
+ *
+ * This is the most-read string in the product and it is drawn at random before
+ * the founder has typed anything, so it cannot know what kind of day they are
+ * having. A founder opening the app an hour after losing a pilot was being met
+ * with "It's over." The register is right and stays; those particular lines
+ * were the product having a joke at the expense of the one moment it exists
+ * for. "They cooked." and "You cooked." are compliments in this register and
+ * stayed.
  */
 const IDLE_PROMPTS = [
   "Who are you cooking?",
@@ -892,8 +991,6 @@ const IDLE_PROMPTS = [
   "That's cap.",
   "Be so for real.",
   "Bffr.",
-  "We're cooked.",
-  "Are we cooked?",
   "We're so back.",
   "They're locked in.",
   "Stop yapping.",
@@ -907,7 +1004,6 @@ const IDLE_PROMPTS = [
   "Real.",
   "Valid.",
   "Based.",
-  "Mid.",
   "Fire.",
   "Bussin'.",
   "Hits different.",
@@ -921,19 +1017,15 @@ const IDLE_PROMPTS = [
   "Plot twist.",
   "Aura check.",
   "+100 aura.",
-  "Negative aura.",
   "W or L?",
   "Common W.",
-  "Massive L.",
   "Lock in.",
   "Stay locked in.",
   "Built different.",
   "Rent free.",
   "Say it louder.",
   "Be fr.",
-  "I fear…",
   "We listen and we don't judge.",
-  "Chat, are we cooked?",
   "Chat, what are we doing?",
   "Chat, be honest.",
   "Chat, is this real?",
@@ -945,12 +1037,6 @@ const IDLE_PROMPTS = [
   "Nobody asked.",
   "Not the…",
   "The audacity.",
-  "I'm crying.",
-  "I'm dead.",
-  "I can't 😭",
-  "It's over.",
-  "We're finished.",
-  "Pack it up.",
   "Go touch grass.",
 ] as const;
 
@@ -962,7 +1048,7 @@ function drawPrompt(): string {
 /** A new line on open, and again every hour the tab stays put. */
 const PROMPT_ROTATE_MS = 60 * 60 * 1000;
 
-function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail }: ChatProps) {
+function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail, firstRun }: ChatProps) {
   /* The component is mounted client:only, so drawing at first render cannot
      desync from a server-rendered value — there is no server render. */
   const [idlePrompt, setIdlePrompt] = useState(drawPrompt);
@@ -983,7 +1069,6 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
   const [msgs, setMsgs] = useState<Msg[]>(() => existing ? existing.messages : []);
   const [input, setInput] = useState("");
-  const [mode] = useState<StateKey>(existing?.state || "thinking");
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ kind: "logged"; text: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -991,8 +1076,8 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const checkinInitiated = useRef(false);
 
   const threadId = existing?.id || null;
-  const accent = isCheckin ? C.blue : STATES[mode].color;
-  const postureLabel = isCheckin ? "Check-in" : STATES[mode].label.split(" ")[0];
+  const accent = isCheckin ? C.blue : CHAT_ACCENT;
+  const postureLabel = isCheckin ? "Check-in" : "Thinking";
 
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [msgs, busy, banner]);
 
@@ -1008,9 +1093,9 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   };
 
   const ctx = useTimeContext();
-  // Carries the posture to callClaude, which reads it and sends the label.
-  // The real system prompt is assembled server-side and never leaves it.
-  const sys = isCheckin ? "You are running today's daily check-in." : STATES[mode].posture;
+  // The real system prompt is assembled server-side and never leaves it. This
+  // only tells the route which of the two flows to run.
+  const sys = isCheckin ? "You are running today's daily check-in." : "";
 
   const founderName = userEmail
     ? (userEmail.split("@")[0] ?? userEmail).replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -1029,7 +1114,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       const exists = prev.some((x) => x.id === id);
       const base = exists
         ? prev.map((x) => x.id === id ? { ...x, messages: finalMsgs, lastAt: "now" } : x)
-        : [{ id, title, theme: isCheckin ? "Check-in" : (theme || "—"), state: mode, lastAt: "now", messages: finalMsgs, ...(isCheckin ? { kind: "checkin" as const } : {}) }, ...prev];
+        : [{ id, title, theme: isCheckin ? "Check-in" : (theme || "—"), state: THREAD_STATE, lastAt: "now", messages: finalMsgs, ...(isCheckin ? { kind: "checkin" as const } : {}) }, ...prev];
       if (userEmail) {
         const saved = base.find((x) => x.id === id);
         if (saved) saveThread(userEmail, saved).catch(() => {});
@@ -1131,7 +1216,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       <div ref={scroller} style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "26px 24px 10px" }}>
           {isFresh && msgs.length === 0 && !isCheckin ? (
-            <EmptyState ctx={ctx} />
+            <EmptyState ctx={ctx} firstRun={firstRun} />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {msgs.map((m, i) => m.role === "assistant" ? (
@@ -1166,7 +1251,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 24px 18px" }}>
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
-              placeholder={mode === "panic" ? "Say it plainly. One thing at a time." : mode === "venting" ? "Let it out, nobody's grading this." : idlePrompt}
+              placeholder={idlePrompt}
               style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
             <button
               onClick={() => send()}
@@ -1218,11 +1303,170 @@ const WG_BAND_META: Record<WorkingGeniusBand, { title: string; blurb: string; ac
   },
 };
 
-function EmptyState({ ctx }: { ctx: TimeCtx }) {
+/**
+ * The five-second check-in.
+ *
+ * Five labels, not a 0-10 scale. A number asks the founder to calibrate against
+ * an invisible standard; a word they recognise does not, and the point of this
+ * control is that it costs no thought. The values behind them are attention
+ * needed rather than happiness, matching the signal the full check-in produces,
+ * so both kinds of row plot on the same trend.
+ *
+ * The optional line is deliberately optional and deliberately one line. A
+ * founder with ninety seconds should be able to register something real; a
+ * founder with fifteen minutes should be using the full check-in instead.
+ */
+const QUICK_MOODS: Array<{ label: string; mood: number; color: string }> = [
+  { label: "Flying", mood: 10, color: "#7CB893" },
+  { label: "Good", mood: 25, color: "#7CB893" },
+  { label: "Fine", mood: 40, color: C.sub },
+  { label: "Stretched", mood: 65, color: C.yellow },
+  { label: "Struggling", mood: 85, color: C.red },
+];
+
+function QuickCheckin({
+  onQuickCheckin,
+  compact,
+}: {
+  onQuickCheckin: (mood: number, label: string, note: string) => void;
+  compact?: boolean;
+}) {
+  const [picked, setPicked] = useState<(typeof QUICK_MOODS)[number] | null>(null);
+  const [note, setNote] = useState("");
+
+  if (picked) {
+    return (
+      <form
+        className={compact ? "quick-note quick-note-compact" : "quick-note"}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onQuickCheckin(picked.mood, picked.label, note);
+        }}
+      >
+        <input
+          autoFocus
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={200}
+          placeholder={`${picked.label}. Add a line? Optional.`}
+          aria-label="One line about today, optional"
+        />
+        <button type="submit">Save</button>
+      </form>
+    );
+  }
+
+  return (
+    <div className={compact ? "quick-row quick-row-compact" : "quick-row"}>
+      {!compact && <span className="quick-label">Or in one tap</span>}
+      <div className="quick-buttons">
+        {QUICK_MOODS.map((m) => (
+          <button
+            key={m.label}
+            type="button"
+            onClick={() => setPicked(m)}
+            style={{ color: m.color }}
+            title={`${m.label}, then add a line if you want to`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The two daily actions, on a phone.
+ *
+ * Below 700px the sidebar collapses to zero width, and both the check-in and
+ * the whole deadline list live inside it. That left the device a founder
+ * actually carries between sessions showing nothing they could act on. This
+ * strip is hidden entirely on wider screens, where the sidebar already does
+ * the job properly.
+ */
+function MobileActions({
+  checkinDone,
+  onStartCheckin,
+  onQuickCheckin,
+  deadlines,
+  onOpenSidebar,
+}: {
+  checkinDone: boolean;
+  onStartCheckin: () => void;
+  onQuickCheckin: (mood: number, label: string, note: string) => void;
+  deadlines: DeadlinesState;
+  onOpenSidebar: () => void;
+}) {
+  const next = nextUp(deadlines);
+  const overdue = next?.item.group === "overdue";
+
+  return (
+    <div className="mobile-actions">
+      {checkinDone ? (
+        <span className="mobile-actions-done">
+          <span aria-hidden="true">✓</span> Checked in
+        </span>
+      ) : (
+        <button type="button" onClick={onStartCheckin} className="mobile-actions-checkin">
+          Today&rsquo;s check-in
+        </button>
+      )}
+
+      {!checkinDone && <QuickCheckin onQuickCheckin={onQuickCheckin} compact />}
+
+      {next && (
+        <button
+          type="button"
+          onClick={onOpenSidebar}
+          className="mobile-actions-next"
+          style={overdue ? { color: C.red, borderColor: "rgba(253, 99, 96, 0.4)" } : undefined}
+        >
+          <span className="mobile-actions-title">{next.item.title}</span>
+          <span className="mobile-actions-when">{next.label}</span>
+          {next.more > 0 && <span className="mobile-actions-more">+{next.more}</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ ctx, firstRun }: { ctx: TimeCtx; firstRun: boolean }) {
   return (
     <div className="rise" style={{ paddingTop: 30 }}>
       <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 38, letterSpacing: "-0.025em", lineHeight: 1.04, margin: "0 0 8px", color: C.ink, fontVariationSettings: '"opsz" 50' }}>{ctx.greeting}</h1>
-      <p style={{ color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 15.5, margin: "0 0 32px", fontVariationSettings: '"opsz" 22' }}>Say what's going on.</p>
+      <p style={{ color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 15.5, margin: "0 0 32px", fontVariationSettings: '"opsz" 22' }}>Say what&rsquo;s going on.</p>
+
+      {/*
+        Shown once, on a genuinely empty account.
+
+        A founder used to arrive here straight from setting a password, with no
+        idea what this was for and no statement that it was private. The
+        privacy promise existed only on the sign-in page they had already left.
+        Two sentences, then it never appears again: the second visit is not the
+        moment to explain the product.
+      */}
+      {firstRun && (
+        <div
+          style={{
+            maxWidth: 520,
+            padding: "14px 16px",
+            border: `1px solid ${C.line}`,
+            borderRadius: 10,
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
+            This is your space to think out loud. Sprint Buddy is software, not a
+            person, and it carries what this programme&rsquo;s mentors teach.
+          </p>
+          <p style={{ margin: "8px 0 0", fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
+            <strong style={{ color: C.ink }}>Nothing here is read by the team</strong> unless
+            you share a conversation on purpose. Start anywhere, or use today&rsquo;s
+            check-in.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1364,6 +1608,16 @@ function Reflections({
           label="Open loop to close next"
           value={nextOpenDecision ? `${nextOpenDecision.summary} (${nextOpenDecision.door})` : "No open decision logged"}
         />
+      </div>
+
+      <div style={{ margin: "0 0 20px", padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
+        <p style={{ ...kicker, marginBottom: 12 }}>What's on</p>
+        <Programme />
+      </div>
+
+      <div style={{ margin: "0 0 20px", padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
+        <p style={{ ...kicker, marginBottom: 12 }}>The sprint so far</p>
+        <Arc checkins={checkins} />
       </div>
 
       <div style={{ margin: "0 0 34px", padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
@@ -1569,9 +1823,132 @@ function Reflections({
         )}
       </div>
 
+      <SprintRecord
+        threads={threads}
+        decisions={decisions}
+        checkins={checkins}
+        themes={themes}
+        result={wgResult}
+      />
+
       <p style={{ marginTop: 44, paddingTop: 22, borderTop: `1px solid ${C.line}`, color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14, lineHeight: 1.5, fontVariationSettings: '"opsz" 18' }}>
         Open loops come back as soft check-ins in the chat. That is how they get closed.
       </p>
+    </div>
+  );
+}
+
+/**
+ * The record of the sprint, printable.
+ *
+ * The programme ends and there is nothing to take away from it. This is the
+ * closing artefact, assembled entirely from what the founder actually did:
+ * counted, not narrated. Nothing here is generated by a model, so there is
+ * nothing in it that can be wrong about their twelve weeks.
+ *
+ * Visible from week one rather than unlocked at the end. A summary that appears
+ * only once it is too late to influence is a worse thing than one that fills in
+ * while you watch.
+ */
+function SprintRecord({
+  threads,
+  decisions,
+  checkins,
+  themes,
+  result,
+}: {
+  threads: Thread[];
+  decisions: Decision[];
+  checkins: Checkin[];
+  themes: ThemeArc[];
+  result: WorkingGeniusResult | null;
+}) {
+  const closed = decisions.filter((d) => d.status === "closed");
+  const dated = checkins.filter((c) => c.createdAt).map((c) => asDate(c.createdAt!));
+  const first = dated.length ? dated[dated.length - 1]! : null;
+  const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const top = themes
+    .filter((t) => t.arc.reduce((sum, n) => sum + n, 0) > 0)
+    .slice(0, 4)
+    .map((t) => t.name);
+
+  const nothingYet = !checkins.length && !threads.length;
+
+  return (
+    <section className="sprint-record" style={{ marginTop: 44, paddingTop: 26, borderTop: `2px solid ${C.line}` }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
+        <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", color: C.ink }}>
+          Your record
+        </h2>
+        {!nothingYet && (
+          <button
+            type="button"
+            className="record-print"
+            onClick={() => window.print()}
+          >
+            Print or save as PDF
+          </button>
+        )}
+      </div>
+      <p style={{ margin: "0 0 18px", fontSize: 13.5, color: C.faint, lineHeight: 1.6 }}>
+        Yours to keep. Counted from what you did, not written about you.
+      </p>
+
+      {nothingYet ? (
+        <p style={{ margin: 0, fontSize: 13.5, color: C.faint }}>This fills in as you go.</p>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 14, marginBottom: 20 }}>
+            <RecordStat n={checkins.length} label={checkins.length === 1 ? "check-in" : "check-ins"} />
+            <RecordStat n={threads.length} label={threads.length === 1 ? "conversation" : "conversations"} />
+            <RecordStat n={decisions.length} label={decisions.length === 1 ? "decision" : "decisions"} />
+            <RecordStat n={closed.length} label="closed" />
+          </div>
+
+          {first && (
+            <p style={{ margin: "0 0 16px", fontSize: 13.5, color: C.sub }}>
+              Started {fmt(first)}.
+            </p>
+          )}
+
+          {top.length > 0 && (
+            <p style={{ margin: "0 0 16px", fontSize: 14, color: C.sub, lineHeight: 1.6 }}>
+              <strong style={{ color: C.ink }}>What kept coming up:</strong> {top.join(", ")}.
+            </p>
+          )}
+
+          {result && (
+            <p style={{ margin: "0 0 16px", fontSize: 14, color: C.sub, lineHeight: 1.6 }}>
+              <strong style={{ color: C.ink }}>Where your energy goes:</strong>{" "}
+              {result.bands.genius.map((id) => typeById(id).label).join(" and ")}, with{" "}
+              {result.bands.frustration.map((id) => typeById(id).label).join(" and ")} draining you.
+            </p>
+          )}
+
+          {closed.length > 0 && (
+            <>
+              <p style={{ ...kicker, margin: "22px 0 10px" }}>Decisions you closed</p>
+              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 10 }}>
+                {closed.slice(0, 12).map((d) => (
+                  <li key={d.id} style={{ fontSize: 13.5, lineHeight: 1.55, color: C.sub, borderLeft: `2px solid ${C.line}`, paddingLeft: 12 }}>
+                    <span style={{ color: C.ink }}>{d.summary}</span>
+                    {d.outcome ? <> {"\u2014"} {d.outcome}</> : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function RecordStat({ n, label }: { n: number; label: string }) {
+  return (
+    <div>
+      <p style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 800, color: C.ink, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{n}</p>
+      <p style={{ margin: "4px 0 0", fontSize: 12, color: C.faint, letterSpacing: 0.3 }}>{label}</p>
     </div>
   );
 }
@@ -1732,6 +2109,159 @@ function WgCaveats({ result }: { result: WorkingGeniusResult }) {
         own instrument, not the official assessment.
       </p>
     </div>
+  );
+}
+
+/**
+ * The sprint so far, as one line.
+ *
+ * The product promised a founder that the value compounds and then never once
+ * showed it: twelve weeks produced "N check-ins saved" and a single latest
+ * number. This is the smallest honest fix.
+ *
+ * Deliberately a trend and not a streak. A streak punishes exactly the founder
+ * having a hard month, which is the one this should be kindest to. A trend
+ * rewards nothing and shames nothing; it just shows what happened.
+ *
+ * Nothing is drawn below three points. A two-point "trend" is a line between
+ * two moods and reads as a finding when it is an accident.
+ */
+function Arc({ checkins }: { checkins: Checkin[] }) {
+  const points = useMemo(() => {
+    return checkins
+      .filter((c) => typeof c.mood === "number" && c.createdAt)
+      .slice(0, 40)
+      .reverse()
+      .map((c) => ({ mood: c.mood as number, at: asDate(c.createdAt as string) }));
+  }, [checkins]);
+
+  if (points.length < 3) {
+    return (
+      <p style={{ margin: 0, fontSize: 13, color: C.faint, lineHeight: 1.6 }}>
+        Your trend appears here after three check-ins. {points.length === 0 ? "None yet." : `${points.length} so far.`}
+      </p>
+    );
+  }
+
+  const W = 560;
+  const H = 96;
+  const PAD = 6;
+  const x = (i: number) => PAD + (i * (W - PAD * 2)) / Math.max(1, points.length - 1);
+  // The scale is attention needed, so 0 at the top reads as the good end.
+  const y = (m: number) => PAD + ((m / 100) * (H - PAD * 2));
+
+  const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.mood).toFixed(1)}`).join(" ");
+  const area = `${line} L${x(points.length - 1).toFixed(1)},${H - PAD} L${x(0).toFixed(1)},${H - PAD} Z`;
+
+  const last = points[points.length - 1]!;
+  const first = points[0]!;
+  const shift = last.mood - first.mood;
+  const endColor = signalColor(last.mood);
+
+  const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const summary = `${points.length} check-ins from ${fmt(first.at)} to ${fmt(last.at)}. ` +
+    `Started ${signalLabel(first.mood).toLowerCase()}, now ${signalLabel(last.mood).toLowerCase()}.`;
+
+  return (
+    <div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        height={H}
+        role="img"
+        aria-label={summary}
+        style={{ display: "block", overflow: "visible" }}
+      >
+        <title>{summary}</title>
+        {/* Two recessive rules at the band edges, so a reader can place a point
+            without a full grid competing with the line. */}
+        {[40, 70].map((band) => (
+          <line key={band} x1={PAD} x2={W - PAD} y1={y(band)} y2={y(band)} stroke={C.line} strokeWidth="1" strokeDasharray="2 4" />
+        ))}
+        <path d={area} fill={C.blue} opacity="0.08" />
+        <path d={line} fill="none" stroke={C.blue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p, i) => (
+          <circle key={i} cx={x(i)} cy={y(p.mood)} r={i === points.length - 1 ? 4.5 : 2.5}
+            fill={i === points.length - 1 ? endColor : C.blue}
+            stroke={C.bg} strokeWidth="2">
+            <title>{`${fmt(p.at)} · ${signalLabel(p.mood)} (${p.mood}/100)`}</title>
+          </circle>
+        ))}
+      </svg>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 18px", marginTop: 10, fontSize: 12.5, color: C.faint }}>
+        <span><Stat c={C.ink}>{points.length}</Stat> check-ins</span>
+        <span>{fmt(first.at)} to {fmt(last.at)}</span>
+        <span style={{ color: endColor }}>Now {signalLabel(last.mood).toLowerCase()}</span>
+        {Math.abs(shift) >= 10 && (
+          <span>{shift < 0 ? "Steadier than you started" : "Under more strain than you started"}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type ProgrammeWeek = { week: number; phase: string; title: string; milestones: string; sessions: string };
+
+/**
+ * What is on, this week and next.
+ *
+ * The schedule already existed, editable in the admin page and handed to the
+ * advisor server-side, and was the one thing a founder could not look up. Read
+ * only, and only the weeks that are still ahead plus the one in progress:
+ * a twelve-week wall of text is a thing to scroll past, not a thing to read.
+ */
+function Programme() {
+  const [weeks, setWeeks] = useState<ProgrammeWeek[] | null>(null);
+  const [now, setNow] = useState(1);
+
+  useEffect(() => {
+    let live = true;
+    fetch("/api/programme")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!live || !d) return;
+        setWeeks((d.weeks as ProgrammeWeek[]) ?? []);
+        setNow((d.currentWeek as number) ?? 1);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  const shown = useMemo(() => {
+    if (!weeks) return [];
+    return weeks
+      .filter((w) => w.week >= now && (w.title || w.milestones || w.sessions))
+      .slice(0, 3);
+  }, [weeks, now]);
+
+  if (!weeks) return null;
+  if (!shown.length) {
+    return (
+      <p style={{ margin: 0, fontSize: 13, color: C.faint, lineHeight: 1.6 }}>
+        Nothing scheduled yet. The team fills this in as the sprint is planned.
+      </p>
+    );
+  }
+
+  return (
+    <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 14 }}>
+      {shown.map((w) => (
+        <li key={w.week} style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 14, alignItems: "baseline" }}>
+          <span style={{
+            fontSize: 11, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase",
+            color: w.week === now ? C.blue : C.faint, whiteSpace: "nowrap",
+          }}>
+            {w.week === now ? "This week" : `Week ${w.week}`}
+          </span>
+          <div>
+            {w.title && <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>{w.title}</p>}
+            {w.sessions && <p style={{ margin: "3px 0 0", fontSize: 13.5, color: C.sub, lineHeight: 1.5 }}>{w.sessions}</p>}
+            {w.milestones && <p style={{ margin: "3px 0 0", fontSize: 13, color: C.faint, lineHeight: 1.5 }}>{w.milestones}</p>}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -2128,6 +2658,157 @@ const CSS = `
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
 .composer-box:focus-within { border-color: var(--brand-blue)!important; }
+
+/* ---- The record, and printing it ------------------------------------------
+   Printing is the export. A founder who wants to keep this should not need an
+   account to read it later, and a PDF is the one format that outlives the
+   programme without anything being built to serve it. */
+.record-print {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: inherit;
+  font: 600 12.5px/1 var(--font-family);
+  cursor: pointer;
+}
+.record-print:hover { background: rgba(255,255,255,.06); }
+.record-print:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+
+@media print {
+  /* Only the record prints. Everything else on this page is navigation or
+     something the founder can see any time they are signed in. */
+  body * { visibility: hidden !important; }
+  .sprint-record, .sprint-record * { visibility: visible !important; }
+  .sprint-record {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border-top: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    color: #000 !important;
+  }
+  .sprint-record * { color: #000 !important; }
+  .record-print { display: none !important; }
+}
+
+/* ---- Quick check-in ------------------------------------------------------- */
+.quick-row { margin: -6px 0 14px; }
+.quick-label {
+  display: block;
+  font: 600 10.5px/1 var(--font-family);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint, #6B7280);
+  padding: 0 4px 7px;
+}
+.quick-buttons { display: flex; flex-wrap: wrap; gap: 5px; }
+.quick-buttons button {
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 0 9px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  font: 600 12px/1 var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.quick-buttons button:hover { background: rgba(255,255,255,.06); }
+.quick-buttons button:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+
+.quick-note { display: flex; gap: 6px; margin: -6px 0 14px; }
+.quick-note input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: inherit;
+  font: 400 13px/1 var(--font-family);
+}
+.quick-note input:focus { outline: none; border-color: var(--brand-blue); }
+.quick-note button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: none;
+  background: var(--brand-blue);
+  color: oklch(13% 0.008 250);
+  font: 700 12.5px/1 var(--font-family);
+  cursor: pointer;
+}
+.quick-row-compact, .quick-note-compact { margin: 0; flex: 0 0 auto; }
+.quick-row-compact .quick-buttons { flex-wrap: nowrap; }
+.quick-note-compact input { min-width: 9rem; }
+
+/* ---- Mobile actions -------------------------------------------------------
+   Hidden entirely on anything wide enough to show the sidebar, which is where
+   these two live properly. This is the phone fallback, not a second home. */
+.mobile-actions { display: none; }
+@media (max-width: 700px) {
+  .mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 10px 12px 10px 60px;
+    border-bottom: 1px solid var(--line-strong);
+    background: var(--card, rgba(255,255,255,0.03));
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mobile-actions::-webkit-scrollbar { display: none; }
+}
+.mobile-actions-checkin {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(70, 165, 255, 0.4);
+  background: rgba(70, 165, 255, 0.14);
+  color: var(--brand-blue);
+  font: 700 13.5px/1 var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mobile-actions-done {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  font: 600 13px/1 var(--font-family);
+  color: #7CB893;
+  white-space: nowrap;
+}
+.mobile-actions-next {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: inherit;
+  font: 500 13px/1.2 var(--font-family);
+  cursor: pointer;
+  text-align: left;
+}
+.mobile-actions-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-actions-when { flex: 0 0 auto; font-weight: 700; font-size: 12px; opacity: .85; }
+.mobile-actions-more { flex: 0 0 auto; font-size: 11.5px; opacity: .6; }
+.mobile-actions-checkin:focus-visible,
+.mobile-actions-next:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
 .send-button {
   /* 44px is the smallest reliable touch target on iOS and Android, and this
      is the control founders hit most. It was 36px. */
