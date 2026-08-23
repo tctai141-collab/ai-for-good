@@ -2,6 +2,15 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createFounder, createOrganizer, get, startServer, type Harness, type Session } from "./helpers/harness";
 
 /**
+ * Sessions are stored as SHA-256 of the cookie value, so a test poking at the
+ * row has to hash the same way production does. If this drifts, the tests
+ * silently match nothing and pass for the wrong reason.
+ */
+function sessionKey(token: string): string {
+  return new Bun.CryptoHasher("sha256").update(token).digest("hex");
+}
+
+/**
  * Session lifetime: a rolling idle window and an absolute ceiling.
  *
  * It used to be a single fixed 30 days from login with no idle expiry, so a
@@ -37,10 +46,10 @@ function setDeadlines(session: Session, fields: { expiresAt?: string; createdAt?
   const db = h.db();
   try {
     if (fields.expiresAt) {
-      db.run("UPDATE sessions SET expires_at = $v WHERE token = $t", { $v: fields.expiresAt, $t: tokenOf(session) });
+      db.run("UPDATE sessions SET expires_at = $v WHERE token_hash = $t", { $v: fields.expiresAt, $t: sessionKey(tokenOf(session)) });
     }
     if (fields.createdAt) {
-      db.run("UPDATE sessions SET created_at = $v WHERE token = $t", { $v: fields.createdAt, $t: tokenOf(session) });
+      db.run("UPDATE sessions SET created_at = $v WHERE token_hash = $t", { $v: fields.createdAt, $t: sessionKey(tokenOf(session)) });
     }
   } finally {
     db.close();
@@ -51,8 +60,8 @@ function readSession(session: Session): { expires_at: string; created_at: string
   const db = h.db();
   try {
     return db
-      .query("SELECT expires_at, created_at FROM sessions WHERE token = $t")
-      .get({ $t: tokenOf(session) }) as { expires_at: string; created_at: string } | null;
+      .query("SELECT expires_at, created_at FROM sessions WHERE token_hash = $t")
+      .get({ $t: sessionKey(tokenOf(session)) }) as { expires_at: string; created_at: string } | null;
   } finally {
     db.close();
   }
@@ -157,7 +166,7 @@ describe("absolute ceiling", () => {
     const founder = await createFounder(h, organizer, "utc@example.test", "Utc", "utc-password-11223");
     const db = h.db();
     try {
-      db.run("UPDATE sessions SET created_at = datetime('now') WHERE token = $t", { $t: tokenOf(founder) });
+      db.run("UPDATE sessions SET created_at = datetime('now') WHERE token_hash = $t", { $t: sessionKey(tokenOf(founder)) });
     } finally {
       db.close();
     }

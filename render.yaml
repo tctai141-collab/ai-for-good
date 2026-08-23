@@ -13,7 +13,7 @@ services:
     region: frankfurt
     plan: starter
     # Returns 200 with {"user": null} when signed out, so it needs no auth.
-    healthCheckPath: /api/session
+    healthCheckPath: /api/health
     disk:
       name: sprint-buddy-data
       mountPath: /app/data

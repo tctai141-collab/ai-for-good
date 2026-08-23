@@ -129,3 +129,93 @@ describe("cross-site protection", () => {
     expect((await get(h, "/api/session", founder.cookie)).status).toBe(200);
   });
 });
+
+/**
+ * The origin check itself, exercised directly.
+ *
+ * The integration tests above run against a server on an OS-assigned port, so
+ * they can only cover the unconfigured fallback. These drive the predicate
+ * with synthetic requests, which is the only way to cover the configured case
+ * — and the configured case is the one that matters, because it is what runs
+ * in production.
+ */
+describe("the origin check, with PUBLIC_BASE_URL configured", () => {
+  const SITE = "https://sprintbuddy.example";
+  let saved: string | undefined;
+
+  beforeAll(async () => {
+    saved = process.env.PUBLIC_BASE_URL;
+    process.env.PUBLIC_BASE_URL = SITE;
+  });
+  afterAll(() => {
+    if (saved === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = saved;
+  });
+
+  const make = (headers: Record<string, string>, method = "POST") =>
+    new Request(`${SITE}/api/chat`, { method, headers });
+
+  test("same-origin POST is accepted", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({ origin: SITE }))).toBe(false);
+  });
+
+  test("cross-origin POST is rejected", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({ origin: "https://evil.example" }))).toBe(true);
+  });
+
+  test("missing Origin and Referer is rejected", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({}))).toBe(true);
+  });
+
+  test("a spoofed X-Forwarded-Host cannot widen the allow-set", async () => {
+    /*
+     * The regression this guards. The host set used to include the request's
+     * own forwarded host, so a caller who set both Origin and
+     * X-Forwarded-Host to the same value authorised themselves.
+     */
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({
+      origin: "https://evil.example",
+      "x-forwarded-host": "evil.example",
+    }))).toBe(true);
+  });
+
+  test("a spoofed Host cannot widen it either", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({ origin: "https://evil.example", host: "evil.example" }))).toBe(true);
+  });
+
+  test("Sec-Fetch-Site: cross-site is rejected even with a matching Origin", async () => {
+    // The browser sets this and script cannot, so it outranks Origin.
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({ origin: SITE, "sec-fetch-site": "cross-site" }))).toBe(true);
+  });
+
+  test("Sec-Fetch-Site: same-origin with a matching Origin is accepted", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({ origin: SITE, "sec-fetch-site": "same-origin" }))).toBe(false);
+  });
+
+  test("Referer stands in when Origin is absent", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    expect(crossSiteRequest(make({ referer: `${SITE}/chat` }))).toBe(false);
+    expect(crossSiteRequest(make({ referer: "https://evil.example/x" }))).toBe(true);
+  });
+
+  test("GET and HEAD are never treated as cross-site", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    for (const method of ["GET", "HEAD", "OPTIONS"]) {
+      expect(crossSiteRequest(make({ origin: "https://evil.example" }, method))).toBe(false);
+    }
+  });
+
+  test("every state-changing method is checked", async () => {
+    const { crossSiteRequest } = await import("../src/lib/origin");
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      expect(crossSiteRequest(make({ origin: "https://evil.example" }, method))).toBe(true);
+    }
+  });
+});

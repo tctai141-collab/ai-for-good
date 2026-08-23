@@ -166,6 +166,16 @@ export async function startServer(
     env: {
       ...process.env,
       DB_PATH: dbPath,
+      /*
+       * Explicitly cleared. The server is spawned on an OS-assigned port, so
+       * the harness cannot know its own origin in advance and cannot set a
+       * matching PUBLIC_BASE_URL — and inheriting the developer's would pin
+       * the CSRF check to the production hostname and reject every request.
+       * Unset, the middleware falls back to comparing Origin against Host,
+       * which is the correct same-origin test for this server. The configured
+       * path is covered directly in test/csrf.test.ts.
+       */
+      PUBLIC_BASE_URL: "",
       HOST: "127.0.0.1",
       // 0 = let the OS assign; the real port is read back from the startup line.
       PORT: "0",
@@ -279,17 +289,19 @@ export async function get(h: Harness, path: string, cookie?: string) {
  * token is emailed to the founder and never returned to any caller, so a helper
  * that parsed the response body would break the moment that landed.
  */
-export function inviteToken(h: Harness, email: string): string {
-  const db = h.db();
-  try {
-    const row = db
-      .query("SELECT token FROM invites WHERE user_email = $email ORDER BY rowid DESC LIMIT 1")
-      .get({ $email: email }) as { token: string } | null;
-    if (!row) throw new Error(`no invite for ${email}`);
-    return row.token;
-  } finally {
-    db.close();
-  }
+/**
+ * The seeded organizer's setup token.
+ *
+ * Reads from memory, not the database. Invites are stored as SHA-256, so the
+ * emailed value cannot be recovered from a row any more — which is the whole
+ * point of the change, and worth a test helper that cannot quietly regress it.
+ */
+const seededTokens = new Map<string, string>();
+
+export function inviteToken(_h: Harness, email: string): string {
+  const token = seededTokens.get(email);
+  if (!token) throw new Error(`no seeded invite for ${email}`);
+  return token;
 }
 
 /** The token from the setup link as the founder actually received it. */
@@ -324,15 +336,19 @@ export async function createOrganizer(
       "INSERT INTO users (email, name, role, created_at) VALUES ($email, $name, 'organizer', datetime('now'))",
       { $email: email, $name: name },
     );
+    // Invites are stored hashed, exactly as production stores them, so this
+    // helper has to hash too. The raw token stays in memory here because that
+    // is the only place it can live — it is unrecoverable from the row.
     const token = crypto.randomUUID().replace(/-/g, "");
     db.run(
-      "INSERT INTO invites (token, user_email, expires_at) VALUES ($token, $email, $expires)",
+      "INSERT INTO invites (token_hash, user_email, expires_at) VALUES ($hash, $email, $expires)",
       {
-        $token: token,
+        $hash: new Bun.CryptoHasher("sha256").update(token).digest("hex"),
         $email: email,
         $expires: new Date(Date.now() + 14 * 864e5).toISOString(),
       },
     );
+    seededTokens.set(email, token);
   } finally {
     db.close();
   }

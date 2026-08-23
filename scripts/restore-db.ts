@@ -12,7 +12,7 @@
  */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { listBackups, resolveTarget } from "../src/lib/backup";
+import { decryptBackup, listBackups, resolveTarget } from "../src/lib/backup";
 
 const target = resolveTarget();
 if (target.kind === "none") {
@@ -62,7 +62,12 @@ if (target.kind === "r2") {
   gzipped = new Uint8Array(await Bun.file(`${target.dir}/${path}`).arrayBuffer());
 }
 
-await Bun.write(destination, Bun.gunzipSync(gzipped));
+// Decrypts first when the snapshot carries the encryption marker, and is a
+// no-op otherwise, so this handles both shapes without being told which. A
+// snapshot encrypted with a key this process does not have fails loudly here
+// rather than writing an unreadable file to the destination.
+const plain = await decryptBackup(gzipped);
+await Bun.write(destination, Bun.gunzipSync(plain));
 
 // Prove it is a real, openable database and show what it holds. Row counts are
 // the point of the drill: a file that opens but is empty is still a failure.

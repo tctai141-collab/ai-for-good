@@ -1,4 +1,5 @@
 import { defineMiddleware } from "astro:middleware";
+import { crossSiteRequest } from "./lib/origin";
 import { startBackupScheduler } from "./lib/backup";
 import { startReminderScheduler } from "./lib/reminders";
 import { MAX_BODY_BYTES } from "./lib/limits";
@@ -18,80 +19,6 @@ startReminderScheduler();
  * browser behaviour would put that whole URL in the Referer header of any
  * outbound request from that page — handing the token to a third party.
  */
-/** Methods that cannot change state, and so need no origin check. */
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-
-/**
- * Every host this deployment legitimately answers on.
- *
- * Render terminates TLS and forwards over plain HTTP, so the URL the server
- * sees is http:// on an internal host while the browser sent https:// on a
- * public one. Comparing full origins therefore never matches in production;
- * comparing hosts does, and the protocol adds nothing here because HSTS is set.
- *
- * The set matters as much as the comparison. An earlier version trusted only
- * PUBLIC_BASE_URL, which is correct for one domain and wrong for this service —
- * it also answers on its onrender.com address, and every state-changing request
- * from that host was rejected with a 403 that no log recorded. The security
- * property we actually want is the ordinary same-origin one: the Origin the
- * browser reports must match the host the browser addressed. A page on another
- * origin cannot forge either — it cannot set Host, and it cannot add
- * X-Forwarded-Host without triggering a preflight this app never approves.
- */
-function acceptableHosts(request: Request): Set<string> {
-  const hosts = new Set<string>();
-
-  const add = (value: string | null | undefined) => {
-    if (!value) return;
-    const first = value.split(",")[0]!.trim().toLowerCase();
-    if (first) hosts.add(first);
-  };
-
-  const configured = process.env.PUBLIC_BASE_URL?.trim();
-  if (configured) {
-    try {
-      add(new URL(configured).host);
-    } catch {
-      // Misconfigured; the request's own headers still apply below.
-    }
-  }
-
-  add(request.headers.get("x-forwarded-host"));
-  add(request.headers.get("host"));
-
-  return hosts;
-}
-
-/**
- * Rejects state-changing requests that did not come from this site.
- *
- * Stricter than what it replaces: it covers every unsafe method whatever the
- * content type, so the JSON endpoints this app is made of are actually
- * protected rather than skipped. The session cookie is already SameSite=Lax,
- * which is the primary defence; this is the second one.
- */
-function crossSiteRequest(request: Request): boolean {
-  if (SAFE_METHODS.has(request.method)) return false;
-
-  const origin = request.headers.get("origin");
-  const referer = request.headers.get("referer");
-  const claimed = origin ?? referer;
-  // A browser always sends Origin on an unsafe method. Nothing else legitimate
-  // reaches these routes, so a request without either header is not ours.
-  if (!claimed) return true;
-
-  let claimedHost: string;
-  try {
-    claimedHost = new URL(claimed).host.toLowerCase();
-  } catch {
-    return true;
-  }
-
-  const allowed = acceptableHosts(request);
-  if (allowed.size === 0) return true;
-  return !allowed.has(claimedHost);
-}
-
 export const onRequest = defineMiddleware(async (context, next) => {
   if (crossSiteRequest(context.request)) {
     /*
@@ -181,11 +108,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
     context.request.headers.get("x-forwarded-proto") ??
     new URL(context.request.url).protocol.replace(":", "");
   if (proto === "https") {
-    response.headers.set("Strict-Transport-Security", "max-age=31536000");
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains; preload",
+    );
   }
 
   // Don't let a browser second-guess a declared content type.
   response.headers.set("X-Content-Type-Options", "nosniff");
+
+  // Nothing here uses any of these, so none of them should be reachable — by
+  // this page or by anything that manages to run inside it.
+  response.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+  );
 
   // Nothing here is meant to be embedded; refusing framing removes a
   // clickjacking route to the admin controls.

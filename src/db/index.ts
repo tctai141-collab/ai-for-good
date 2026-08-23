@@ -560,11 +560,34 @@ export type SessionRow = {
   role: Role;
 };
 
+/**
+ * The cookie value is never what is stored.
+ *
+ * A session row used to hold the token itself, which meant anyone who could
+ * read the database — or one of the thirty days of gzipped, unencrypted
+ * backups sitting in object storage — held a working credential for every
+ * signed-in person until it idled out. Hashing makes the stored value useless
+ * on its own: it authenticates nobody without the original cookie.
+ *
+ * SHA-256 without a salt or a work factor is the right primitive here, unlike
+ * for passwords. The input is 256 bits of CSPRNG output, so there is no
+ * dictionary to run and nothing to slow an attacker down against; what matters
+ * is only that the stored form is one-way. It is also fast, and this runs on
+ * every authenticated request.
+ *
+ * Lookup is by hash, so the comparison happens inside SQLite's index on a
+ * value the attacker cannot influence the timing of usefully — there is no
+ * string compare of a secret in JavaScript anywhere in this path.
+ */
+function hashToken(token: string): string {
+  return new Bun.CryptoHasher("sha256").update(token).digest("hex");
+}
+
 export function createSessionRow(token: string, email: string, expiresAt: string): void {
   const db = getDb();
   db.run(
-    "INSERT INTO sessions (token, user_email, expires_at) VALUES ($token, $email, $expires)",
-    { $token: token, $email: email, $expires: expiresAt },
+    "INSERT INTO sessions (token_hash, user_email, expires_at) VALUES ($hash, $email, $expires)",
+    { $hash: hashToken(token), $email: email, $expires: expiresAt },
   );
 }
 
@@ -574,23 +597,23 @@ export function getSessionRow(token: string): SessionRow | null {
     .query(
       `SELECT s.user_email, s.expires_at, s.created_at, u.name, u.role
        FROM sessions s JOIN users u ON u.email = s.user_email
-       WHERE s.token = $token`,
+       WHERE s.token_hash = $hash`,
     )
-    .get({ $token: token }) as SessionRow | null;
+    .get({ $hash: hashToken(token) }) as SessionRow | null;
 }
 
 /** Slides a live session's idle deadline forward. */
 export function touchSessionRow(token: string, expiresAt: string): void {
   const db = getDb();
-  db.run("UPDATE sessions SET expires_at = $expires WHERE token = $token", {
-    $token: token,
+  db.run("UPDATE sessions SET expires_at = $expires WHERE token_hash = $hash", {
+    $hash: hashToken(token),
     $expires: expiresAt,
   });
 }
 
 export function deleteSessionRow(token: string): void {
   const db = getDb();
-  db.run("DELETE FROM sessions WHERE token = $token", { $token: token });
+  db.run("DELETE FROM sessions WHERE token_hash = $hash", { $hash: hashToken(token) });
 }
 
 export function deleteSessionsForUser(email: string): void {
@@ -606,7 +629,8 @@ export function purgeExpiredSessions(): void {
 // --- invites ---
 
 export type InviteRow = {
-  token: string;
+  /* No `token` field: the row stores only a hash, and nothing needs the value
+     back — the link is emailed once at creation and never reconstructed. */
   user_email: string;
   expires_at: string;
   used_at: string | null;
@@ -623,8 +647,8 @@ export function createInvite(token: string, email: string, expiresAt: string): v
   db.transaction(() => {
     db.run("DELETE FROM invites WHERE user_email = $email", { $email: email });
     db.run(
-      "INSERT INTO invites (token, user_email, expires_at) VALUES ($token, $email, $expires)",
-      { $token: token, $email: email, $expires: expiresAt },
+      "INSERT INTO invites (token_hash, user_email, expires_at) VALUES ($hash, $email, $expires)",
+      { $hash: hashToken(token), $email: email, $expires: expiresAt },
     );
   })();
 }
@@ -633,16 +657,16 @@ export function getInvite(token: string): InviteRow | null {
   const db = getDb();
   return db
     .query(
-      `SELECT i.token, i.user_email, i.expires_at, i.used_at, u.name, u.role
+      `SELECT i.user_email, i.expires_at, i.used_at, u.name, u.role
        FROM invites i JOIN users u ON u.email = i.user_email
-       WHERE i.token = $token`,
+       WHERE i.token_hash = $hash`,
     )
-    .get({ $token: token }) as InviteRow | null;
+    .get({ $hash: hashToken(token) }) as InviteRow | null;
 }
 
 export function markInviteUsed(token: string): void {
   const db = getDb();
-  db.run("UPDATE invites SET used_at = datetime('now') WHERE token = $token", { $token: token });
+  db.run("UPDATE invites SET used_at = datetime('now') WHERE token_hash = $hash", { $hash: hashToken(token) });
 }
 
 /**
@@ -660,16 +684,16 @@ export function redeemInvite(token: string, passwordHash: string): boolean {
   let claimed = false;
   db.transaction(() => {
     db.run(
-      "UPDATE invites SET used_at = datetime('now') WHERE token = $token AND used_at IS NULL",
-      { $token: token },
+      "UPDATE invites SET used_at = datetime('now') WHERE token_hash = $hash AND used_at IS NULL",
+      { $hash: hashToken(token) },
     );
     const row = db
       .query("SELECT changes() AS n")
       .get() as { n: number };
     if (row.n !== 1) return;
     const invite = db
-      .query("SELECT user_email FROM invites WHERE token = $token")
-      .get({ $token: token }) as { user_email: string } | null;
+      .query("SELECT user_email FROM invites WHERE token_hash = $hash")
+      .get({ $hash: hashToken(token) }) as { user_email: string } | null;
     if (!invite) return;
     db.run("UPDATE users SET password_hash = $hash WHERE email = $email", {
       $hash: passwordHash,

@@ -2,6 +2,15 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createFounder, createOrganizer, get, startServer, type Harness, type Session } from "./helpers/harness";
 
 /**
+ * Sessions are stored as SHA-256 of the cookie value, so a test poking at the
+ * row has to hash the same way production does. If this drifts, the tests
+ * silently match nothing and pass for the wrong reason.
+ */
+function sessionKey(token: string): string {
+  return new Bun.CryptoHasher("sha256").update(token).digest("hex");
+}
+
+/**
  * Signing out must actually end the session.
  *
  * It did not, in production, for the entire life of the deployment. The client
@@ -95,12 +104,12 @@ describe("signing out", () => {
 
     const db = h.db();
     try {
-      const before = db.query("SELECT COUNT(*) AS n FROM sessions WHERE token = $token").get({ $token: token }) as { n: number };
+      const before = db.query("SELECT COUNT(*) AS n FROM sessions WHERE token_hash = $token").get({ $token: sessionKey(token) }) as { n: number };
       expect(before.n).toBe(1);
 
       await signOut(session.cookie);
 
-      const after = db.query("SELECT COUNT(*) AS n FROM sessions WHERE token = $token").get({ $token: token }) as { n: number };
+      const after = db.query("SELECT COUNT(*) AS n FROM sessions WHERE token_hash = $token").get({ $token: sessionKey(token) }) as { n: number };
       expect(after.n).toBe(0);
     } finally {
       db.close();
