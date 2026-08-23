@@ -36,6 +36,9 @@ export type Checkin = {
 
 export type ThemeArc = { name: string; arc: number[] };
 
+import type { WorkingGeniusResult } from "./workingGenius";
+export type { WorkingGeniusResult };
+
 export type UserData = {
   threads: Thread[];
   decisions: Decision[];
@@ -52,6 +55,13 @@ export type WorkingGenius = {
   primary: string;
   counts: Record<string, number>;
   completedAt: string;
+  /**
+   * Full scoring: ranking, the three bands, per-item answers, consistency.
+   * Absent on rows written by the six-item quiz this replaced, which knew only
+   * a primary type. The UI treats that absence as "retake it" rather than
+   * inventing bands it cannot derive.
+   */
+  result?: WorkingGeniusResult;
 };
 
 async function post(body: Record<string, unknown>) {
@@ -134,11 +144,22 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
     week: (thData.week as number) || 1,
     visits: (vData.visits as number) || 0,
     workingGenius: wgData.workingGenius
-      ? {
-        primary: (wgData.workingGenius as { primary_type: string }).primary_type,
-        counts: JSON.parse((wgData.workingGenius as { counts_json: string }).counts_json),
-        completedAt: (wgData.workingGenius as { completed_at: string }).completed_at,
-      }
+      ? (() => {
+        const row = wgData.workingGenius as {
+          primary_type: string;
+          counts_json: string;
+          completed_at: string;
+          result_json?: string | null;
+        };
+        return {
+          primary: row.primary_type,
+          counts: JSON.parse(row.counts_json),
+          completedAt: row.completed_at,
+          result: row.result_json
+            ? (JSON.parse(row.result_json) as WorkingGeniusResult)
+            : undefined,
+        };
+      })()
       : undefined,
   };
 }
@@ -215,6 +236,15 @@ export async function bumpVisits(userEmail: string): Promise<number> {
   return (data.count as number) || 0;
 }
 
-export async function saveWorkingGenius(userEmail: string, workingGenius: WorkingGenius) {
-  await post({ action: "save-working-genius", userEmail, workingGenius });
+/**
+ * Sends the raw per-item answers, not a finished profile. The server owns the
+ * scoring so that one item bank and one ranking implementation produce every
+ * stored result, and returns what it computed.
+ */
+export async function saveWorkingGenius(
+  userEmail: string,
+  workingGeniusResponses: Record<string, string>,
+): Promise<WorkingGeniusResult> {
+  const data = await post({ action: "save-working-genius", userEmail, workingGeniusResponses });
+  return data.result as WorkingGeniusResult;
 }

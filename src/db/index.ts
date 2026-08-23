@@ -68,6 +68,14 @@ export type WorkingGeniusRow = {
   primary_type: string;
   counts_json: string;
   completed_at: string;
+  /**
+   * The full scored result: ranking, bands, per-item responses, consistency.
+   * Null on rows written by the six-item quiz this replaced, which only ever
+   * knew a primary type.
+   */
+  result_json?: string | null;
+  instrument_version?: string | null;
+  consistency?: number | null;
 };
 
 /**
@@ -338,7 +346,11 @@ export function getVisits(userEmail: string): number {
 export function getWorkingGenius(userEmail: string): WorkingGeniusRow | null {
   const db = getDb();
   const row = db
-    .query("SELECT user_email, primary_type, counts_json, completed_at FROM working_genius WHERE user_email = $email")
+    .query(
+      `SELECT user_email, primary_type, counts_json, completed_at,
+              result_json, instrument_version, consistency
+         FROM working_genius WHERE user_email = $email`,
+    )
     .get({ $email: userEmail }) as WorkingGeniusRow | null;
   return row;
 }
@@ -346,18 +358,30 @@ export function getWorkingGenius(userEmail: string): WorkingGeniusRow | null {
 export function upsertWorkingGenius(row: WorkingGeniusRow) {
   const db = getDb();
   db.run(
-    `INSERT INTO working_genius (user_email, primary_type, counts_json, completed_at, updated_at)
-     VALUES ($user_email, $primary_type, $counts_json, $completed_at, datetime('now'))
+    `INSERT INTO working_genius (
+       user_email, primary_type, counts_json, completed_at,
+       result_json, instrument_version, consistency, updated_at
+     )
+     VALUES (
+       $user_email, $primary_type, $counts_json, $completed_at,
+       $result_json, $instrument_version, $consistency, datetime('now')
+     )
      ON CONFLICT(user_email) DO UPDATE SET
        primary_type = $primary_type,
        counts_json = $counts_json,
        completed_at = $completed_at,
+       result_json = $result_json,
+       instrument_version = $instrument_version,
+       consistency = $consistency,
        updated_at = datetime('now')`,
     {
       $user_email: row.user_email,
       $primary_type: row.primary_type,
       $counts_json: row.counts_json,
       $completed_at: row.completed_at,
+      $result_json: row.result_json ?? null,
+      $instrument_version: row.instrument_version ?? null,
+      $consistency: row.consistency ?? null,
     },
   );
 }

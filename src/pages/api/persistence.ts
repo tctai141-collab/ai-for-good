@@ -19,6 +19,13 @@ import {
   NotOwnerError,
 } from "../../db/index";
 import { TOTAL_WEEKS, currentSprintWeek, weekForDateClamped } from "../../lib/sprint-calendar";
+import {
+  INSTRUMENT_VERSION,
+  WORKING_GENIUS_ITEMS,
+  scoreWorkingGenius,
+  type WorkingGeniusId,
+  type WorkingGeniusResponses,
+} from "../../lib/workingGenius";
 import { getSessionUser, type SessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import {
@@ -75,7 +82,8 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       thread?: { id: string; title: string; theme: string; state: string; lastAt: string; personality?: string; messages: { role: string; content: string }[] };
       decision?: { id: string; summary: string; door: string; theme: string; status?: string; outcome?: string; threadId?: string; at?: string };
       checkin?: { id: string; theme?: string; prompt: string; mood?: number; refDecisionId?: string };
-      workingGenius?: { primary: string; counts: Record<string, number>; completedAt: string };
+      /** Raw per-item answers. The server scores them; see save-working-genius. */
+      workingGeniusResponses?: Record<string, string>;
       checkinId?: string;
     };
 
@@ -202,17 +210,50 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         return json({ count: incrementVisits(session!.email) });
       }
 
+      /**
+       * The client sends which option it picked on each item and nothing else.
+       * Scoring happens here rather than in the browser so that the ranking,
+       * the bands and the consistency figure are all computed by one
+       * implementation against one item bank. The previous version accepted a
+       * finished result from the client, which meant a stale tab could write a
+       * profile scored by superseded rules and nothing downstream could tell.
+       */
       case "save-working-genius": {
         const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
-        if (!body.userEmail || !body.workingGenius) return err("workingGenius + userEmail required");
+        if (!body.userEmail || !body.workingGeniusResponses) {
+          return err("workingGeniusResponses + userEmail required");
+        }
+
+        // Only answers to items that exist, naming options those items offer.
+        // Anything else is dropped rather than rejected: a half-recognised
+        // submission is still worth more to the founder than an error.
+        const byItem = new Map(WORKING_GENIUS_ITEMS.map((i) => [i.id, i]));
+        const responses: WorkingGeniusResponses = {};
+        for (const [itemId, choice] of Object.entries(body.workingGeniusResponses)) {
+          const item = byItem.get(itemId);
+          if (item && item.options.some((o) => o.id === choice)) {
+            responses[itemId] = choice as WorkingGeniusId;
+          }
+        }
+        if (Object.keys(responses).length < WORKING_GENIUS_ITEMS.length) {
+          return err("assessment incomplete");
+        }
+
+        const result = scoreWorkingGenius(
+          responses,
+          new Date().toISOString().slice(0, 10),
+        );
         upsertWorkingGenius({
           user_email: session!.email,
-          primary_type: cap(body.workingGenius.primary, 60),
-          counts_json: JSON.stringify(body.workingGenius.counts ?? {}).slice(0, 2_000),
-          completed_at: cap(body.workingGenius.completedAt, 60),
+          primary_type: result.primary,
+          counts_json: JSON.stringify(result.counts),
+          completed_at: result.completedAt,
+          result_json: JSON.stringify(result),
+          instrument_version: INSTRUMENT_VERSION,
+          consistency: result.consistency,
         });
-        return json({ ok: true });
+        return json({ result });
       }
 
       default:
@@ -295,7 +336,23 @@ export const GET: APIRoute = async ({ cookies, request }) => {
       case "visits":
         return json({ visits: getVisits(userEmail) });
 
+      /*
+       * Founder-only, with no organizer view at all.
+       *
+       * This case sat under requireSelfOrOrganizer with no owner check, so an
+       * organizer could read any founder's row: the bands, the full ranking,
+       * and result_json, which contains every individual answer. The card in
+       * the app tells the founder nobody else sees this, and that promise was
+       * not true.
+       *
+       * There is deliberately no redacted organizer shape here, the way
+       * threads and decisions have one. Those are work a founder may choose to
+       * hand over. A working-style profile is not work, and an aggregate of it
+       * across the cohort is exactly the use the founder is being promised
+       * will not happen.
+       */
       case "working-genius":
+        if (!isOwner) return err("forbidden", 403);
         return json({ workingGenius: getWorkingGenius(userEmail) });
 
       // Derived here rather than in the browser because placing a date into a
