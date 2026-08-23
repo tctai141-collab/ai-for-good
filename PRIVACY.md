@@ -38,6 +38,25 @@ the founder as "Read by the team".
 
 Founders can see only their own data.
 
+## Email from the programme
+
+Three kinds of email are sent to the address you registered with:
+
+- **Account mail**: your setup link and password resets.
+- **Deadline reminders**: at most two per milestone, the day before and the day
+  after. Ignore both and you hear nothing further about that one.
+- **Cohort announcements**: messages an organizer writes and sends to the
+  cohort, addressed to you by name.
+
+These are operational messages about a programme you enrolled in, so there is
+no unsubscribe link. If you do not want them, that is a conversation with the
+operating team rather than a setting.
+
+**Every announcement is sent to you individually.** Your address is never
+placed in a message to anybody else, so no participant learns another
+participant's address from an email. Who sent each announcement, what it said,
+and who received it is recorded in the audit log.
+
 ## Processors
 
 | Who | What they get | Where |
@@ -59,6 +78,7 @@ completed rather than left vague.
 - Invite and reset tokens: 14 days, single use
 - Backups: **30 days**, then rotated out
 - Rate-limit counters: 15 minutes, in memory only
+- Announcements sent, and who received them: kept as a record, no fixed expiry
 
 **Deleting is not instant everywhere.** A deleted conversation goes from the
 live database immediately, and disappears from backups as those rotate — up to

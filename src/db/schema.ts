@@ -438,6 +438,41 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // A record of every blast, and of who each one actually reached.
+  //
+  // Two tables rather than one because the interesting question after the fact
+  // is never "what did we send" on its own, it is "did Aino get it". A per
+  // recipient row answers that, including the failures — a bounced address is
+  // invisible if you only store a success count, and the founder who did not
+  // hear about a deadline change is exactly the one you need to find.
+  //
+  // Deliberately no foreign key to users: this is a delivery record. Removing
+  // someone from the cohort must not quietly rewrite the history of what was
+  // sent to them while they were in it.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS broadcasts (
+      id TEXT PRIMARY KEY,
+      actor_email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      audience TEXT NOT NULL,
+      content_hash TEXT NOT NULL DEFAULT '',
+      sent INTEGER NOT NULL DEFAULT 0,
+      failed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS broadcast_recipients (
+      broadcast_id TEXT NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('sent', 'failed')),
+      detail TEXT,
+      PRIMARY KEY (broadcast_id, email)
+    )
+  `);
+
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_deadlines_status_due ON deadlines(status, due_date);
   `);
@@ -450,6 +485,9 @@ export function initSchema(db: Database) {
   `);
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_admin_audit_at ON admin_audit(created_at DESC);
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_broadcasts_at ON broadcasts(created_at DESC);
   `);
   // The cohort dashboard sorts every founder check-in by time on each load.
   db.run(`

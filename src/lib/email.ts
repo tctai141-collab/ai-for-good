@@ -199,3 +199,29 @@ triggered a reset on your account.
 ${signOff()}`,
   });
 }
+
+/**
+ * A cohort announcement, written by an organizer.
+ *
+ * The footer is not decoration. These go out without an unsubscribe link
+ * because they are operational mail about a programme the recipient enrolled
+ * in, the same basis as the deadline reminders — and the honest way to hold
+ * that position is to tell people plainly why they are receiving it and who to
+ * reply to, rather than leaving them to guess.
+ *
+ * The body is passed through as written. Nothing is appended to it beyond this
+ * footer, so what the organizer reads in their test send is what the cohort
+ * gets.
+ */
+export function sendBroadcastEmail(to: string, subject: string, text: string): Promise<void> {
+  const contact = replyTo();
+  return send({
+    to,
+    subject,
+    text: `${text}
+
+---
+You are receiving this because you are registered on the Aalto Founder Sprint.
+${contact ? `Questions: just reply, it reaches ${contact}.` : "Questions: reply to this email."}`,
+  });
+}

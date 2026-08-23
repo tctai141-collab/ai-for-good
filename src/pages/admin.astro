@@ -164,6 +164,28 @@
       .message { font-size: 0.875rem; margin-top: 14px; }
       .message.error { color: var(--danger); }
       .message.ok { color: var(--ok); }
+      /* ---- Broadcast ---------------------------------------------- */
+      .inline { display: inline-flex; align-items: center; gap: 8px; }
+      .bc-tag {
+        font-family: inherit;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        margin-right: 4px;
+      }
+      /* Scrolls rather than growing without limit: the point of the individual
+         picker is to glance at it, and a list that pushes the Send button off
+         the page is how the wrong people get selected. */
+      .bc-people {
+        max-height: 260px;
+        overflow-y: auto;
+        margin-top: 10px;
+        display: grid;
+        gap: 6px;
+      }
+      .bc-people label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
+      .bc-people .role { color: var(--muted); font-size: 0.75rem; }
+      .bc-sent { font-size: 0.875rem; padding: 8px 0; border-bottom: 1px solid var(--line); }
+      .bc-sent .when { color: var(--muted); font-size: 0.75rem; }
       [hidden] { display: none !important; }
       a { color: var(--accent); }
       .back-link {
@@ -287,6 +309,7 @@
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
           <button type="button" class="tab" data-tab="programme">Programme</button>
           <button type="button" class="tab" data-tab="shared">Shared</button>
+          <button type="button" class="tab" data-tab="broadcast">Broadcast</button>
           <button type="button" class="tab" data-tab="knowledge">Knowledge</button>
           <button type="button" class="tab" data-tab="transcript">Add transcript</button>
         </nav>
@@ -445,6 +468,85 @@
             </p>
             <p class="message" id="shared-message" hidden></p>
             <div id="shared-list"></div>
+          </section>
+        </div>
+
+        <div class="tabpanel" id="tab-broadcast" hidden>
+          <section class="panel">
+            <h2>Send a message to the cohort</h2>
+            <p class="note" style="margin-top:0">
+              Everyone selected gets their own email, addressed to them. Nobody
+              sees anybody else's address.
+            </p>
+            <p class="note" style="margin-top:0">
+              Type <code>{"{{first_name}}"}</code> where you want their name. The
+              buttons below insert it for you. Available:
+              <code>{"{{first_name}}"}</code>, <code>{"{{name}}"}</code>,
+              <code>{"{{email}}"}</code>.
+            </p>
+
+            <form id="bc-form" class="row">
+              <label style="flex:1 1 100%">
+                <span class="label-text">Subject</span>
+                <input id="bc-subject" maxlength="200" required
+                       placeholder="Thursday session moved to 14:00" />
+              </label>
+              <label style="flex:1 1 100%">
+                <span class="label-text">Message</span>
+                <textarea id="bc-body" rows="12"
+                          placeholder={"Hi {{first_name}},\n\n..."}></textarea>
+              </label>
+            </form>
+            <p class="note" style="margin-top:0">
+              Insert:
+              <button type="button" class="bc-tag" data-tag="first_name">{"{{first_name}}"}</button>
+              <button type="button" class="bc-tag" data-tag="name">{"{{name}}"}</button>
+              <button type="button" class="bc-tag" data-tag="email">{"{{email}}"}</button>
+            </p>
+          </section>
+
+          <section class="panel">
+            <h2>Who gets it</h2>
+            <p class="row" style="gap:1.5rem">
+              <label class="inline">
+                <input type="checkbox" id="bc-role-founder" checked />
+                <span>All founders</span>
+              </label>
+              <label class="inline">
+                <input type="checkbox" id="bc-role-organizer" />
+                <span>All organizers</span>
+              </label>
+            </p>
+            <details>
+              <summary>Or pick people individually</summary>
+              <div id="bc-people" class="bc-people"></div>
+            </details>
+            <p class="message ok" id="bc-count" hidden></p>
+          </section>
+
+          <section class="panel">
+            <h2>Send</h2>
+            <p class="note" style="margin-top:0">
+              A blast cannot be recalled. Send yourself a test first, read it in
+              your own inbox, then type the number of recipients to confirm.
+            </p>
+            <p class="row">
+              <button type="button" id="bc-test">Send a test to me</button>
+              <span class="note" id="bc-test-state">Not tested yet.</span>
+            </p>
+            <form id="bc-send" class="row">
+              <label>
+                <span class="label-text">Type the recipient count to confirm</span>
+                <input id="bc-confirm" inputmode="numeric" autocomplete="off" placeholder="0" />
+              </label>
+              <button type="submit" id="bc-go" disabled>Send to everyone selected</button>
+            </form>
+            <p class="message" id="bc-message" hidden></p>
+          </section>
+
+          <section class="panel">
+            <h2>Already sent</h2>
+            <div id="bc-history"></div>
           </section>
         </div>
 
@@ -1569,11 +1671,229 @@
         renderShared();
       }
 
+      // ---- Broadcast ----------------------------------------------------
+      //
+      // The send button stays disabled until three things are true: a test of
+      // this exact wording has been delivered, somebody is selected, and the
+      // typed number matches the count. The server checks all three again. This
+      // copy stops the mistake; the server copy is what makes it impossible.
+
+      const bcSubject = document.getElementById("bc-subject");
+      const bcBody = document.getElementById("bc-body");
+      const bcPeople = document.getElementById("bc-people");
+      const bcRoleFounder = document.getElementById("bc-role-founder");
+      const bcRoleOrganizer = document.getElementById("bc-role-organizer");
+      const bcCount = document.getElementById("bc-count");
+      const bcConfirm = document.getElementById("bc-confirm");
+      const bcGo = document.getElementById("bc-go");
+      const bcTest = document.getElementById("bc-test");
+      const bcTestState = document.getElementById("bc-test-state");
+      const bcMessage = document.getElementById("bc-message");
+      const bcHistory = document.getElementById("bc-history");
+
+      let bcRoster = [];
+      let bcPicked = new Set();
+      // The exact wording that was last test-sent. Editing anything clears it.
+      let bcTestedWording = null;
+
+      function bcWording() {
+        return bcSubject.value.trim() + " " + bcBody.value.trim();
+      }
+
+      function bcSelected() {
+        const roles = [];
+        if (bcRoleFounder.checked) roles.push("founder");
+        if (bcRoleOrganizer.checked) roles.push("organizer");
+        // Mirrors the server's union-and-deduplicate, so the number shown here
+        // is the number the server will demand as confirmation.
+        const set = new Set();
+        bcRoster.forEach(function (person) {
+          if (roles.indexOf(person.role) !== -1 || bcPicked.has(person.email)) {
+            set.add(person.email);
+          }
+        });
+        return { roles: roles, emails: Array.from(bcPicked), count: set.size };
+      }
+
+      function bcRefresh() {
+        const chosen = bcSelected();
+        const count = chosen.count;
+        bcCount.hidden = false;
+        bcCount.className = "message " + (count ? "ok" : "error");
+        bcCount.textContent = count
+          ? count + (count === 1 ? " person will receive this." : " people will receive this.")
+          : "Nobody is selected.";
+
+        const tested = bcTestedWording !== null && bcTestedWording === bcWording();
+        if (!tested) bcTestState.textContent = "Not tested yet.";
+        bcConfirm.placeholder = String(count);
+        bcGo.disabled = !(tested && count > 0 && Number(bcConfirm.value) === count);
+      }
+
+      function bcRenderPeople() {
+        bcPeople.textContent = "";
+        bcRoster.forEach(function (person) {
+          const label = document.createElement("label");
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.checked = bcPicked.has(person.email);
+          box.addEventListener("change", function () {
+            if (box.checked) bcPicked.add(person.email);
+            else bcPicked.delete(person.email);
+            bcRefresh();
+          });
+          const who = document.createElement("span");
+          who.textContent = person.name + " (" + person.email + ")";
+          const role = document.createElement("span");
+          role.className = "role";
+          role.textContent = person.role;
+          label.append(box, who, role);
+          bcPeople.append(label);
+        });
+      }
+
+      function bcRenderHistory(rows) {
+        bcHistory.textContent = "";
+        if (!rows.length) {
+          const empty = document.createElement("p");
+          empty.className = "note";
+          empty.textContent = "Nothing sent yet.";
+          bcHistory.append(empty);
+          return;
+        }
+        rows.forEach(function (row) {
+          const item = document.createElement("div");
+          item.className = "bc-sent";
+          const subject = document.createElement("div");
+          subject.textContent = row.subject;
+          const when = document.createElement("div");
+          when.className = "when";
+          const failed = row.failed ? ", " + row.failed + " failed" : "";
+          when.textContent =
+            row.created_at + " to " + row.audience + ": " + row.sent + " sent" + failed +
+            " (by " + row.actor_email + ")";
+          item.append(subject, when);
+          bcHistory.append(item);
+        });
+      }
+
+      document.querySelectorAll(".bc-tag").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const tag = "{{" + button.dataset.tag + "}}";
+          const start = bcBody.selectionStart == null ? bcBody.value.length : bcBody.selectionStart;
+          const end = bcBody.selectionEnd == null ? bcBody.value.length : bcBody.selectionEnd;
+          bcBody.value = bcBody.value.slice(0, start) + tag + bcBody.value.slice(end);
+          bcBody.focus();
+          bcBody.setSelectionRange(start + tag.length, start + tag.length);
+          bcRefresh();
+        });
+      });
+
+      [bcSubject, bcBody].forEach(function (field) {
+        field.addEventListener("input", bcRefresh);
+      });
+      [bcRoleFounder, bcRoleOrganizer].forEach(function (box) {
+        box.addEventListener("change", bcRefresh);
+      });
+      bcConfirm.addEventListener("input", bcRefresh);
+
+      async function bcPost(payload) {
+        let res;
+        try {
+          res = await fetch("/api/admin/broadcast", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+        } catch {
+          return { error: "Could not reach the server." };
+        }
+        try {
+          return await res.json();
+        } catch {
+          return { error: "The server returned an error (" + res.status + ") with no details." };
+        }
+      }
+
+      bcTest.addEventListener("click", async function () {
+        bcTest.disabled = true;
+        bcMessage.hidden = true;
+        const wording = bcWording();
+        const data = await bcPost({
+          action: "test",
+          subject: bcSubject.value,
+          body: bcBody.value,
+        });
+        bcTest.disabled = false;
+        if (data.error) {
+          bcTestedWording = null;
+          say(bcMessage, data.error, true);
+          bcRefresh();
+          return;
+        }
+        bcTestedWording = wording;
+        bcTestState.textContent = "Test sent to " + data.to + ". Read it before sending.";
+        say(bcMessage, "Test sent. Nothing has gone to the cohort.", false);
+        bcRefresh();
+      });
+
+      document.getElementById("bc-send").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const chosen = bcSelected();
+        bcGo.disabled = true;
+        bcGo.textContent = "Sending to " + chosen.count + "...";
+        const data = await bcPost({
+          action: "send",
+          subject: bcSubject.value,
+          body: bcBody.value,
+          roles: chosen.roles,
+          emails: chosen.emails,
+          confirm: Number(bcConfirm.value),
+        });
+        bcGo.textContent = "Send to everyone selected";
+        if (data.error) {
+          say(bcMessage, data.error, true);
+          bcRefresh();
+          return;
+        }
+        const failures = (data.failures || []).map(function (f) { return f.email; }).join(", ");
+        say(
+          bcMessage,
+          data.sent + " sent" +
+            (data.failed ? ", " + data.failed + " failed: " + failures : "") + ".",
+          data.failed > 0,
+        );
+        // A sent message must not be one stray click away from going out twice.
+        bcConfirm.value = "";
+        bcTestedWording = null;
+        bcRefresh();
+        loadBroadcast();
+      });
+
+      async function loadBroadcast() {
+        let res;
+        try {
+          res = await fetch("/api/admin/broadcast");
+        } catch {
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        bcRoster = data.people || [];
+        bcRenderPeople();
+        bcRenderHistory(data.history || []);
+        if (!data.configured) {
+          say(bcMessage, "Email is not configured, so nothing can be sent.", true);
+        }
+        bcRefresh();
+      }
+
       load();
       loadDeadlines();
       loadProgramme();
       loadKnowledge();
       loadShared();
+      loadBroadcast();
     </script>
   </body>
 </html>
