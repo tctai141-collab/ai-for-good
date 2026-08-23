@@ -266,9 +266,9 @@ describe("the admin page itself", () => {
     }
   });
 
-  test("all five areas are present", async () => {
+  test("every admin area is present", async () => {
     const html = await (await get(h, "/admin", organizer.cookie)).text();
-    for (const slug of ["people", "deadlines", "programme", "knowledge", "transcript"]) {
+    for (const slug of ["people", "deadlines", "programme", "shared", "broadcast", "knowledge", "transcript"]) {
       expect(html).toContain(`id="tab-${slug}"`);
     }
   });

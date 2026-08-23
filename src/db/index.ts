@@ -1275,3 +1275,159 @@ export function foundersBehindOn(deadlineId: string): { email: string; name: str
     )
     .all({ $id: deadlineId }) as { email: string; name: string }[];
 }
+
+// ---- Broadcasts -----------------------------------------------------------
+
+export type BroadcastRecipient = { email: string; name: string; role: Role };
+
+/**
+ * Resolves an audience to the actual people it means.
+ *
+ * Roles and individually picked addresses are a union, not a filter: ticking
+ * "founders" and also picking one organizer by name reaches both. The query
+ * deduplicates, so a person who is in the role *and* picked individually is
+ * mailed once, which is the bug you would otherwise only discover by sending
+ * someone two copies of the same announcement.
+ *
+ * Ordering is stable so that the count shown in the confirmation box and the
+ * list actually mailed can never drift apart.
+ */
+export function listBroadcastRecipients(
+  roles: Role[],
+  emails: string[],
+): BroadcastRecipient[] {
+  const db = getDb();
+  const cleanRoles = roles.filter((r) => r === "founder" || r === "organizer");
+  const cleanEmails = emails.map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (!cleanRoles.length && !cleanEmails.length) return [];
+
+  // Bound parameters, one per value: an IN list cannot be parameterised as a
+  // whole, and interpolating addresses into SQL is how you get an injection.
+  const roleParams: Record<string, string> = {};
+  const rolePlaceholders = cleanRoles.map((role, i) => {
+    roleParams[`$role${i}`] = role;
+    return `$role${i}`;
+  });
+  const emailParams: Record<string, string> = {};
+  const emailPlaceholders = cleanEmails.map((email, i) => {
+    emailParams[`$email${i}`] = email;
+    return `$email${i}`;
+  });
+
+  const clauses: string[] = [];
+  if (rolePlaceholders.length) clauses.push(`role IN (${rolePlaceholders.join(", ")})`);
+  if (emailPlaceholders.length) clauses.push(`email IN (${emailPlaceholders.join(", ")})`);
+
+  return db
+    .query(
+      `SELECT email, name, role FROM users
+       WHERE ${clauses.join(" OR ")}
+       ORDER BY role DESC, name ASC`,
+    )
+    .all({ ...roleParams, ...emailParams }) as BroadcastRecipient[];
+}
+
+/** Opens a broadcast record before the first send, so a crash mid-run still leaves a trace. */
+export function createBroadcast(
+  id: string,
+  actorEmail: string,
+  subject: string,
+  body: string,
+  audience: string,
+  contentHash: string,
+): void {
+  const db = getDb();
+  db.run(
+    `INSERT INTO broadcasts (id, actor_email, subject, body, audience, content_hash)
+     VALUES ($id, $actor, $subject, $body, $audience, $hash)`,
+    {
+      $id: id,
+      $actor: actorEmail,
+      $subject: subject,
+      $body: body,
+      $audience: audience,
+      $hash: contentHash,
+    },
+  );
+}
+
+export function recordBroadcastDelivery(
+  broadcastId: string,
+  email: string,
+  status: "sent" | "failed",
+  detail: string | null = null,
+): void {
+  const db = getDb();
+  db.run(
+    `INSERT OR REPLACE INTO broadcast_recipients (broadcast_id, email, status, detail)
+     VALUES ($id, $email, $status, $detail)`,
+    { $id: broadcastId, $email: email, $status: status, $detail: detail },
+  );
+}
+
+export function finishBroadcast(id: string, sent: number, failed: number): void {
+  const db = getDb();
+  db.run("UPDATE broadcasts SET sent = $sent, failed = $failed WHERE id = $id", {
+    $id: id,
+    $sent: sent,
+    $failed: failed,
+  });
+}
+
+/**
+ * True when this organizer has already test-sent this exact wording to
+ * themselves. The send endpoint refuses without it.
+ *
+ * Matching on a hash of the subject and body means editing a single character
+ * after the test invalidates it. That is the point: the gate exists so that
+ * what the cohort receives is what somebody actually read in their own inbox.
+ */
+export function hasTestedBroadcast(actorEmail: string, contentHash: string): boolean {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT 1 AS ok FROM broadcasts
+       WHERE actor_email = $actor AND content_hash = $hash AND audience = 'test'
+       LIMIT 1`,
+    )
+    .get({ $actor: actorEmail, $hash: contentHash }) as { ok: number } | null;
+  return Boolean(row);
+}
+
+export type BroadcastSummary = {
+  id: string;
+  actor_email: string;
+  subject: string;
+  audience: string;
+  sent: number;
+  failed: number;
+  created_at: string;
+};
+
+/** Real blasts only. Test sends are bookkeeping for the gate, not history. */
+export function listBroadcasts(limit = 20): BroadcastSummary[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT id, actor_email, subject, audience, sent, failed, created_at
+       FROM broadcasts
+       WHERE audience <> 'test'
+       ORDER BY created_at DESC
+       LIMIT $limit`,
+    )
+    .all({ $limit: limit }) as BroadcastSummary[];
+}
+
+/** Who a given blast actually reached, and who it did not. */
+export function listBroadcastDeliveries(
+  broadcastId: string,
+): { email: string; status: string; detail: string | null }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT email, status, detail FROM broadcast_recipients
+       WHERE broadcast_id = $id
+       ORDER BY status ASC, email ASC`,
+    )
+    .all({ $id: broadcastId }) as { email: string; status: string; detail: string | null }[];
+}
