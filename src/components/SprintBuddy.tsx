@@ -1,6 +1,15 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import Tasks, { useDeadlines, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
+import {
+  WORKING_GENIUS_ITEMS,
+  WORKING_GENIUS_TYPES,
+  bandCopy,
+  typeById,
+  type WorkingGeniusBand,
+  type WorkingGeniusId,
+  type WorkingGeniusResult,
+} from "../lib/workingGenius";
 import type { Checkin, UserData } from "../lib/persistence";
 import { advisorErrorMessage } from "../lib/advisor-errors";
 
@@ -1177,119 +1186,37 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
 type TimeCtx = { clock: string; line: string; dotColor: string; greeting: string };
 
-type WorkingGeniusId = "wonder" | "invention" | "discernment" | "galvanizing" | "enablement" | "tenacity";
-
-type WorkingGeniusResult = {
-  primary: WorkingGeniusId;
-  counts: Record<WorkingGeniusId, number>;
-  completedAt: string;
+/*
+ * The six types, the thirty items and the scoring live in lib/workingGenius.ts
+ * so that the browser and the API score against one implementation. Only the
+ * palette stays here, because it is presentation and the rest is not.
+ */
+const WG_COLOR: Record<WorkingGeniusId, { tint: string; accent: string }> = {
+  wonder: { tint: "rgba(247, 225, 89, 0.16)", accent: C.yellow },
+  invention: { tint: "rgba(253, 99, 96, 0.16)", accent: C.red },
+  discernment: { tint: "rgba(70, 165, 255, 0.16)", accent: C.blue },
+  galvanizing: { tint: "rgba(255, 255, 255, 0.10)", accent: C.white },
+  enablement: { tint: "rgba(124, 184, 147, 0.16)", accent: "#7CB893" },
+  tenacity: { tint: "rgba(255, 255, 255, 0.08)", accent: C.ink },
 };
 
-const WORKING_GENIUS_TYPES: Array<{
-  id: WorkingGeniusId;
-  label: string;
-  vibe: string;
-  color: string;
-  accent: string;
-  description: string;
-}> = [
-  {
-    id: "wonder",
-    label: "Wonder",
-    vibe: "Curious starter",
-    color: "rgba(247, 225, 89, 0.16)",
-    accent: C.yellow,
-    description: "Sees the big questions first and keeps possibility alive.",
-  },
-  {
-    id: "invention",
-    label: "Invention",
-    vibe: "Idea shaper",
-    color: "rgba(253, 99, 96, 0.16)",
-    accent: C.red,
-    description: "Turns sparks into concepts people can build around.",
-  },
-  {
-    id: "discernment",
-    label: "Discernment",
-    vibe: "Signal finder",
-    color: "rgba(70, 165, 255, 0.16)",
-    accent: C.blue,
-    description: "Feels what is ready and what still needs work.",
-  },
-  {
-    id: "galvanizing",
-    label: "Galvanizing",
-    vibe: "Momentum maker",
-    color: "rgba(255, 255, 255, 0.1)",
-    accent: C.white,
-    description: "Rallies people and turns decisions into movement.",
-  },
-  {
-    id: "enablement",
-    label: "Enablement",
-    vibe: "Support engine",
-    color: "rgba(124, 184, 147, 0.16)",
+const WG_BAND_META: Record<WorkingGeniusBand, { title: string; blurb: string; accent: string }> = {
+  genius: {
+    title: "Working genius",
+    blurb: "Gifted at it and energised by it. Give yourself more of this.",
     accent: "#7CB893",
-    description: "Removes friction and keeps the team resourced.",
   },
-  {
-    id: "tenacity",
-    label: "Tenacity",
-    vibe: "Finisher",
-    color: "rgba(255, 255, 255, 0.08)",
-    accent: C.ink,
-    description: "Pushes through to the last detail and ships.",
+  competency: {
+    title: "Working competency",
+    blurb: "You can do it well enough and it does not cost you much. Fine in moderation.",
+    accent: C.yellow,
   },
-];
-
-const WORKING_GENIUS_QUIZ: Array<{
-  prompt: string;
-  options: Array<{ id: WorkingGeniusId; label: string }>;
-}> = [
-  {
-    prompt: "You walk into a messy situation and your brain goes to...",
-    options: [
-      { id: "wonder", label: "What is the real question here?" },
-      { id: "invention", label: "What could we build differently?" },
-    ],
+  frustration: {
+    title: "Working frustration",
+    blurb: "It drains you, whether or not you are good at it. Get help here first.",
+    accent: C.red,
   },
-  {
-    prompt: "When a team has two solid paths, you...",
-    options: [
-      { id: "discernment", label: "Sense which option is ripe and which isn't." },
-      { id: "galvanizing", label: "Push for a call and move people into action." },
-    ],
-  },
-  {
-    prompt: "People tend to count on you for…",
-    options: [
-      { id: "enablement", label: "Clearing blockers and keeping them resourced." },
-      { id: "tenacity", label: "Carrying it over the finish line." },
-    ],
-  },
-  {
-    prompt: "Early-stage ambiguity feels…",
-    options: [
-      { id: "wonder", label: "Energizing — it holds the real answers." },
-      { id: "discernment", label: "Like a signal hunt — what matters most?" },
-    ],
-  },
-  {
-    prompt: "In a tight meeting, you’re the one who…",
-    options: [
-      { id: "invention", label: "Offers the fresh frame or creative approach." },
-      { id: "galvanizing", label: "Creates urgency and alignment." },
-    ],
-  },
-  {
-    prompt: "Late-stage execution feels best when…",
-    options: [
-      { id: "enablement", label: "Everyone has what they need to deliver." },
-      { id: "tenacity", label: "The last 10% finally gets done." },
-    ],
-  },
-];
+};
 
 function EmptyState({ ctx }: { ctx: TimeCtx }) {
   return (
@@ -1319,7 +1246,12 @@ function Reflections({
   visits: number;
   /** Absent only before sign-in completes; every use below is guarded. */
   userEmail?: string;
-  initialWorkingGenius?: { primary: string; counts: Record<string, number>; completedAt: string };
+  initialWorkingGenius?: {
+    primary: string;
+    counts: Record<string, number>;
+    completedAt: string;
+    result?: WorkingGeniusResult;
+  };
 }) {
   const openCount = decisions.filter((d) => d.status === "open").length;
   const nextOpenDecision = decisions.find((d) => d.status === "open") || null;
@@ -1331,80 +1263,63 @@ function Reflections({
     return Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
   }, [threads]);
 
-  const storageKey = `sprintbuddy:working-genius:${userEmail}`;
-  const [workingGenius, setWorkingGenius] = useState<WorkingGeniusResult | null>(() => {
-    if (!initialWorkingGenius) return null;
-    return {
-      primary: (initialWorkingGenius.primary as WorkingGeniusId) ?? "wonder",
-      counts: initialWorkingGenius.counts as Record<WorkingGeniusId, number>,
-      completedAt: initialWorkingGenius.completedAt,
-    };
-  });
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [quizCounts, setQuizCounts] = useState<Record<WorkingGeniusId, number>>({
-    wonder: 0,
-    invention: 0,
-    discernment: 0,
-    galvanizing: 0,
-    enablement: 0,
-    tenacity: 0,
-  });
+  /*
+   * Three states: not started, mid-assessment, and scored. The scored result
+   * is whatever the server computed — the browser never scores, so a founder
+   * and the operating team are always looking at the same numbers.
+   *
+   * A row saved by the six-item quiz this replaced arrives without `result`.
+   * That is shown as an old result to be retaken rather than padded out with
+   * bands the six items could not support.
+   */
+  const [wgResult, setWgResult] = useState<WorkingGeniusResult | null>(
+    initialWorkingGenius?.result ?? null,
+  );
+  const [wgLegacy, setWgLegacy] = useState<boolean>(
+    Boolean(initialWorkingGenius && !initialWorkingGenius.result),
+  );
+  const [wgStarted, setWgStarted] = useState(false);
+  const [wgIndex, setWgIndex] = useState(0);
+  const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusId>>({});
+  const [wgSaving, setWgSaving] = useState(false);
+  const [wgError, setWgError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        setWorkingGenius(JSON.parse(saved) as WorkingGeniusResult);
-      } catch {
-        window.localStorage.removeItem(storageKey);
-      }
-    }
-  }, [storageKey]);
+  const wgItem = WORKING_GENIUS_ITEMS[wgIndex];
 
-  const finishWorkingGenius = (counts: Record<WorkingGeniusId, number>) => {
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    const primary = (sorted[0]?.[0] as WorkingGeniusId) ?? "wonder";
-    const result: WorkingGeniusResult = {
-      primary,
-      counts,
-      completedAt: new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-    };
-    setWorkingGenius(result);
-    window.localStorage.setItem(storageKey, JSON.stringify(result));
-    if (userEmail) {
-      saveWorkingGenius(userEmail, {
-        primary: result.primary,
-        counts: result.counts,
-        completedAt: result.completedAt,
-      }).catch(() => {});
+  const submitWorkingGenius = async (answers: Record<string, WorkingGeniusId>) => {
+    if (!userEmail) return;
+    setWgSaving(true);
+    setWgError(null);
+    try {
+      const result = await saveWorkingGenius(userEmail, answers);
+      setWgResult(result);
+      setWgLegacy(false);
+      setWgStarted(false);
+    } catch {
+      // The answers stay in state, so Try again resubmits rather than
+      // restarting thirty items.
+      setWgError("Could not save that. Your answers are still here.");
+    } finally {
+      setWgSaving(false);
     }
   };
 
-  const handleQuizAnswer = (id: WorkingGeniusId) => {
-    if (workingGenius) return;
-    setQuizCounts((current) => {
-      const next = { ...current, [id]: current[id] + 1 };
-      const nextIndex = quizIndex + 1;
-      if (nextIndex >= WORKING_GENIUS_QUIZ.length) {
-        finishWorkingGenius(next);
-      } else {
-        setQuizIndex(nextIndex);
-      }
-      return next;
-    });
+  const answerWorkingGenius = (choice: WorkingGeniusId) => {
+    if (!wgItem || wgSaving) return;
+    const next = { ...wgAnswers, [wgItem.id]: choice };
+    setWgAnswers(next);
+    if (wgIndex + 1 >= WORKING_GENIUS_ITEMS.length) {
+      void submitWorkingGenius(next);
+    } else {
+      setWgIndex(wgIndex + 1);
+    }
   };
 
-  const resetQuiz = () => {
-    if (workingGenius) return;
-    setQuizCounts({
-      wonder: 0,
-      invention: 0,
-      discernment: 0,
-      galvanizing: 0,
-      enablement: 0,
-      tenacity: 0,
-    });
-    setQuizIndex(0);
+  const startWorkingGenius = () => {
+    setWgAnswers({});
+    setWgIndex(0);
+    setWgError(null);
+    setWgStarted(true);
   };
 
   const closeDecision = (decision: Decision) => {
@@ -1419,10 +1334,6 @@ function Reflections({
     if (userEmail) saveDecision(userEmail, updated).catch(() => {});
   };
 
-  const primaryType = workingGenius
-    ? WORKING_GENIUS_TYPES.find((t) => t.id === workingGenius.primary)
-    : null;
-  const currentQuestion = WORKING_GENIUS_QUIZ[quizIndex];
 
   return (
     <div className="rise" style={{ maxWidth: 720, margin: "0 auto", padding: "60px 28px 90px" }}>
@@ -1504,81 +1415,55 @@ function Reflections({
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <p style={{ ...kicker, marginBottom: 6 }}>Working Genius</p>
+            <p style={{ ...kicker, marginBottom: 6 }}>Working style</p>
             <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", color: C.ink }}>
-              {workingGenius ? "Your profile" : "Find your current edge"}
+              {wgResult ? "Where your energy goes" : "Find where your energy goes"}
             </h2>
           </div>
-          <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-            {workingGenius ? "Saved to your reflections." : "Six quick picks. Takes 60 seconds."}
-          </span>
-        </div>
-
-        {workingGenius ? (
-          <div style={{ marginTop: 20 }}>
-            <div
+          {wgResult ? (
+            <button
+              type="button"
+              onClick={startWorkingGenius}
               style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
-                gap: 20,
-                alignItems: "stretch",
+                background: "none", border: `1px solid ${C.line}`, borderRadius: 999,
+                padding: "7px 15px", color: C.sub, fontSize: 12.5, cursor: "pointer",
               }}
             >
-              <div
-                style={{
-                  padding: "18px 18px",
-                  borderRadius: 14,
-                  background: primaryType?.color ?? "rgba(255,255,255,0.06)",
-                  border: `1px solid ${C.line}`,
-                  minHeight: 140,
-                }}
-              >
-                <p style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: C.faint, margin: "0 0 10px" }}>Primary genius</p>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-                  <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 800, color: C.ink }}>
-                    {primaryType?.label ?? "—"}
-                  </h3>
-                  <span style={{ color: C.sub, fontSize: 13 }}>{primaryType?.vibe}</span>
-                </div>
-                <p style={{ margin: "8px 0 0", color: C.sub, fontFamily: "var(--font-serif)", fontSize: 15 }}>
-                  {primaryType?.description}
-                </p>
-                <p style={{ marginTop: 12, fontSize: 12, color: C.faint }}>Completed {workingGenius.completedAt}</p>
-              </div>
-              <div
-                style={{
-                  padding: "18px 16px",
-                  borderRadius: 14,
-                  border: `1px solid ${C.line}`,
-                  background: "rgba(0,0,0,0.2)",
-                  display: "grid",
-                  gap: 10,
-                }}
-              >
-                {WORKING_GENIUS_TYPES.map((type) => {
-                  const score = workingGenius.counts[type.id];
-                  const width = Math.max(12, Math.min(100, score * 50));
-                  return (
-                    <div key={type.id} style={{ display: "grid", gap: 4 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, color: C.sub }}>
-                        <span>{type.label}</span>
-                        <span style={{ color: C.faint }}>{score}</span>
-                      </div>
-                      <div style={{ height: 6, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-                        <div style={{ width: `${width}%`, height: "100%", borderRadius: 999, background: type.accent, boxShadow: `0 0 10px ${type.accent}` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+              Retake
+            </button>
+          ) : (
+            <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
+              Thirty either-or questions. About six minutes.
+            </span>
+          )}
+        </div>
+
+        {wgResult ? (
+          <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
+            {(["genius", "competency", "frustration"] as WorkingGeniusBand[]).map((band) => (
+              <WgBandCard key={band} band={band} ids={wgResult.bands[band]} />
+            ))}
+            <WgRanking result={wgResult} />
+            <WgCaveats result={wgResult} />
           </div>
-        ) : (
+        ) : wgStarted && wgItem ? (
           <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint }}>
-                Question {quizIndex + 1} of {WORKING_GENIUS_QUIZ.length}
+                {wgIndex + 1} of {WORKING_GENIUS_ITEMS.length}
               </span>
+              {wgIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setWgIndex(wgIndex - 1)}
+                  style={{ background: "none", border: "none", color: C.faint, fontSize: 12.5, cursor: "pointer", padding: 0 }}
+                >
+                  ← Back
+                </button>
+              )}
+            </div>
+            <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+              <div style={{ width: `${(wgIndex / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.blue, transition: "width 200ms ease" }} />
             </div>
             <div
               style={{
@@ -1589,35 +1474,94 @@ function Reflections({
                 boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)",
               }}
             >
-              <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: C.ink }}>{currentQuestion?.prompt}</p>
+              <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: C.ink }}>{wgItem.prompt}</p>
             </div>
             <div style={{ display: "grid", gap: 12 }}>
-              {currentQuestion?.options.map((option) => {
-                const type = WORKING_GENIUS_TYPES.find((t) => t.id === option.id);
+              {/*
+                * The option's type is deliberately not labelled here. The old
+                * quiz printed "WONDER" above each choice, which told the
+                * founder exactly what each answer scored and turned the
+                * instrument into a self-portrait. The types appear in the
+                * result, where knowing them costs nothing.
+                */}
+              {wgItem.options.map((option) => {
+                const picked = wgAnswers[wgItem.id] === option.id;
                 return (
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => handleQuizAnswer(option.id)}
+                    disabled={wgSaving}
+                    onClick={() => answerWorkingGenius(option.id)}
                     className="wg-quiz-option"
                     style={{
-                      display: "grid",
-                      gap: 6,
                       textAlign: "left",
                       padding: "16px 18px",
                       borderRadius: 14,
-                      border: `1px solid ${C.line}`,
-                      background: "rgba(0,0,0,0.25)",
+                      border: `1px solid ${picked ? C.blue : C.line}`,
+                      background: picked ? "rgba(70, 165, 255, 0.10)" : "rgba(0,0,0,0.25)",
                       color: C.ink,
-                      cursor: "pointer",
+                      fontSize: 16,
+                      fontWeight: 600,
+                      cursor: wgSaving ? "progress" : "pointer",
+                      opacity: wgSaving ? 0.6 : 1,
                       transition: "transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease",
                     }}
                   >
-                    <span style={{ fontSize: 13, letterSpacing: 1.8, textTransform: "uppercase", color: C.faint }}>{type?.label}</span>
-                    <span style={{ fontSize: 16, fontWeight: 600 }}>{option.label}</span>
+                    {option.label}
                   </button>
                 );
               })}
+            </div>
+            {wgSaving && (
+              <p style={{ margin: 0, fontSize: 13, color: C.faint }}>Scoring…</p>
+            )}
+            {wgError && (
+              <p style={{ margin: 0, fontSize: 13, color: C.red }}>
+                {wgError}{" "}
+                <button
+                  type="button"
+                  onClick={() => void submitWorkingGenius(wgAnswers)}
+                  style={{ background: "none", border: "none", color: C.blue, cursor: "pointer", padding: 0, fontSize: 13, textDecoration: "underline" }}
+                >
+                  Try again
+                </button>
+              </p>
+            )}
+          </div>
+        ) : (
+          <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
+            <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.55, color: C.sub, fontFamily: "var(--font-serif)" }}>
+              Six kinds of work. Two you are gifted at <em>and</em> energised by, two you can do
+              without much cost, two that drain you whether or not you are good at them. The point
+              is not the label. It is knowing which two to stop volunteering for, and who on your
+              team should be doing them instead.
+            </p>
+            {wgLegacy && initialWorkingGenius && (
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: C.faint, padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.line}`, background: "rgba(0,0,0,0.2)" }}>
+                You took the earlier six-question version on {initialWorkingGenius.completedAt}, which
+                only ever named one type and could not compare all six. Retaking it gives you the
+                full ranking.
+              </p>
+            )}
+            <div>
+              <button
+                type="button"
+                onClick={startWorkingGenius}
+                disabled={!userEmail}
+                style={{
+                  padding: "12px 22px",
+                  borderRadius: 999,
+                  border: "none",
+                  background: C.blue,
+                  color: "#04121f",
+                  fontWeight: 700,
+                  fontSize: 14.5,
+                  cursor: userEmail ? "pointer" : "not-allowed",
+                  opacity: userEmail ? 1 : 0.5,
+                }}
+              >
+                {wgLegacy ? "Retake it properly" : "Start"}
+              </button>
             </div>
           </div>
         )}
@@ -1625,6 +1569,139 @@ function Reflections({
 
       <p style={{ marginTop: 44, paddingTop: 22, borderTop: `1px solid ${C.line}`, color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14, lineHeight: 1.5, fontVariationSettings: '"opsz" 18' }}>
         Open loops come back as soft check-ins in the chat. That is how they get closed.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------- working style result -------------------- */
+
+function WgGear({ id, size = 34 }: { id: WorkingGeniusId; size?: number }) {
+  const { accent, tint } = WG_COLOR[id];
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size, height: size, borderRadius: 999, display: "grid", placeItems: "center",
+        background: tint, border: `1px solid ${accent}`, color: accent,
+        fontWeight: 800, fontSize: Math.round(size * 0.42), flexShrink: 0,
+      }}
+    >
+      {typeById(id).letter}
+    </span>
+  );
+}
+
+function WgBandCard({ band, ids }: { band: WorkingGeniusBand; ids: WorkingGeniusId[] }) {
+  const meta = WG_BAND_META[band];
+  return (
+    <section
+      style={{
+        padding: "18px", borderRadius: 14, border: `1px solid ${C.line}`,
+        background: "rgba(0,0,0,0.2)", display: "grid", gap: 15,
+      }}
+    >
+      <div>
+        <p style={{ margin: 0, fontSize: 11.5, letterSpacing: 2, textTransform: "uppercase", fontWeight: 800, color: meta.accent }}>
+          {meta.title}
+        </p>
+        <p style={{ margin: "5px 0 0", fontSize: 13, color: C.faint }}>{meta.blurb}</p>
+      </div>
+      {ids.map((id) => {
+        const type = typeById(id);
+        return (
+          <div key={id} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <WgGear id={id} />
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 16, color: C.ink }}>{type.label}</p>
+              <p style={{ margin: "3px 0 0", fontSize: 14.5, lineHeight: 1.45, color: C.sub, fontFamily: "var(--font-serif)" }}>
+                {bandCopy(type, band)}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function WgRanking({ result }: { result: WorkingGeniusResult }) {
+  const max = WORKING_GENIUS_ITEMS.length / WORKING_GENIUS_TYPES.length * 2; // 10
+  return (
+    <section style={{ padding: "18px", borderRadius: 14, border: `1px solid ${C.line}`, background: "rgba(0,0,0,0.2)", display: "grid", gap: 11 }}>
+      <p style={{ margin: "0 0 3px", fontSize: 11.5, letterSpacing: 2, textTransform: "uppercase", color: C.faint }}>
+        All six, by how often you chose them
+      </p>
+      {result.ranking.map((id, i) => {
+        const type = typeById(id);
+        const score = result.counts[id];
+        return (
+          <div key={id} style={{ display: "grid", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, color: C.sub }}>
+              <span>
+                <span style={{ color: C.faint, marginRight: 7 }}>{i + 1}</span>
+                {type.label}
+              </span>
+              <span style={{ color: C.faint }}>{score}/{max}</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+              <div
+                style={{
+                  width: `${Math.max(2, (score / max) * 100)}%`, height: "100%", borderRadius: 999,
+                  background: WG_COLOR[id].accent, boxShadow: `0 0 10px ${WG_COLOR[id].accent}`,
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/**
+ * Says out loud where the result is soft.
+ *
+ * Every question was asked twice, so we know how often the founder contradicted
+ * themselves, and we know whether a band boundary was decided by the answers or
+ * by a tie-break. Withholding that would make a coin toss look like a finding,
+ * which is the failure mode of every pop personality test.
+ */
+function WgCaveats({ result }: { result: WorkingGeniusResult }) {
+  const pairs = WORKING_GENIUS_ITEMS.length / 2;
+  const changed = Math.round((1 - result.consistency) * pairs);
+  const notes: string[] = [];
+
+  if (changed >= 5) {
+    notes.push(
+      `You answered ${changed} of the ${pairs} pairs one way the first time and the other way the second. That is enough that the middle of this ranking should be read as unsettled rather than as a result.`,
+    );
+  } else if (changed > 0) {
+    notes.push(`You switched on ${changed} of the ${pairs} pairs between the two askings, which is normal.`);
+  }
+  if (result.boundaryMargins.geniusCompetency === 0) {
+    notes.push("Your second and third types finished level, so the line between genius and competency was a tie-break, not a finding. Read those two as interchangeable.");
+  }
+  if (result.boundaryMargins.competencyFrustration === 0) {
+    notes.push("Your fourth and fifth types finished level, so the line between competency and frustration was a tie-break, not a finding.");
+  }
+  for (const [a, b] of result.contested) {
+    notes.push(`${typeById(a).label} and ${typeById(b).label} came out exactly level, including against each other. Nothing in your answers separates them.`);
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 8, paddingTop: 4 }}>
+      {notes.map((note) => (
+        <p key={note} style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
+          {note}
+        </p>
+      ))}
+      <p style={{ margin: 0, fontSize: 12, color: C.faint }}>
+        Completed {result.completedAt} · {WORKING_GENIUS_ITEMS.length} items · {result.version}
+      </p>
+      <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: C.faint }}>
+        Six-type model after Patrick Lencioni's The 6 Types of Working Genius. This is the Sprint's
+        own instrument, not the official assessment.
       </p>
     </div>
   );

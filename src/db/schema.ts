@@ -247,6 +247,19 @@ export function initSchema(db: Database) {
   // landed. Null means nobody has read it yet.
   addColumn(db, "threads", "shared_seen_at", "TEXT");
 
+  // The working-style assessment grew from six items returning one "primary"
+  // type to thirty returning a full ranking in three bands. primary_type and
+  // counts_json stay because rows written by the old six-item quiz still exist
+  // and are still the founder's answer until they retake it; result_json holds
+  // everything the new scoring produces. A row with a null result_json is an
+  // old one and the UI says so rather than dressing it up as a full profile.
+  addColumn(db, "working_genius", "result_json", "TEXT");
+  // Broken out of the blob so the operating team can check data quality across
+  // the cohort without parsing 20 JSON documents: which instrument someone
+  // took, and how often their two answers to the same pair agreed.
+  addColumn(db, "working_genius", "instrument_version", "TEXT");
+  addColumn(db, "working_genius", "consistency", "REAL");
+
   // Server-side sessions. The cookie holds an opaque random token and nothing
   // else, so a client cannot forge a role the way it could with the previous
   // plain-JSON cookie. Deleting a row revokes access immediately.
