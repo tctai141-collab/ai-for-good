@@ -43,7 +43,7 @@ Founders can see only their own data.
 | Who | What they get | Where |
 |---|---|---|
 | **Render** | Hosting, the database on a persistent disk | Frankfurt, EU |
-| **Anthropic** | Message text, to generate replies | ⚠️ **Confirm the org's data-retention tier and region in the console and complete this line before the cohort starts.** |
+| **Anthropic** | Message text, to generate replies | Requests may route via the US, Europe, Asia or Australia; data is **stored in the US**. Retention period confirmed as 30 days in the console (Settings, Privacy Controls). Inputs and outputs flagged under the Usage Policy are kept up to 2 years. Not used for model training. |
 | **Resend** | Email address and the message, for invites and reminders | EU |
 | **Cloudflare R2** | Encrypted database snapshots | EU |
 | **Sentry** | Error type, stack, and route. **Never message content, request bodies or cookies** | See Sentry project region |
