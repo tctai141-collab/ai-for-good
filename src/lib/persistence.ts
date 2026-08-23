@@ -51,6 +51,13 @@ export type UserData = {
   week: number;
   visits: number;
   workingGenius?: WorkingGenius;
+  /** Every take, oldest first. One entry until the first retake window opens. */
+  workingGeniusTakes?: WorkingGeniusTake[];
+};
+
+export type WorkingGeniusTake = {
+  takenOn: string;
+  result: WorkingGeniusResult;
 };
 
 export type WorkingGenius = {
@@ -146,6 +153,16 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
     themes: (thData.themes as ThemeArc[]) || [],
     week: (thData.week as number) || 1,
     visits: (vData.visits as number) || 0,
+    workingGeniusTakes: ((wgData.takes as Array<{ taken_on: string; result_json: string }> | undefined) ?? [])
+      .flatMap((t) => {
+        try {
+          return [{ takenOn: t.taken_on, result: JSON.parse(t.result_json) as WorkingGeniusResult }];
+        } catch {
+          // A row this client cannot parse is not worth failing the whole page
+          // over; the comparison simply has one fewer point.
+          return [];
+        }
+      }),
     workingGenius: wgData.workingGenius
       ? (() => {
         const row = wgData.workingGenius as {
