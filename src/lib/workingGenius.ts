@@ -673,3 +673,49 @@ export function bandOf(result: WorkingGeniusResult, id: WorkingGeniusId): Workin
   if (result.bands.competency.includes(id)) return "competency";
   return "frustration";
 }
+
+/* ---------------------------- retake schedule ----------------------------- */
+
+/**
+ * When a founder may take this again.
+ *
+ * The instrument measures where energy goes, and that does not move week to
+ * week. Letting somebody retake it the morning after a bad session would
+ * measure the session, not them, and would turn a profile into a mood ring.
+ *
+ * So: the first take is available whenever they arrive, and each retake opens
+ * on a fixed date the whole cohort shares. Three fixed points across the sprint
+ * is enough to see movement and few enough that each one is worth sitting down
+ * for.
+ *
+ * Dates are Helsinki calendar days, matching everything else the cohort runs on.
+ */
+export const RETAKE_WINDOWS: readonly string[] = ["2026-10-08", "2026-11-08", "2026-12-01"];
+
+/**
+ * The next date this founder may retake, or null when they are done.
+ *
+ * Keyed off the last take rather than off a count, which is what makes a late
+ * joiner work correctly: somebody whose first take is on 20 October has already
+ * passed the October window, so their next one is November, not a window that
+ * opened before they existed.
+ */
+export function nextRetakeDate(lastTakenOn: string | null): string | null {
+  if (!lastTakenOn) return null;
+  return RETAKE_WINDOWS.find((d) => d > lastTakenOn) ?? null;
+}
+
+/** True when `today` has reached the founder's next window. */
+export function retakeOpen(lastTakenOn: string | null, today: string): boolean {
+  if (!lastTakenOn) return true;
+  const next = nextRetakeDate(lastTakenOn);
+  return next !== null && today >= next;
+}
+
+/** Whole days from `today` to `date`, never negative. */
+export function daysUntil(date: string, today: string): number {
+  const a = Date.parse(`${today}T00:00:00Z`);
+  const b = Date.parse(`${date}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.max(0, Math.round((b - a) / 86_400_000));
+}

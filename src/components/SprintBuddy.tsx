@@ -5,6 +5,9 @@ import {
   WORKING_GENIUS_ITEMS,
   WORKING_GENIUS_TYPES,
   bandCopy,
+  daysUntil,
+  nextRetakeDate,
+  retakeOpen,
   typeById,
   type WorkingGeniusBand,
   type WorkingGeniusId,
@@ -591,7 +594,7 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
           />
         )}
         {persona === "founder" && view === "reflections" && (
-          <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} /></Scroll>
+          <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} /></Scroll>
         )}
         {persona === "coach" && (
           <Scroll>
@@ -684,6 +687,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
       {persona === "founder" ? (
         <>
           <Tasks state={deadlines} />
+
+          <ProgrammeRail />
 
           {checkinDone ? (
             <div className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14, color: C.faint, marginBottom: 14, cursor: "default" }}>
@@ -1480,6 +1485,7 @@ function Reflections({
   themes,
   visits,
   userEmail,
+  takes,
   initialWorkingGenius,
 }: {
   threads: Thread[];
@@ -1490,6 +1496,7 @@ function Reflections({
   visits: number;
   /** Absent only before sign-in completes; every use below is guarded. */
   userEmail?: string;
+  takes?: Array<{ takenOn: string; result: WorkingGeniusResult }>;
   initialWorkingGenius?: {
     primary: string;
     counts: Record<string, number>;
@@ -1522,6 +1529,17 @@ function Reflections({
   const [wgLegacy, setWgLegacy] = useState<boolean>(
     Boolean(initialWorkingGenius && !initialWorkingGenius.result),
   );
+  /*
+   * Retakes are pinned to three dates the whole cohort shares. The instrument
+   * measures where energy goes, which does not move week to week, so a retake
+   * the morning after a bad session would measure the session. Enforced on the
+   * server too; this only decides what the card says.
+   */
+  const today = helsinkiDay(new Date());
+  const lastTakenOn = wgResult?.completedAt ?? initialWorkingGenius?.completedAt ?? null;
+  const canRetake = retakeOpen(lastTakenOn, today);
+  const nextWindow = nextRetakeDate(lastTakenOn);
+
   const [wgStarted, setWgStarted] = useState(false);
   const [wgIndex, setWgIndex] = useState(0);
   const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusId>>({});
@@ -1611,11 +1629,6 @@ function Reflections({
       </div>
 
       <div style={{ margin: "0 0 20px", padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
-        <p style={{ ...kicker, marginBottom: 12 }}>What's on</p>
-        <Programme />
-      </div>
-
-      <div style={{ margin: "0 0 20px", padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
         <p style={{ ...kicker, marginBottom: 12 }}>The sprint so far</p>
         <Arc checkins={checkins} />
       </div>
@@ -1675,16 +1688,31 @@ function Reflections({
             </h2>
           </div>
           {wgResult ? (
-            <button
-              type="button"
-              onClick={startWorkingGenius}
-              style={{
-                background: "none", border: `1px solid ${C.line}`, borderRadius: 999,
-                padding: "7px 15px", color: C.sub, fontSize: 12.5, cursor: "pointer",
-              }}
-            >
-              Retake
-            </button>
+            canRetake ? (
+              <button
+                type="button"
+                onClick={startWorkingGenius}
+                style={{
+                  background: "none", border: `1px solid ${C.blue}`, borderRadius: 999,
+                  padding: "7px 15px", color: C.blue, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Retake it now
+              </button>
+            ) : nextWindow ? (
+              <span
+                title="Locked until the next window so the retake measures you, not the week you have just had"
+                style={{ fontSize: 12.5, color: C.faint, textAlign: "right", lineHeight: 1.45 }}
+              >
+                Next on {readableWindow(nextWindow)}
+                <br />
+                <span style={{ color: C.sub }}>
+                  {daysUntil(nextWindow, today)} {daysUntil(nextWindow, today) === 1 ? "day" : "days"}
+                </span>
+              </span>
+            ) : (
+              <span style={{ fontSize: 12.5, color: C.faint }}>Last one taken</span>
+            )
           ) : (
             <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
               Thirty either-or questions. About six minutes.
@@ -1701,6 +1729,7 @@ function Reflections({
             ))}
             <WgRanking result={wgResult} />
             <WgCaveats result={wgResult} />
+            <WgHistory takes={takes ?? []} />
           </div>
         ) : wgStarted && wgItem ? (
           <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
@@ -2054,6 +2083,58 @@ function WgRanking({ result }: { result: WorkingGeniusResult }) {
  * test/working-genius-privacy.test.ts fails if an organizer can reach it.
  * Softening the wording would be the tell that somebody had stopped being sure.
  */
+/**
+ * What moved between takes.
+ *
+ * The reason the retakes are spaced across the sprint at all. One take is a
+ * label; four are a record of whether the work changed how a founder spends
+ * their energy, which is the only interesting question the instrument can
+ * answer.
+ *
+ * Shows nothing until there are two, and says plainly when nothing changed.
+ * A profile that reports movement every time is measuring noise.
+ */
+function WgHistory({ takes }: { takes: Array<{ takenOn: string; result: WorkingGeniusResult }> }) {
+  if (takes.length < 2) return null;
+
+  const label = (ids: WorkingGeniusId[]) => ids.map((id) => typeById(id).label).join(" + ");
+  const first = takes[0]!;
+  const last = takes[takes.length - 1]!;
+  const moved = label(first.result.bands.genius) !== label(last.result.bands.genius);
+
+  return (
+    <div style={{ marginTop: 22, paddingTop: 18, borderTop: `1px solid ${C.line}` }}>
+      <p style={{ ...kicker, marginBottom: 12 }}>Across the sprint</p>
+
+      <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 10 }}>
+        {takes.map((t, i) => (
+          <li key={t.takenOn} style={{ display: "grid", gridTemplateColumns: "5.5rem 1fr", gap: 12, alignItems: "baseline" }}>
+            <span style={{ fontSize: 12, color: C.faint, fontVariantNumeric: "tabular-nums" }}>
+              {readableWindow(t.takenOn)}
+            </span>
+            <span style={{ fontSize: 13.5, color: i === takes.length - 1 ? C.ink : C.sub }}>
+              {label(t.result.bands.genius)}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <p style={{ margin: "14px 0 0", fontSize: 13, color: C.sub, lineHeight: 1.6 }}>
+        {moved
+          ? `Your top two moved from ${label(first.result.bands.genius)} to ${label(last.result.bands.genius)}. Worth asking whether the work changed or you did.`
+          : `Your top two have not moved since ${readableWindow(first.takenOn)}. That is the usual outcome and it is not a failure of the sprint.`}
+      </p>
+    </div>
+  );
+}
+
+/** "8 October", which is what a person reads, not what a machine stores. */
+function readableWindow(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+}
+
 function WgPrivateNote() {
   return (
     <p
@@ -2204,16 +2285,21 @@ function Arc({ checkins }: { checkins: Checkin[] }) {
 type ProgrammeWeek = { week: number; phase: string; title: string; milestones: string; sessions: string };
 
 /**
- * What is on, this week and next.
+ * What is on, in the left rail.
  *
- * The schedule already existed, editable in the admin page and handed to the
- * advisor server-side, and was the one thing a founder could not look up. Read
- * only, and only the weeks that are still ahead plus the one in progress:
- * a twelve-week wall of text is a thing to scroll past, not a thing to read.
+ * Lives in the navigation rather than on Reflections because it answers a
+ * question a founder has in passing, not one they sit down for. It is the
+ * cohort's own schedule and it was, until now, the one thing the product
+ * would not tell them.
+ *
+ * Shows this week by default and opens to the next two. Renders nothing at all
+ * when the programme is empty: an empty box in permanent navigation teaches
+ * people to stop looking at that corner of the screen.
  */
-function Programme() {
+function ProgrammeRail() {
   const [weeks, setWeeks] = useState<ProgrammeWeek[] | null>(null);
   const [now, setNow] = useState(1);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -2228,40 +2314,58 @@ function Programme() {
     return () => { live = false; };
   }, []);
 
-  const shown = useMemo(() => {
+  const ahead = useMemo(() => {
     if (!weeks) return [];
     return weeks
       .filter((w) => w.week >= now && (w.title || w.milestones || w.sessions))
       .slice(0, 3);
   }, [weeks, now]);
 
-  if (!weeks) return null;
-  if (!shown.length) {
-    return (
-      <p style={{ margin: 0, fontSize: 13, color: C.faint, lineHeight: 1.6 }}>
-        Nothing scheduled yet. The team fills this in as the sprint is planned.
-      </p>
-    );
-  }
+  if (!ahead.length) return null;
+  const [current, ...rest] = ahead;
+  const shown = open ? ahead : [current!];
 
   return (
-    <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 14 }}>
-      {shown.map((w) => (
-        <li key={w.week} style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 14, alignItems: "baseline" }}>
-          <span style={{
-            fontSize: 11, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase",
-            color: w.week === now ? C.blue : C.faint, whiteSpace: "nowrap",
-          }}>
-            {w.week === now ? "This week" : `Week ${w.week}`}
-          </span>
-          <div>
-            {w.title && <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>{w.title}</p>}
-            {w.sessions && <p style={{ margin: "3px 0 0", fontSize: 13.5, color: C.sub, lineHeight: 1.5 }}>{w.sessions}</p>}
-            {w.milestones && <p style={{ margin: "3px 0 0", fontSize: 13, color: C.faint, lineHeight: 1.5 }}>{w.milestones}</p>}
+    <section aria-label="Programme" style={{ marginBottom: 16 }}>
+      <p style={{ ...navLabel, margin: "0 0 6px", padding: "0 4px" }}>What&rsquo;s on</p>
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {shown.map((w) => (
+          <div key={w.week} style={{ padding: "0 4px" }}>
+            <p style={{
+              margin: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.2,
+              textTransform: "uppercase", color: w.week === now ? C.blue : C.faint,
+            }}>
+              {w.week === now ? "This week" : `Week ${w.week}`}
+            </p>
+            {w.title && (
+              <p style={{ margin: "2px 0 0", fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{w.title}</p>
+            )}
+            {w.sessions && (
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: C.sub, lineHeight: 1.45 }}>{w.sessions}</p>
+            )}
+            {open && w.milestones && (
+              <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.faint, lineHeight: 1.45 }}>{w.milestones}</p>
+            )}
           </div>
-        </li>
-      ))}
-    </ul>
+        ))}
+      </div>
+
+      {rest.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="navitem"
+          style={{
+            display: "block", width: "100%", textAlign: "left", marginTop: 6,
+            background: "transparent", border: "none", color: C.faint,
+            cursor: "pointer", font: "600 11.5px/1 inherit", padding: "6px 4px",
+          }}
+        >
+          {open ? "Show less" : `What's coming (${rest.length})`}
+        </button>
+      )}
+    </section>
   );
 }
 

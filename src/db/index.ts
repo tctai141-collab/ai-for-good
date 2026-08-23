@@ -1471,3 +1471,76 @@ export function listBroadcastDeliveries(
     )
     .all({ $id: broadcastId }) as { email: string; status: string; detail: string | null }[];
 }
+
+// ---- Working-style history ------------------------------------------------
+
+export type WorkingGeniusTake = {
+  id: string;
+  taken_on: string;
+  primary_type: string;
+  result_json: string;
+  instrument_version: string;
+  consistency: number | null;
+};
+
+/**
+ * Records one take, in addition to the latest-snapshot row.
+ *
+ * Ignores a repeat on the same day rather than stacking two rows for one
+ * sitting: a founder who submits, sees the result and immediately resubmits has
+ * taken it once. The retake schedule makes that rare, and the guard is cheaper
+ * than reasoning about it later.
+ */
+export function recordWorkingGeniusTake(
+  userEmail: string,
+  take: Omit<WorkingGeniusTake, "id">,
+): void {
+  const db = getDb();
+  const existing = db
+    .query("SELECT id FROM working_genius_takes WHERE user_email = $email AND taken_on = $on")
+    .get({ $email: userEmail, $on: take.taken_on }) as { id: string } | null;
+
+  if (existing) {
+    db.run(
+      `UPDATE working_genius_takes
+         SET primary_type = $primary, result_json = $result,
+             instrument_version = $version, consistency = $consistency
+       WHERE id = $id`,
+      {
+        $id: existing.id,
+        $primary: take.primary_type,
+        $result: take.result_json,
+        $version: take.instrument_version,
+        $consistency: take.consistency,
+      },
+    );
+    return;
+  }
+
+  db.run(
+    `INSERT INTO working_genius_takes
+       (id, user_email, taken_on, primary_type, result_json, instrument_version, consistency)
+     VALUES ($id, $email, $on, $primary, $result, $version, $consistency)`,
+    {
+      $id: crypto.randomUUID(),
+      $email: userEmail,
+      $on: take.taken_on,
+      $primary: take.primary_type,
+      $result: take.result_json,
+      $version: take.instrument_version,
+      $consistency: take.consistency,
+    },
+  );
+}
+
+/** Oldest first, so a comparison reads left to right as time. */
+export function listWorkingGeniusTakes(userEmail: string): WorkingGeniusTake[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT id, taken_on, primary_type, result_json, instrument_version, consistency
+       FROM working_genius_takes WHERE user_email = $email
+       ORDER BY taken_on ASC`,
+    )
+    .all({ $email: userEmail }) as WorkingGeniusTake[];
+}

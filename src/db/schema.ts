@@ -500,6 +500,34 @@ export function initSchema(db: Database) {
   // what most of them still mean. It exists because a reminder counted back in
   // hours has to have something to count back from: "ten hours before" is not
   // a question a bare date can answer.
+  // Every take, kept.
+  //
+  // working_genius holds one row per founder and overwrites on retake, which
+  // was right when the assessment was a one-off. It is now taken up to four
+  // times across the sprint, on fixed dates, specifically so a founder can see
+  // what moved. Overwriting would delete the only thing those extra takes are
+  // for.
+  //
+  // The latest take still lands in working_genius as well, so every existing
+  // read, the founder-only guard and its tests included, keeps working
+  // unchanged. This table is additive history and nothing reads it but the
+  // founder's own comparison.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS working_genius_takes (
+      id TEXT PRIMARY KEY,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      taken_on TEXT NOT NULL,
+      primary_type TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      instrument_version TEXT NOT NULL,
+      consistency REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_wg_takes_user ON working_genius_takes(user_email, taken_on);
+  `);
+
   addColumn(db, "deadlines", "due_time", "TEXT");
 
   // --- Migration 4: more reminder kinds -------------------------------------

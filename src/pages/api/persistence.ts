@@ -14,6 +14,8 @@ import {
   incrementVisits,
   ensureUser,
   getWorkingGenius,
+  listWorkingGeniusTakes,
+  recordWorkingGeniusTake,
   upsertWorkingGenius,
   getThemeSignals,
   NotOwnerError,
@@ -22,6 +24,8 @@ import { TOTAL_WEEKS, currentSprintWeek, weekForDateClamped } from "../../lib/sp
 import {
   INSTRUMENT_VERSION,
   WORKING_GENIUS_ITEMS,
+  nextRetakeDate,
+  retakeOpen,
   scoreWorkingGenius,
   type WorkingGeniusId,
   type WorkingGeniusResponses,
@@ -68,6 +72,22 @@ function requireSelfOrOrganizer(session: SessionUser | null, userEmail: string):
   if (session.email === userEmail) return null;
   if (session.role === "organizer") return null;
   return "forbidden";
+}
+
+/**
+ * Today in Helsinki, as YYYY-MM-DD.
+ *
+ * The retake windows are calendar days the whole cohort shares, so the server
+ * has to agree with the founder's calendar rather than with UTC. Otherwise a
+ * window opens three hours late for everybody.
+ */
+function helsinkiToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Helsinki",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 export const POST: APIRoute = async ({ cookies, request }) => {
@@ -240,15 +260,40 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           return err("assessment incomplete");
         }
 
-        const result = scoreWorkingGenius(
-          responses,
-          new Date().toISOString().slice(0, 10),
-        );
+        /*
+         * The window, enforced here and not only in the interface.
+         *
+         * The assessment measures where energy goes, which does not move week
+         * to week, so retakes are pinned to three fixed dates the cohort
+         * shares. A disabled button is a suggestion; this is the rule. It also
+         * covers the stale tab that was left open before a window closed.
+         */
+        const today = helsinkiToday();
+        const previous = getWorkingGenius(session!.email);
+        if (previous && !retakeOpen(previous.completed_at, today)) {
+          const next = nextRetakeDate(previous.completed_at);
+          return err(
+            next
+              ? `This one opens again on ${next}.`
+              : "You have taken this the last time for this sprint.",
+            409,
+          );
+        }
+
+        const result = scoreWorkingGenius(responses, today);
         upsertWorkingGenius({
           user_email: session!.email,
           primary_type: result.primary,
           counts_json: JSON.stringify(result.counts),
           completed_at: result.completedAt,
+          result_json: JSON.stringify(result),
+          instrument_version: INSTRUMENT_VERSION,
+          consistency: result.consistency,
+        });
+        // Kept as well as overwritten: the point of four takes is the comparison.
+        recordWorkingGeniusTake(session!.email, {
+          taken_on: result.completedAt,
+          primary_type: result.primary,
           result_json: JSON.stringify(result),
           instrument_version: INSTRUMENT_VERSION,
           consistency: result.consistency,
@@ -353,7 +398,10 @@ export const GET: APIRoute = async ({ cookies, request }) => {
        */
       case "working-genius":
         if (!isOwner) return err("forbidden", 403);
-        return json({ workingGenius: getWorkingGenius(userEmail) });
+        return json({
+          workingGenius: getWorkingGenius(userEmail),
+          takes: listWorkingGeniusTakes(userEmail),
+        });
 
       // Derived here rather than in the browser because placing a date into a
       // sprint week needs SPRINT_START_DATE, which is server-side only.
