@@ -2292,9 +2292,9 @@ type ProgrammeWeek = { week: number; phase: string; title: string; milestones: s
  * cohort's own schedule and it was, until now, the one thing the product
  * would not tell them.
  *
- * Shows this week by default and opens to the next two. Renders nothing at all
- * when the programme is empty: an empty box in permanent navigation teaches
- * people to stop looking at that corner of the screen.
+ * Shows this week by default and opens to the next two, and says what it is
+ * waiting for when the programme has no weeks in it yet. Founders should be
+ * able to learn that the schedule lives here before there is a schedule.
  */
 function ProgrammeRail() {
   const [weeks, setWeeks] = useState<ProgrammeWeek[] | null>(null);
@@ -2321,13 +2321,28 @@ function ProgrammeRail() {
       .slice(0, 3);
   }, [weeks, now]);
 
-  if (!ahead.length) return null;
   const [current, ...rest] = ahead;
-  const shown = open ? ahead : [current!];
+  const shown = open ? ahead : current ? [current] : [];
 
   return (
     <section aria-label="Programme" style={{ marginBottom: 16 }}>
       <p style={{ ...navLabel, margin: "0 0 6px", padding: "0 4px" }}>What&rsquo;s on</p>
+
+      {/*
+        The empty state is shown, not hidden.
+
+        I hid this when the programme had no weeks in it, reasoning that an
+        empty box in permanent navigation teaches people to ignore that corner.
+        That was the wrong call here: a founder who cannot see the section at
+        all has no way to learn the schedule will appear there, and it read as
+        the feature having gone missing. A section that says what it is waiting
+        for is not an empty box.
+      */}
+      {!shown.length && (
+        <p style={{ margin: 0, padding: "0 4px", fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>
+          Nothing scheduled yet. The team fills this in as the sprint is planned.
+        </p>
+      )}
 
       <div style={{ display: "grid", gap: 10 }}>
         {shown.map((w) => (
@@ -2808,9 +2823,10 @@ const CSS = `
   color: var(--faint, #6B7280);
   padding: 0 4px 7px;
 }
-.quick-buttons { display: flex; flex-wrap: wrap; gap: 5px; }
+/* Three then two, rather than letting five wrap to four and a stranded one.
+   An even split reads as a designed row; 4+1 reads as a bug. */
+.quick-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .quick-buttons button {
-  flex: 1 1 auto;
   min-height: 34px;
   padding: 0 9px;
   border-radius: 9px;
@@ -2848,7 +2864,7 @@ const CSS = `
   cursor: pointer;
 }
 .quick-row-compact, .quick-note-compact { margin: 0; flex: 0 0 auto; }
-.quick-row-compact .quick-buttons { flex-wrap: nowrap; }
+.quick-row-compact .quick-buttons { display: flex; flex-wrap: nowrap; }
 .quick-note-compact input { min-width: 9rem; }
 
 /* ---- Mobile actions -------------------------------------------------------
