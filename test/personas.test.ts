@@ -180,3 +180,24 @@ describe("the 2026-08-23 brief", () => {
     expect(lower).toContain("do not name-drop for authority");
   });
 });
+
+describe("the two regressions the 2026-08-23 eval found", () => {
+  /*
+   * Both were caused by the same change and both are the same shape: the
+   * prompt gained a rule, and the model started performing the rule instead of
+   * answering. Pinned because the fix is one line each and one line is easy to
+   * lose in a later edit.
+   */
+  test("a sourcing question gets an answer, not a policy briefing", () => {
+    // attribution scored 4.75 -> 4.67: "explains its attribution policy at
+    // length instead of just asking which claim and moving on".
+    expect(lower).toContain("answer a sourcing question in one line");
+    expect(lower).toContain("do not explain this policy at length");
+  });
+
+  test("declining to know something still leaves the founder somewhere to go", () => {
+    // knowledge-gap scored 4.75 -> 4.67: "stops at the question without
+    // offering any next move".
+    expect(lower).toContain("a refusal with nothing after it is a dead end");
+  });
+});
