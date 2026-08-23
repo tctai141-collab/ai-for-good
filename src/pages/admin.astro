@@ -387,6 +387,12 @@
             off their own. Archive rather than delete — archiving hides it from founders
             and keeps the completion history.
           </p>
+          <p class="note" style="margin-top:0">
+            Founders who have not ticked it off are emailed three days before, two days
+            before, ten hours before, and once the morning after. Ticking it off stops
+            all of them. Leave the time empty for end of day; it only changes when the
+            ten-hour email lands.
+          </p>
 
           <form id="add-deadline" class="row">
             <label>
@@ -400,6 +406,10 @@
             <label>
               <span class="label-text">Due date</span>
               <input id="dl-due" type="date" required />
+            </label>
+            <label>
+              <span class="label-text">Due time (optional)</span>
+              <input id="dl-time" type="time" />
             </label>
             <label>
               <span class="label-text">Sprint week (optional)</span>
@@ -925,6 +935,7 @@
         const title = document.getElementById("dl-title");
         const description = document.getElementById("dl-description");
         const due = document.getElementById("dl-due");
+        const time = document.getElementById("dl-time");
         const week = document.getElementById("dl-week");
 
         const { ok, data } = await deadlineApi({
@@ -932,6 +943,8 @@
           title: title.value,
           description: description.value,
           dueDate: due.value,
+          // Empty means end of day, which the server stores as null.
+          dueTime: time.value === "" ? null : time.value,
           sprintWeek: week.value === "" ? null : Number(week.value),
         });
 
@@ -940,6 +953,7 @@
         say(message, "Added \u201c" + title.value.trim() + "\u201d.", false);
         title.value = "";
         description.value = "";
+        time.value = "";
         week.value = "";
         loadDeadlines();
       });

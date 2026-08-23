@@ -1,4 +1,9 @@
-import { pendingReminders, recordReminder, type ReminderKind } from "../db/index";
+import {
+  pendingReminders,
+  recordReminder,
+  type PendingReminder,
+  type ReminderKind,
+} from "../db/index";
 import { isEmailConfigured, sendDeadlineReminder } from "./email";
 import { reportError } from "./errors";
 
@@ -9,14 +14,29 @@ import { reportError } from "./errors";
  * deadlines drive completion, and that the nudge is most of the effect. This is
  * that nudge — and the whole design problem is not sending too many.
  *
- * Two moments, once each, per founder per deadline:
+ * Four moments, once each, per founder per deadline:
  *
- *   DUE-SOON  the day before it is due, while there is still time to act.
+ *   DUE-3D    three days out, while the work can still be planned.
+ *   DUE-2D    two days out.
+ *   DUE-10H   ten hours out. The last call, and the only one that depends on
+ *             the time of day rather than the date.
  *   OVERDUE   the day after, once, when the date has actually passed.
  *
- * A founder who ignores both hears nothing further about that milestone. The
- * primary key on deadline_reminders is what enforces this — not a flag someone
- * has to remember to check, and not the scheduler running exactly once.
+ * This was one nudge the day before, and the comment here used to argue that
+ * one was the right number. Tai asked for the fuller cadence with the tradeoff
+ * in front of him, so the risk is now on the record instead: four emails per
+ * deadline per founder, and a sprint week with three deadlines is twelve
+ * emails. If founders start filtering them, this is the first thing to cut
+ * back, and DUE-2D is the one to cut because it sits a single day from DUE-3D.
+ *
+ * What has not changed is that finishing the work stops all of it. Every query
+ * excludes founders with a completion row, so ticking a deadline off silences
+ * every reminder still to come for it.
+ *
+ * A founder who ignores all four hears nothing further about that milestone.
+ * The primary key on deadline_reminders is what enforces this, not a flag
+ * somebody has to remember to check, and not the scheduler running exactly
+ * once.
  *
  * Timing is computed in Helsinki, matching the tracker: the server is UTC and
  * every founder is in Finland, so "tomorrow" has to mean their tomorrow.
@@ -40,9 +60,36 @@ export function helsinkiDate(now: Date, dayOffset = 0): string {
   return shifted.toISOString().slice(0, 10);
 }
 
+/** The hour of the day in Helsinki, 0 to 23. */
+export function helsinkiHour(now: Date): number {
+  return (now.getUTCHours() + helsinkiOffsetHours(now)) % 24;
+}
+
+/**
+ * The instant a deadline actually falls due.
+ *
+ * A deadline with no time means end of day, which is what every deadline
+ * written before due_time existed meant. The offset is read from the candidate
+ * instant rather than from now, so a deadline on the far side of a clock change
+ * is still counted back from correctly.
+ */
+export function dueInstant(dueDate: string, dueTime: string | null): Date {
+  const [y, m, d] = dueDate.split("-").map(Number);
+  const [hh, mm] = (dueTime ?? "23:59").split(":").map(Number);
+  if (!y || !m || !d) return new Date(NaN);
+  const naive = Date.UTC(y, m - 1, d, hh ?? 23, mm ?? 59);
+  return new Date(naive - helsinkiOffsetHours(new Date(naive)) * 60 * 60 * 1000);
+}
+
 function appUrl(): string {
   return process.env.PUBLIC_BASE_URL?.trim() || "https://aaltofoundersprint.com";
 }
+
+/** Nothing date-based goes out before this hour, Helsinki. */
+const SEND_HOUR_HELSINKI = 8;
+
+/** How far ahead of the deadline itself the last call opens. */
+const LAST_CALL_HOURS = 10;
 
 export type ReminderRun = { sent: number; failed: number; skipped: string | null };
 
@@ -59,36 +106,79 @@ export async function runReminders(now = new Date()): Promise<ReminderRun> {
     return { sent: 0, failed: 0, skipped: "email is not configured" };
   }
 
-  const work: { kind: ReminderKind; dueDate: string }[] = [
-    { kind: "due-soon", dueDate: helsinkiDate(now, 1) },
-    { kind: "overdue", dueDate: helsinkiDate(now, -1) },
-  ];
+  const jobs: { kind: ReminderKind; row: PendingReminder }[] = [];
+
+  /*
+   * The date-based three, held back until the founder's day has started. The
+   * scheduler checks every hour so that the ten-hour nudge can be timed, and
+   * without this gate the three-day warning would go out in the first tick
+   * after midnight, which is when the Helsinki date rolls over.
+   */
+  if (helsinkiHour(now) >= SEND_HOUR_HELSINKI) {
+    const daily: { kind: ReminderKind; dueDate: string }[] = [
+      { kind: "due-3d", dueDate: helsinkiDate(now, 3) },
+      { kind: "due-2d", dueDate: helsinkiDate(now, 2) },
+      { kind: "overdue", dueDate: helsinkiDate(now, -1) },
+    ];
+    for (const { kind, dueDate } of daily) {
+      for (const row of pendingReminders(kind, dueDate)) jobs.push({ kind, row });
+    }
+  }
+
+  /*
+   * The last call, ten hours out.
+   *
+   * Both today and tomorrow are scanned because ten hours before a deadline
+   * can land on the previous calendar day: a deadline set for 06:00 opens its
+   * window at 20:00 the evening before. The window is closed at the deadline
+   * itself, so a founder who is already late gets the overdue mail tomorrow
+   * rather than a "last call" for a moment that has passed.
+   *
+   * Note what this means for an early deadline: one set for 09:00 opens its
+   * window at 23:00 the night before, and the next tick sends it then. There
+   * is no quiet-hours guard, because suppressing the send would mean the last
+   * call never arrives at all for that deadline, which is worse than arriving
+   * late in the evening. Deadlines with no time are end of day, so the common
+   * case opens at 13:59 and this does not arise.
+   */
+  for (const dueDate of [helsinkiDate(now, 0), helsinkiDate(now, 1)]) {
+    for (const row of pendingReminders("due-10h", dueDate)) {
+      const due = dueInstant(row.due_date, row.due_time).getTime();
+      const opens = due - LAST_CALL_HOURS * 60 * 60 * 1000;
+      if (now.getTime() >= opens && now.getTime() < due) {
+        jobs.push({ kind: "due-10h", row });
+      }
+    }
+  }
 
   let sent = 0;
   let failed = 0;
 
-  for (const { kind, dueDate } of work) {
-    for (const row of pendingReminders(kind, dueDate)) {
-      try {
+  for (const { kind, row } of jobs) {
+    try {
         await sendDeadlineReminder(
-          row.email,
-          row.name,
-          { title: row.title, description: row.description, dueDate: row.due_date },
-          kind,
-          appUrl(),
-        );
-        recordReminder(row.deadline_id, row.email, kind);
-        sent += 1;
-      } catch (error) {
-        failed += 1;
-        // One founder's bounced address must not stop the rest of the cohort
-        // being reminded.
-        reportError(error, {
-          where: "reminders",
-          level: "warning",
-          extra: { kind, deadline: row.deadline_id },
-        });
-      }
+        row.email,
+        row.name,
+        {
+          title: row.title,
+          description: row.description,
+          dueDate: row.due_date,
+          dueTime: row.due_time,
+        },
+        kind,
+        appUrl(),
+      );
+      recordReminder(row.deadline_id, row.email, kind);
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      // One founder's bounced address must not stop the rest of the cohort
+      // being reminded.
+      reportError(error, {
+        where: "reminders",
+        level: "warning",
+        extra: { kind, deadline: row.deadline_id },
+      });
     }
   }
 
@@ -98,13 +188,14 @@ export async function runReminders(now = new Date()): Promise<ReminderRun> {
 let scheduled = false;
 
 /**
- * Runs the reminders once an hour.
+ * Runs the reminders once an hour, and acts on every one of those ticks.
  *
- * Hourly rather than daily on purpose. A daily timer anchored to boot sends at
- * whatever time the last deploy happened, which for a cohort in one timezone
- * could be the middle of the night. Checking hourly and only acting when the
- * Helsinki date has advanced means the send lands in the morning regardless of
- * when the process started, and a restart cannot skip a day.
+ * It used to check hourly and act once a day, because everything it sent was
+ * keyed to a date. The ten-hour last call is keyed to a time, so a once-a-day
+ * pass would miss its window entirely on most deadlines. runReminders is safe
+ * to call as often as this: the morning gate lives inside it, and the primary
+ * key on deadline_reminders is what stops a second send, not the frequency of
+ * the caller.
  */
 export function startReminderScheduler(): void {
   if (scheduled) return;
@@ -115,18 +206,9 @@ export function startReminderScheduler(): void {
   }
   scheduled = true;
 
-  const SEND_HOUR_HELSINKI = 8;
-  let lastSentDate: string | null = null;
-
   const tick = async () => {
     try {
-      const now = new Date();
-      const localHour = (now.getUTCHours() + helsinkiOffsetHours(now)) % 24;
-      const today = helsinkiDate(now);
-      if (localHour < SEND_HOUR_HELSINKI || lastSentDate === today) return;
-
-      const result = await runReminders(now);
-      lastSentDate = today;
+      const result = await runReminders(new Date());
       if (result.sent > 0 || result.failed > 0) {
         console.info(`[reminders] sent ${result.sent}, failed ${result.failed}`);
       }

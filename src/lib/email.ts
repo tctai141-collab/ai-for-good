@@ -133,28 +133,50 @@ function readableDate(iso: string): string {
  *
  * Deliberately about a single milestone rather than a digest of everything
  * outstanding. A list of five things you are behind on is a reason to close the
- * email; one thing with a date is a reason to go and do it. The scheduler only
- * ever sends one of these per deadline per founder, so this cannot become a
- * daily list by accident.
+ * email; one thing with a date is a reason to go and do it. The scheduler sends
+ * each of these at most once per deadline per founder, and none of them at all
+ * once the founder has ticked the deadline off.
+ *
+ * Four kinds, and the wording earns its place by being different each time. A
+ * founder who gets the same sentence three days running learns to skim it,
+ * which costs the last one its effect precisely when it matters most.
  */
 export function sendDeadlineReminder(
   to: string,
   name: string,
-  deadline: { title: string; description: string | null; dueDate: string },
-  kind: "due-soon" | "overdue",
+  deadline: { title: string; description: string | null; dueDate: string; dueTime?: string | null },
+  kind: "due-soon" | "due-3d" | "due-2d" | "due-10h" | "overdue",
   appUrl: string,
 ): Promise<void> {
-  const when = kind === "overdue"
-    ? `was due ${readableDate(deadline.dueDate)}`
-    : `due tomorrow, ${readableDate(deadline.dueDate)}`;
-  const subject = kind === "overdue"
-    ? `Overdue: ${deadline.title}`
-    : `Due tomorrow: ${deadline.title}`;
+  const day = readableDate(deadline.dueDate);
+  const at = deadline.dueTime ? ` at ${deadline.dueTime}` : "";
 
-  const opener = kind === "overdue"
-    ? `This one slipped past its date. That happens — it is worth five minutes to
-either finish it or decide it is not happening.`
-    : `A heads-up rather than a nag.`;
+  const when = {
+    "overdue": `was due ${day}${at}`,
+    "due-10h": `due ${day}${at || ", end of day"}`,
+    "due-2d": `due in two days, ${day}${at}`,
+    "due-3d": `due in three days, ${day}${at}`,
+    "due-soon": `due tomorrow, ${day}${at}`,
+  }[kind];
+
+  const subject = {
+    "overdue": `Overdue: ${deadline.title}`,
+    "due-10h": `Last call: ${deadline.title}`,
+    "due-2d": `Two days: ${deadline.title}`,
+    "due-3d": `Three days: ${deadline.title}`,
+    "due-soon": `Due tomorrow: ${deadline.title}`,
+  }[kind];
+
+  const opener = {
+    "overdue": `This one slipped past its date. That happens, and it is worth five
+minutes to either finish it or decide it is not happening.`,
+    "due-10h": `Last call on this one. If it is not going to happen, deciding that now
+is better than finding out tomorrow.`,
+    "due-2d": `Still on your list, and now close enough to plan around.`,
+    "due-3d": `Far enough out to do something about, which is why you are hearing
+about it now rather than the night before.`,
+    "due-soon": `A heads-up rather than a nag.`,
+  }[kind];
 
   return send({
     to,
@@ -170,7 +192,7 @@ Tick it off here when it is done:
 
 ${appUrl}
 
-You will not get another email about this one either way.
+Tick it off and you will hear nothing more about it.
 
 — The Aalto Founder Sprint team`,
   });

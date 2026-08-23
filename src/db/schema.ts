@@ -454,7 +454,7 @@ export function initSchema(db: Database) {
     CREATE TABLE IF NOT EXISTS deadline_reminders (
       deadline_id TEXT NOT NULL REFERENCES deadlines(id) ON DELETE CASCADE,
       user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK(kind IN ('due-soon', 'overdue')),
+      kind TEXT NOT NULL CHECK(kind IN ('due-soon', 'due-3d', 'due-2d', 'due-10h', 'overdue')),
       sent_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (deadline_id, user_email, kind)
     )
@@ -494,6 +494,35 @@ export function initSchema(db: Database) {
       PRIMARY KEY (broadcast_id, email)
     )
   `);
+
+  // Optional time of day a deadline falls due, HH:MM in Helsinki. Null means
+  // end of day, which is what every deadline written before this meant and
+  // what most of them still mean. It exists because a reminder counted back in
+  // hours has to have something to count back from: "ten hours before" is not
+  // a question a bare date can answer.
+  addColumn(db, "deadlines", "due_time", "TEXT");
+
+  // --- Migration 4: more reminder kinds -------------------------------------
+  //
+  // One nudge the day before became three before and one after, so the CHECK
+  // has to admit the new kinds. SQLite cannot alter a CHECK in place.
+  //
+  // 'due-soon' stays in the allowed set even though nothing writes it any more.
+  // Rows from the old cadence are the record that a founder was already told,
+  // and dropping the value would either fail the rebuild or silently discard
+  // them, which would mail people about deadlines they have already heard
+  // about twice.
+  migrate(db, 4, () => {
+    rebuild(db, "deadline_reminders", `
+      CREATE TABLE deadline_reminders (
+        deadline_id TEXT NOT NULL REFERENCES deadlines(id) ON DELETE CASCADE,
+        user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK(kind IN ('due-soon', 'due-3d', 'due-2d', 'due-10h', 'overdue')),
+        sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (deadline_id, user_email, kind)
+      )
+    `, ["deadline_id", "user_email", "kind", "sent_at"]);
+  });
 
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_deadlines_status_due ON deadlines(status, due_date);
