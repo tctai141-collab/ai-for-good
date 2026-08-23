@@ -140,6 +140,11 @@ function readableDate(iso: string): string {
  * Four kinds, and the wording earns its place by being different each time. A
  * founder who gets the same sentence three days running learns to skim it,
  * which costs the last one its effect precisely when it matters most.
+ *
+ * The check-in line at the bottom is deliberate and is the only trigger the
+ * product has. Tai ruled out emailing founders outside deadlines, which leaves
+ * no channel to prompt a daily habit, so these emails carry the prompt instead
+ * of a new one being invented. It costs nothing: the mail was going anyway.
  */
 export function sendDeadlineReminder(
   to: string,
@@ -193,6 +198,8 @@ Tick it off here when it is done:
 ${appUrl}
 
 Tick it off and you will hear nothing more about it.
+
+While you are there, today's check-in takes two minutes.
 
 — The Aalto Founder Sprint team`,
   });

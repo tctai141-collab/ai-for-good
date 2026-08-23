@@ -58,8 +58,20 @@ describe("editing the programme", () => {
     expect(body.weeks[0]!.phase).toBe("Trend Research");
   });
 
-  test("founders cannot read or write it", async () => {
-    expect((await get(h, "/api/programme", founder.cookie)).status).toBe(403);
+  test("founders can read it and cannot write it", async () => {
+    /*
+     * The read was organizers-only, which made the cohort's own schedule the
+     * one thing the product would not tell a founder. It is said out loud in
+     * the room every week; withholding it in the app was an accident of where
+     * the endpoint happened to live.
+     */
+    const read = await get(h, "/api/programme", founder.cookie);
+    expect(read.status).toBe(200);
+    const body = (await read.json()) as { weeks: unknown[]; currentWeek: number };
+    expect(Array.isArray(body.weeks)).toBe(true);
+    expect(typeof body.currentWeek).toBe("number");
+
+    // Writing is still theirs alone.
     expect((await post(h, "/api/programme", { week: 2, title: "Nope" }, founder.cookie)).status).toBe(403);
   });
 
