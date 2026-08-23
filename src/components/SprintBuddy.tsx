@@ -1265,7 +1265,7 @@ function Reflections({
 
   /*
    * Three states: not started, mid-assessment, and scored. The scored result
-   * is whatever the server computed — the browser never scores, so a founder
+   * is whatever the server computed. The browser never scores, so a founder
    * and the operating team are always looking at the same numbers.
    *
    * A row saved by the six-item quiz this replaced arrives without `result`.
@@ -1437,6 +1437,8 @@ function Reflections({
             </span>
           )}
         </div>
+
+        {(!wgStarted || wgResult) && <WgPrivateNote />}
 
         {wgResult ? (
           <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
@@ -1667,6 +1669,32 @@ function WgRanking({ result }: { result: WorkingGeniusResult }) {
  * by a tie-break. Withholding that would make a coin toss look like a finding,
  * which is the failure mode of every pop personality test.
  */
+/**
+ * The founder-only promise, stated where it is relied on.
+ *
+ * Written plainly and without hedging because it is enforced rather than
+ * aspirational: the read is owner-only in the API and
+ * test/working-genius-privacy.test.ts fails if an organizer can reach it.
+ * Softening the wording would be the tell that somebody had stopped being sure.
+ */
+function WgPrivateNote() {
+  return (
+    <p
+      style={{
+        margin: "16px 0 0",
+        fontSize: 12.5,
+        lineHeight: 1.6,
+        color: C.sub,
+        fontFamily: "var(--font-serif)",
+        fontStyle: "italic",
+      }}
+    >
+      This one is yours alone. Your answers and your result are not visible to
+      the operating team, to mentors, or to anyone else in the cohort.
+    </p>
+  );
+}
+
 function WgCaveats({ result }: { result: WorkingGeniusResult }) {
   const pairs = WORKING_GENIUS_ITEMS.length / 2;
   const changed = Math.round((1 - result.consistency) * pairs);

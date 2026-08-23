@@ -17,12 +17,12 @@
  *   each other and to nothing else: their two scores always summed to exactly
  *   2 regardless of who was answering. Max score per type was 2, which made
  *   ties at the top the normal case rather than the edge case, and ties were
- *   resolved by object insertion order — wonder won most of them.
+ *   resolved by object insertion order, which handed most of them to wonder.
  *
  * So: all fifteen pairs, each asked twice with different wording. Every type
  * meets every other type twice, which makes the comparison graph complete and
  * the scores meaningful (0..10, summing to 30 across the six). Asking each pair
- * twice also buys a reliability signal for free — if someone answers the same
+ * twice also buys a reliability signal for free: if someone answers the same
  * pair two different ways we can say so instead of pretending the result is
  * crisp.
  */
@@ -546,8 +546,8 @@ function emptyCounts(): Record<WorkingGeniusId, number> {
  * Ranking runs in two passes. Total wins first; then, inside any group of
  * types on the same total, a mini round-robin using only the head-to-head
  * results between the tied types. A single sort comparator cannot do this
- * safely because head-to-head is not transitive — A beats B, B beats C, C
- * beats A is a real outcome — and feeding a non-transitive comparator to
+ * safely because head-to-head is not transitive. A beats B, B beats C, C
+ * beats A is a real outcome, and feeding a non-transitive comparator to
  * Array.sort gives an order that depends on the engine's sort internals.
  * Anything still level after the round-robin falls back to WIDGET order for
  * determinism and is reported in `contested` rather than hidden.
@@ -585,8 +585,9 @@ export function scoreWorkingGenius(
 
   for (const count of [...byCount.keys()].sort((a, b) => b - a)) {
     const group = byCount.get(count)!;
-    if (group.length === 1) {
-      ranking.push(group[0]);
+    const [only] = group;
+    if (group.length === 1 && only) {
+      ranking.push(only);
       continue;
     }
     // Round-robin restricted to the tied types.
@@ -601,8 +602,11 @@ export function scoreWorkingGenius(
       return diff !== 0 ? diff : widgetIndex(a) - widgetIndex(b);
     });
     for (let i = 0; i < ordered.length - 1; i++) {
-      if ((miniWins.get(ordered[i]) ?? 0) === (miniWins.get(ordered[i + 1]) ?? 0)) {
-        contested.push([ordered[i], ordered[i + 1]]);
+      const here = ordered[i];
+      const next = ordered[i + 1];
+      if (!here || !next) continue;
+      if ((miniWins.get(here) ?? 0) === (miniWins.get(next) ?? 0)) {
+        contested.push([here, next]);
       }
     }
     ranking.push(...ordered);
@@ -621,6 +625,28 @@ export function scoreWorkingGenius(
     if (ra === rb) pairsAgreed += 1;
   }
 
+  /*
+   * Every type in WIDGET_ORDER lands in exactly one count group and every
+   * group is pushed, so this is always six. Checked rather than assumed: the
+   * bands and both boundary margins below are read positionally, and a ranking
+   * that came up short would produce a profile that looks entirely plausible
+   * and is wrong. Throwing is the right failure here because there is no
+   * partial result worth showing a founder.
+   */
+  if (ranking.length !== WIDGET_ORDER.length) {
+    throw new Error(
+      `ranking produced ${ranking.length} types, expected ${WIDGET_ORDER.length}`,
+    );
+  }
+  const placed = ranking as [
+    WorkingGeniusId,
+    WorkingGeniusId,
+    WorkingGeniusId,
+    WorkingGeniusId,
+    WorkingGeniusId,
+    WorkingGeniusId,
+  ];
+
   return {
     version: INSTRUMENT_VERSION,
     counts,
@@ -633,11 +659,11 @@ export function scoreWorkingGenius(
     consistency: pairsAnswered === 0 ? 0 : pairsAgreed / pairsAnswered,
     contested,
     boundaryMargins: {
-      geniusCompetency: counts[ranking[1]] - counts[ranking[2]],
-      competencyFrustration: counts[ranking[3]] - counts[ranking[4]],
+      geniusCompetency: counts[placed[1]] - counts[placed[2]],
+      competencyFrustration: counts[placed[3]] - counts[placed[4]],
     },
     responses,
-    primary: ranking[0],
+    primary: placed[0],
     completedAt,
   };
 }

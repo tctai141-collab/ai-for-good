@@ -45,7 +45,7 @@ describe("item bank structure", () => {
     expect(new Set(WORKING_GENIUS_ITEMS.map((i) => i.id)).size).toBe(30);
   });
 
-  test("covers all 15 type pairs exactly twice — the island bug", () => {
+  test("covers all 15 type pairs exactly twice, the island bug", () => {
     const seen = new Map<string, number>();
     for (const item of WORKING_GENIUS_ITEMS) {
       const k = pairKey(item.options[0].id, item.options[1].id);
@@ -82,7 +82,13 @@ describe("item bank structure", () => {
       const k = pairKey(item.options[0].id, item.options[1].id);
       positions.set(k, [...(positions.get(k) ?? []), idx]);
     });
-    for (const [pair, [first, second]] of positions) {
+    for (const [pair, at] of positions) {
+      // Exactly twice, which is the structural claim the rotation exists to
+      // make. Asserted here so the gap check below cannot pass vacuously on a
+      // pair that was somehow only asked once.
+      expect([pair, at.length]).toEqual([pair, 2]);
+      const first = at[0] ?? -1;
+      const second = at[1] ?? -1;
       expect([pair, second - first >= 10]).toEqual([pair, true]);
     }
     const prompts = WORKING_GENIUS_ITEMS.map((i) => i.prompt);
@@ -226,7 +232,10 @@ describe("scoring", () => {
   test("a partial response set scores without throwing", () => {
     const full = answerByPreference([...WIDGET_ORDER]);
     const partial: WorkingGeniusResponses = {};
-    for (const item of WORKING_GENIUS_ITEMS.slice(0, 8)) partial[item.id] = full[item.id];
+    for (const item of WORKING_GENIUS_ITEMS.slice(0, 8)) {
+      const answer = full[item.id];
+      if (answer) partial[item.id] = answer;
+    }
     const r = scoreWorkingGenius(partial, "x");
     expect(Object.values(r.counts).reduce((a, b) => a + b, 0)).toBe(8);
     expect(r.ranking.length).toBe(6);

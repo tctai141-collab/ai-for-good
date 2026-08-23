@@ -336,7 +336,23 @@ export const GET: APIRoute = async ({ cookies, request }) => {
       case "visits":
         return json({ visits: getVisits(userEmail) });
 
+      /*
+       * Founder-only, with no organizer view at all.
+       *
+       * This case sat under requireSelfOrOrganizer with no owner check, so an
+       * organizer could read any founder's row: the bands, the full ranking,
+       * and result_json, which contains every individual answer. The card in
+       * the app tells the founder nobody else sees this, and that promise was
+       * not true.
+       *
+       * There is deliberately no redacted organizer shape here, the way
+       * threads and decisions have one. Those are work a founder may choose to
+       * hand over. A working-style profile is not work, and an aggregate of it
+       * across the cohort is exactly the use the founder is being promised
+       * will not happen.
+       */
       case "working-genius":
+        if (!isOwner) return err("forbidden", 403);
         return json({ workingGenius: getWorkingGenius(userEmail) });
 
       // Derived here rather than in the browser because placing a date into a
