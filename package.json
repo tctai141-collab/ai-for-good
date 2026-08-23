@@ -9,7 +9,8 @@
     "start": "bun ./dist/server/entry.mjs",
     "typecheck": "astro sync && tsc --noEmit",
     "test": "bun test",
-    "backup": "bun scripts/backup-db.ts"
+    "backup": "bun scripts/backup-db.ts",
+    "mailbox": "bun scripts/dev-mailbox.ts"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
