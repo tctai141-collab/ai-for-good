@@ -47,6 +47,24 @@ function err(message: string, status = 400) {
 }
 
 /** ISO calendar date, and a real one — "2026-02-31" must not pass. */
+/**
+ * An optional time of day, HH:MM in Helsinki.
+ *
+ * Empty string and null both mean end of day, which is what a deadline without
+ * a time has always meant. Distinguished from undefined on update, where
+ * leaving the field out has to leave the stored value alone.
+ */
+function validTime(value: unknown): string | null | undefined {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const match = /^(\d{2}):(\d{2})$/.exec(value.trim());
+  if (!match) return undefined;
+  const hh = Number(match[1]);
+  const mm = Number(match[2]);
+  if (hh > 23 || mm > 59) return undefined;
+  return `${match[1]}:${match[2]}`;
+}
+
 function validDate(value: unknown): string | null {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [y, m, d] = value.split("-").map(Number);
@@ -104,6 +122,7 @@ export const GET: APIRoute = async ({ cookies, request }) => {
       title: d.title,
       description: d.description,
       dueDate: d.due_date,
+      dueTime: d.due_time,
       sprintWeek: d.sprint_week,
       done: done.has(d.id),
       group: groupFor(d.due_date, done.has(d.id), now),
@@ -129,6 +148,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     title?: unknown;
     description?: unknown;
     dueDate?: unknown;
+    dueTime?: unknown;
     sprintWeek?: unknown;
     status?: unknown;
     done?: unknown;
@@ -161,6 +181,11 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         const dueDate = validDate(body.dueDate);
         if (!dueDate) return err("A valid due date (YYYY-MM-DD) is required.");
 
+        const dueTime = validTime(body.dueTime);
+        if (body.dueTime !== undefined && dueTime === undefined) {
+          return err("A due time must look like 14:30, or be left empty.");
+        }
+
         const sprintWeek = validWeek(body.sprintWeek);
         if (sprintWeek === undefined) return err("Sprint week must be between 1 and 15.");
 
@@ -170,6 +195,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
             title,
             description: cap(body.description, MAX_DESCRIPTION).trim() || null,
             dueDate,
+            dueTime: dueTime ?? null,
             sprintWeek,
           },
           session.email,
@@ -199,6 +225,13 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           const dueDate = validDate(body.dueDate);
           if (!dueDate) return err("A valid due date (YYYY-MM-DD) is required.");
           fields.dueDate = dueDate;
+        }
+        if (body.dueTime !== undefined) {
+          const dueTime = validTime(body.dueTime);
+          if (dueTime === undefined) {
+            return err("A due time must look like 14:30, or be left empty.");
+          }
+          fields.dueTime = dueTime;
         }
         if (body.sprintWeek !== undefined) {
           const week = validWeek(body.sprintWeek);

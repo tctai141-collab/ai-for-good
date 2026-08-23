@@ -924,6 +924,8 @@ export type DeadlineRow = {
   title: string;
   description: string | null;
   due_date: string;
+  /** HH:MM in Helsinki, or null for end of day. */
+  due_time: string | null;
   sprint_week: number | null;
   status: "active" | "archived";
   created_by: string;
@@ -935,6 +937,7 @@ export type DeadlineInput = {
   title: string;
   description?: string | null;
   dueDate: string;
+  dueTime?: string | null;
   sprintWeek?: number | null;
 };
 
@@ -943,13 +946,14 @@ export function createDeadline(input: DeadlineInput, createdBy: string): Deadlin
   const db = getDb();
   const id = crypto.randomUUID();
   db.run(
-    `INSERT INTO deadlines (id, title, description, due_date, sprint_week, created_by)
-     VALUES ($id, $title, $description, $due_date, $sprint_week, $created_by)`,
+    `INSERT INTO deadlines (id, title, description, due_date, due_time, sprint_week, created_by)
+     VALUES ($id, $title, $description, $due_date, $due_time, $sprint_week, $created_by)`,
     {
       $id: id,
       $title: input.title,
       $description: input.description ?? null,
       $due_date: input.dueDate,
+      $due_time: input.dueTime ?? null,
       $sprint_week: input.sprintWeek ?? null,
       $created_by: createdBy,
     },
@@ -992,6 +996,7 @@ export function updateDeadline(
        title = $title,
        description = $description,
        due_date = $due_date,
+       due_time = $due_time,
        sprint_week = $sprint_week,
        status = $status,
        updated_at = datetime('now')
@@ -1001,6 +1006,8 @@ export function updateDeadline(
       $title: fields.title ?? existing.title,
       $description: fields.description === undefined ? existing.description : fields.description,
       $due_date: fields.dueDate ?? existing.due_date,
+      // undefined leaves it alone; null clears it back to end of day.
+      $due_time: fields.dueTime === undefined ? existing.due_time : fields.dueTime,
       $sprint_week: fields.sprintWeek === undefined ? existing.sprint_week : fields.sprintWeek,
       $status: fields.status ?? existing.status,
     },
@@ -1232,13 +1239,22 @@ export function upsertProgrammeWeek(row: ProgrammeWeekRow): void {
   );
 }
 
-export type ReminderKind = "due-soon" | "overdue";
+/**
+ * The moments a founder can be nudged about one deadline.
+ *
+ * 'due-soon' is retired and nothing writes it any more. It stays in the type
+ * because rows from the single-nudge cadence are still in the table, and they
+ * are the record that somebody was already told.
+ */
+export type ReminderKind = "due-soon" | "due-3d" | "due-2d" | "due-10h" | "overdue";
 
 export type PendingReminder = {
   deadline_id: string;
   title: string;
   description: string | null;
   due_date: string;
+  /** HH:MM in Helsinki, or null for end of day. */
+  due_time: string | null;
   email: string;
   name: string;
 };
@@ -1256,7 +1272,7 @@ export function pendingReminders(kind: ReminderKind, dueDate: string): PendingRe
   const db = getDb();
   return db
     .query(
-      `SELECT d.id AS deadline_id, d.title, d.description, d.due_date, u.email, u.name
+      `SELECT d.id AS deadline_id, d.title, d.description, d.due_date, d.due_time, u.email, u.name
        FROM deadlines d
        CROSS JOIN users u
        WHERE d.status = 'active'

@@ -24,8 +24,8 @@ let bob: Session;
 
 const NOW = new Date("2026-09-15T09:00:00Z");
 
-async function createDeadline(title: string, dueDate: string) {
-  const res = await post(h, "/api/deadlines", { action: "create", title, dueDate }, organizer.cookie);
+async function createDeadline(title: string, dueDate: string, dueTime: string | null = null) {
+  const res = await post(h, "/api/deadlines", { action: "create", title, dueDate, dueTime }, organizer.cookie);
   expect(res.status).toBe(200);
   return (await res.json() as { id: string }).id;
 }
@@ -70,14 +70,14 @@ describe("helsinki dates", () => {
 });
 
 describe("who gets reminded", () => {
-  test("everybody who still owes a deadline due tomorrow", async () => {
-    await createDeadline("Customer interviews", helsinkiDate(NOW, 1));
+  test("everybody who still owes a deadline due in three days", async () => {
+    await createDeadline("Customer interviews", helsinkiDate(NOW, 3));
 
     const result = await runPass();
 
     expect(result.sent).toBe(2);
-    expect(h.lastEmailTo("alice@example.test")?.subject).toBe("Due tomorrow: Customer interviews");
-    expect(h.lastEmailTo("bob@example.test")?.subject).toBe("Due tomorrow: Customer interviews");
+    expect(h.lastEmailTo("alice@example.test")?.subject).toBe("Three days: Customer interviews");
+    expect(h.lastEmailTo("bob@example.test")?.subject).toBe("Three days: Customer interviews");
   });
 
   test("and never a second time", async () => {
@@ -90,28 +90,28 @@ describe("who gets reminded", () => {
   });
 
   test("not somebody who already ticked it off", async () => {
-    const id = await createDeadline("Pitch deck", helsinkiDate(NOW, 1));
+    const id = await createDeadline("Pitch deck", helsinkiDate(NOW, 3));
     expect((await post(h, "/api/deadlines", { action: "toggle", id, done: true }, alice.cookie)).status).toBe(200);
 
     const result = await runPass();
 
     expect(result.sent).toBe(1);
-    expect(h.lastEmailTo("bob@example.test")?.subject).toBe("Due tomorrow: Pitch deck");
+    expect(h.lastEmailTo("bob@example.test")?.subject).toBe("Three days: Pitch deck");
   });
 
   test("not for a milestone the team archived", async () => {
-    const id = await createDeadline("Abandoned idea", helsinkiDate(NOW, 1));
+    const id = await createDeadline("Abandoned idea", helsinkiDate(NOW, 3));
     expect((await post(h, "/api/deadlines", { action: "update", id, status: "archived" }, organizer.cookie)).status).toBe(200);
 
     expect((await runPass()).sent).toBe(0);
   });
 
   test("organizers are not founders and are left alone", async () => {
-    await createDeadline("Founder-only milestone", helsinkiDate(NOW, 1));
+    await createDeadline("Founder-only milestone", helsinkiDate(NOW, 3));
     await runPass();
 
     // Every message so far has gone to a founder address.
-    const toOrganizer = h.sent.filter((m) => m.to === "organizer@example.test" && m.subject.startsWith("Due tomorrow"));
+    const toOrganizer = h.sent.filter((m) => m.to === "organizer@example.test" && m.subject.startsWith("Three days"));
     expect(toOrganizer.length).toBe(0);
   });
 });
@@ -134,5 +134,123 @@ describe("overdue", () => {
     await createDeadline("Ancient history", helsinkiDate(NOW, -21));
 
     expect((await runPass()).sent).toBe(0);
+  });
+});
+
+describe("two days out", () => {
+  test("its own moment, and its own wording", async () => {
+    await createDeadline("Pricing experiment", helsinkiDate(NOW, 2));
+
+    expect((await runPass()).sent).toBe(2);
+    expect(h.lastEmailTo("alice@example.test")?.subject).toBe("Two days: Pricing experiment");
+  });
+});
+
+describe("the ten-hour last call", () => {
+  /*
+   * The only reminder keyed to a time rather than a date, which is why the
+   * scheduler now acts on every hourly tick instead of once a morning. NOW is
+   * 12:00 in Helsinki.
+   */
+  test("does not go out before the window opens", async () => {
+    // End of day, so the window opens at 13:59. It is noon.
+    await createDeadline("End of day thing", helsinkiDate(NOW, 0));
+
+    const before = h.sent.length;
+    expect((await runPass()).sent).toBe(0);
+    expect(h.sent.length).toBe(before);
+  });
+
+  test("goes out once inside the window", async () => {
+    // 14:00 Helsinki, past the 13:59 opening for an end-of-day deadline.
+    const inWindow = new Date("2026-09-15T11:30:00Z");
+    const result = await runReminders(inWindow);
+
+    expect(result.sent).toBe(2);
+    expect(h.lastEmailTo("alice@example.test")?.subject).toBe("Last call: End of day thing");
+
+    // And not again on the next tick an hour later.
+    expect((await runReminders(new Date("2026-09-15T12:30:00Z"))).sent).toBe(0);
+  });
+
+  test("counts back from an explicit time, not from end of day", async () => {
+    // Due 18:00 Helsinki, so the window opened at 08:00. Noon is inside it.
+    await createDeadline("Session handover", helsinkiDate(NOW, 0), "18:00");
+
+    expect((await runPass()).sent).toBe(2);
+    expect(h.lastEmailTo("bob@example.test")?.subject).toBe("Last call: Session handover");
+    expect(h.lastEmailTo("bob@example.test")?.text).toContain("18:00");
+  });
+
+  test("nothing once the deadline itself has passed", async () => {
+    await createDeadline("Already gone", helsinkiDate(NOW, 0), "09:00");
+
+    // 12:00 Helsinki is after a 09:00 deadline. Being late is the overdue
+    // mail's job tomorrow, not a last call for a moment that has gone.
+    expect((await runPass()).sent).toBe(0);
+  });
+
+  test("a window that opens the previous evening still fires", async () => {
+    // Due 06:00 tomorrow, so the last call opens at 20:00 tonight. This is the
+    // case a today-only scan would miss entirely.
+    await createDeadline("Early start", helsinkiDate(NOW, 1), "06:00");
+
+    const tonight = new Date("2026-09-15T18:00:00Z"); // 21:00 Helsinki
+    const result = await runReminders(tonight);
+
+    expect(result.sent).toBe(2);
+    expect(h.lastEmailTo("alice@example.test")?.subject).toBe("Last call: Early start");
+  });
+});
+
+describe("finishing the work stops the reminders", () => {
+  test("a founder who has ticked it off gets no last call", async () => {
+    const id = await createDeadline("Done early", helsinkiDate(NOW, 0), "18:00");
+    expect((await post(h, "/api/deadlines", { action: "toggle", id, done: true }, alice.cookie)).status).toBe(200);
+
+    const result = await runPass();
+
+    expect(result.sent).toBe(1);
+    expect(h.lastEmailTo("bob@example.test")?.subject).toBe("Last call: Done early");
+    // Alice's most recent mail is about something else entirely.
+    expect(h.lastEmailTo("alice@example.test")?.subject).not.toBe("Last call: Done early");
+  });
+
+  test("ticking it off after the first nudge silences the rest", async () => {
+    const id = await createDeadline("Half chased", helsinkiDate(NOW, 3));
+
+    // Three days out: both founders hear about it.
+    expect((await runPass()).sent).toBe(2);
+
+    // Alice finishes it. Two days later she is not chased again.
+    expect((await post(h, "/api/deadlines", { action: "toggle", id, done: true }, alice.cookie)).status).toBe(200);
+    const twoDaysOut = new Date("2026-09-16T09:00:00Z");
+    const before = h.sent.length;
+    await runReminders(twoDaysOut);
+
+    // Counted per recipient rather than in total: other tests have left their
+    // own deadlines in this database and a total would measure them too.
+    const fresh = h.sent.slice(before).filter((m) => m.subject === "Two days: Half chased");
+    expect(fresh.map((m) => m.to)).toEqual(["bob@example.test"]);
+  });
+});
+
+describe("the morning gate", () => {
+  test("nothing date-based goes out in the small hours", async () => {
+    await createDeadline("Not at 4am", helsinkiDate(NOW, 3));
+
+    // 04:00 Helsinki. The date has rolled over but the founder is asleep, and
+    // the scheduler now ticks every hour so this is a real possibility.
+    const smallHours = new Date("2026-09-15T01:00:00Z");
+    const before = h.sent.length;
+    await runReminders(smallHours);
+    expect(h.sent.slice(before).filter((m) => m.subject.startsWith("Three days"))).toHaveLength(0);
+
+    // The same pass at a civilised hour does send it.
+    const atNoon = h.sent.length;
+    await runPass();
+    expect(
+      h.sent.slice(atNoon).filter((m) => m.subject === "Three days: Not at 4am").map((m) => m.to).sort(),
+    ).toEqual(["alice@example.test", "bob@example.test"]);
   });
 });
