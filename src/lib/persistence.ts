@@ -32,6 +32,8 @@ export type Checkin = {
   suggestions?: string[];
   questions?: Array<{ text: string; suggestions?: string[] }>;
   mood?: number;
+  /** UTC, as SQLite wrote it. The client converts to Helsinki to ask "today?". */
+  createdAt?: string;
 };
 
 export type ThemeArc = { name: string; arc: number[] };
@@ -105,7 +107,7 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
 
   const rawCheckins = (cData.checkins || []) as Array<{
     id: string; ref_decision_id: string | null; theme: string | null;
-    prompt: string; mood: number | null;
+    prompt: string; mood: number | null; created_at?: string;
   }>;
 
   return {
@@ -139,6 +141,7 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       theme: c.theme || undefined,
       prompt: c.prompt,
       mood: c.mood || undefined,
+      createdAt: c.created_at,
     })),
     themes: (thData.themes as ThemeArc[]) || [],
     week: (thData.week as number) || 1,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import Tasks, { useDeadlines, type DeadlinesState } from "./Tasks";
+import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
 import {
   WORKING_GENIUS_ITEMS,
@@ -56,9 +56,28 @@ function formatMarkdown(text: string): string {
  *
  * It shipped in the public bundle all the same, which meant a persona the
  * product had deliberately stopped using was readable by anyone who opened
- * devtools, and one careless change away from being sent for real. Replaced by
- * the posture line alone — the only part that was ever load-bearing.
+ * devtools, and one careless change away from being sent for real.
+ *
+ * Nothing replaced it. The posture that survived that cleanup has since gone
+ * too, so the client now sends messages and a flag for which flow to run, and
+ * the server decides everything else.
  */
+
+/**
+ * The calendar day in Helsinki, as YYYY-MM-DD.
+ *
+ * The cohort is in one timezone and the server is UTC, so "today" has to mean
+ * the founder's today. en-CA is used only because it formats as ISO; no locale
+ * is implied by it.
+ */
+function helsinkiDay(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Helsinki",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
 
 /* ---------- Lightweight local classifiers for journal metadata ---------- */
 function guessTheme(text: string): string {
@@ -120,17 +139,12 @@ async function callClaude(
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
   const theme = guessTheme(lastUser);
 
-  let posture: "panic" | "thinking" | "venting" = "thinking";
-  if (system.includes("PANIC")) posture = "panic";
-  else if (system.includes("VENTING")) posture = "venting";
-
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages,
-        posture,
         stream: !!onChunk,
         kind,
         userEmail: ctx?.userEmail,
@@ -205,12 +219,27 @@ const C = {
  * there is nothing to pick between. Threads saved under the old wire values
  * still open — the server ignores the field rather than mapping it.
  */
+/*
+ * Threads still carry a state, and it is always "thinking".
+ *
+ * There were three: panic, thinking, venting, each with its own posture sent to
+ * the model. No founder could ever reach two of them. The mode was declared
+ * `const [mode] = useState(...)` with no setter and nothing in the interface
+ * set it, so every conversation ever started was "thinking" and the panic and
+ * venting postures were unreachable code that looked shipped and passed tests.
+ *
+ * Removed rather than wired up, deliberately. Making it work would have meant
+ * asking a founder in trouble to first classify their own emotional state,
+ * which is friction at the worst possible moment. The general prompt already
+ * handles distress: it names reversible decisions, separates the feeling from
+ * the decision, and says almost nothing has to be decided tonight.
+ *
+ * The column keeps its CHECK on all three values because threads saved before
+ * this are still in the database with the old ones.
+ */
 type StateKey = "panic" | "thinking" | "venting";
-const STATES: Record<StateKey, { label: string; color: string; posture: string }> = {
-  panic: { label: "Panicking", color: C.red, posture: "They are in PANIC. Take the temperature down. Be calm and very brief. Give exactly ONE next step. Help them not act rashly tonight." },
-  thinking: { label: "Thinking it through", color: C.blue, posture: "They are PLANNING. Give a little substance, name the key tradeoff, ask one sharp question. Still concise." },
-  venting: { label: "Venting", color: C.yellow, posture: "They are VENTING. Mostly witness and validate. One gentle reframe. Do not problem-solve hard." },
-};
+const THREAD_STATE: StateKey = "thinking";
+const CHAT_ACCENT = C.blue;
 
 const THEME_COLOR: Record<string, string> = { Runway: C.red, Hiring: C.blue, Cofounder: C.yellow, Product: C.blue, "Self-doubt": C.red, Fundraise: C.yellow, Growth: C.blue };
 const themeColor = (t: string) => THEME_COLOR[t] || C.blue;
@@ -356,22 +385,29 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
      because the collapsed-sidebar button needs the overdue count too. */
   const deadlines = useDeadlines(persona === "founder" ? userEmail : undefined);
 
-  /* Today's check-in: once a day, persists via date-keyed localStorage */
-  const todayKey = `sprintbuddy:checkin:${new Date().toISOString().slice(0, 10)}`;
-  const [checkinDoneToday, setCheckinDoneToday] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(todayKey) === "1";
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (checkinDoneToday) window.localStorage.setItem(todayKey, "1");
-  }, [checkinDoneToday, todayKey]);
+  /*
+   * Today's check-in, answered by the server's own record rather than by this
+   * browser's localStorage.
+   *
+   * Two things were wrong with the flag this replaces. It lived in
+   * localStorage, so a founder who checked in on a laptop was invited to check
+   * in again on their phone, and the record the server already held was never
+   * asked. And it was keyed on the UTC date while every other date in the
+   * product is computed in Helsinki, so for three hours every night the app
+   * and the reminders disagreed about what day it was.
+   */
+  const [locallyCheckedIn, setLocallyCheckedIn] = useState(false);
+  const checkinDoneToday = useMemo(() => {
+    if (locallyCheckedIn) return true;
+    const last = checkins[0]?.createdAt;
+    return Boolean(last && helsinkiDay(new Date(last + "Z")) === helsinkiDay(new Date()));
+  }, [checkins, locallyCheckedIn]);
   const startCheckin = () => {
     if (checkinDoneToday) return;
     setView("chat");
     setActive({ checkin: true, _t: Date.now() });
   };
-  const markCheckinDone = () => setCheckinDoneToday(true);
+  const markCheckinDone = () => setLocallyCheckedIn(true);
 
   // An optimistic in-session bump so a theme appears as soon as it is talked
   // about; the server recomputes it properly on the next load. The increment
@@ -441,6 +477,14 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
       />
 
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {persona === "founder" && (
+          <MobileActions
+            checkinDone={checkinDoneToday}
+            onStartCheckin={startCheckin}
+            deadlines={deadlines}
+            onOpenSidebar={() => setSidebarOpen(true)}
+          />
+        )}
         {!sidebarOpen && (
           <button
             onClick={toggleSidebar}
@@ -507,6 +551,7 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
             setVisits={setVisits}
             markCheckinDone={markCheckinDone}
             userEmail={userEmail}
+            firstRun={threads.length === 0 && checkins.length === 0}
           />
         )}
         {persona === "founder" && view === "reflections" && (
@@ -852,6 +897,8 @@ type ChatProps = {
   setVisits: React.Dispatch<React.SetStateAction<number>>;
   markCheckinDone: () => void;
   userEmail?: string;
+  /** No threads and no check-ins yet: they have never seen this screen. */
+  firstRun: boolean;
 };
 
 /*
@@ -865,6 +912,19 @@ type ChatProps = {
  * Only the neutral prompt rotates. Panic and venting keep their own wording:
  * a founder who has told the app they are panicking should not be met with
  * "We're cooked."
+ */
+/*
+ * Thirteen lines were cut from this list on 2026-08-23: "We're cooked.",
+ * "It's over.", "Pack it up.", "Massive L.", "Mid.", and the rest of the
+ * defeatist ones.
+ *
+ * This is the most-read string in the product and it is drawn at random before
+ * the founder has typed anything, so it cannot know what kind of day they are
+ * having. A founder opening the app an hour after losing a pilot was being met
+ * with "It's over." The register is right and stays; those particular lines
+ * were the product having a joke at the expense of the one moment it exists
+ * for. "They cooked." and "You cooked." are compliments in this register and
+ * stayed.
  */
 const IDLE_PROMPTS = [
   "Who are you cooking?",
@@ -892,8 +952,6 @@ const IDLE_PROMPTS = [
   "That's cap.",
   "Be so for real.",
   "Bffr.",
-  "We're cooked.",
-  "Are we cooked?",
   "We're so back.",
   "They're locked in.",
   "Stop yapping.",
@@ -907,7 +965,6 @@ const IDLE_PROMPTS = [
   "Real.",
   "Valid.",
   "Based.",
-  "Mid.",
   "Fire.",
   "Bussin'.",
   "Hits different.",
@@ -921,19 +978,15 @@ const IDLE_PROMPTS = [
   "Plot twist.",
   "Aura check.",
   "+100 aura.",
-  "Negative aura.",
   "W or L?",
   "Common W.",
-  "Massive L.",
   "Lock in.",
   "Stay locked in.",
   "Built different.",
   "Rent free.",
   "Say it louder.",
   "Be fr.",
-  "I fear…",
   "We listen and we don't judge.",
-  "Chat, are we cooked?",
   "Chat, what are we doing?",
   "Chat, be honest.",
   "Chat, is this real?",
@@ -945,12 +998,6 @@ const IDLE_PROMPTS = [
   "Nobody asked.",
   "Not the…",
   "The audacity.",
-  "I'm crying.",
-  "I'm dead.",
-  "I can't 😭",
-  "It's over.",
-  "We're finished.",
-  "Pack it up.",
   "Go touch grass.",
 ] as const;
 
@@ -962,7 +1009,7 @@ function drawPrompt(): string {
 /** A new line on open, and again every hour the tab stays put. */
 const PROMPT_ROTATE_MS = 60 * 60 * 1000;
 
-function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail }: ChatProps) {
+function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail, firstRun }: ChatProps) {
   /* The component is mounted client:only, so drawing at first render cannot
      desync from a server-rendered value — there is no server render. */
   const [idlePrompt, setIdlePrompt] = useState(drawPrompt);
@@ -983,7 +1030,6 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
   const [msgs, setMsgs] = useState<Msg[]>(() => existing ? existing.messages : []);
   const [input, setInput] = useState("");
-  const [mode] = useState<StateKey>(existing?.state || "thinking");
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ kind: "logged"; text: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -991,8 +1037,8 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const checkinInitiated = useRef(false);
 
   const threadId = existing?.id || null;
-  const accent = isCheckin ? C.blue : STATES[mode].color;
-  const postureLabel = isCheckin ? "Check-in" : STATES[mode].label.split(" ")[0];
+  const accent = isCheckin ? C.blue : CHAT_ACCENT;
+  const postureLabel = isCheckin ? "Check-in" : "Thinking";
 
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [msgs, busy, banner]);
 
@@ -1008,9 +1054,9 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   };
 
   const ctx = useTimeContext();
-  // Carries the posture to callClaude, which reads it and sends the label.
-  // The real system prompt is assembled server-side and never leaves it.
-  const sys = isCheckin ? "You are running today's daily check-in." : STATES[mode].posture;
+  // The real system prompt is assembled server-side and never leaves it. This
+  // only tells the route which of the two flows to run.
+  const sys = isCheckin ? "You are running today's daily check-in." : "";
 
   const founderName = userEmail
     ? (userEmail.split("@")[0] ?? userEmail).replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -1029,7 +1075,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       const exists = prev.some((x) => x.id === id);
       const base = exists
         ? prev.map((x) => x.id === id ? { ...x, messages: finalMsgs, lastAt: "now" } : x)
-        : [{ id, title, theme: isCheckin ? "Check-in" : (theme || "—"), state: mode, lastAt: "now", messages: finalMsgs, ...(isCheckin ? { kind: "checkin" as const } : {}) }, ...prev];
+        : [{ id, title, theme: isCheckin ? "Check-in" : (theme || "—"), state: THREAD_STATE, lastAt: "now", messages: finalMsgs, ...(isCheckin ? { kind: "checkin" as const } : {}) }, ...prev];
       if (userEmail) {
         const saved = base.find((x) => x.id === id);
         if (saved) saveThread(userEmail, saved).catch(() => {});
@@ -1131,7 +1177,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       <div ref={scroller} style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "26px 24px 10px" }}>
           {isFresh && msgs.length === 0 && !isCheckin ? (
-            <EmptyState ctx={ctx} />
+            <EmptyState ctx={ctx} firstRun={firstRun} />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {msgs.map((m, i) => m.role === "assistant" ? (
@@ -1166,7 +1212,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 24px 18px" }}>
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
-              placeholder={mode === "panic" ? "Say it plainly. One thing at a time." : mode === "venting" ? "Let it out, nobody's grading this." : idlePrompt}
+              placeholder={idlePrompt}
               style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
             <button
               onClick={() => send()}
@@ -1218,11 +1264,93 @@ const WG_BAND_META: Record<WorkingGeniusBand, { title: string; blurb: string; ac
   },
 };
 
-function EmptyState({ ctx }: { ctx: TimeCtx }) {
+/**
+ * The two daily actions, on a phone.
+ *
+ * Below 700px the sidebar collapses to zero width, and both the check-in and
+ * the whole deadline list live inside it. That left the device a founder
+ * actually carries between sessions showing nothing they could act on. This
+ * strip is hidden entirely on wider screens, where the sidebar already does
+ * the job properly.
+ */
+function MobileActions({
+  checkinDone,
+  onStartCheckin,
+  deadlines,
+  onOpenSidebar,
+}: {
+  checkinDone: boolean;
+  onStartCheckin: () => void;
+  deadlines: DeadlinesState;
+  onOpenSidebar: () => void;
+}) {
+  const next = nextUp(deadlines);
+  const overdue = next?.item.group === "overdue";
+
+  return (
+    <div className="mobile-actions">
+      {checkinDone ? (
+        <span className="mobile-actions-done">
+          <span aria-hidden="true">✓</span> Checked in
+        </span>
+      ) : (
+        <button type="button" onClick={onStartCheckin} className="mobile-actions-checkin">
+          Today&rsquo;s check-in
+        </button>
+      )}
+
+      {next && (
+        <button
+          type="button"
+          onClick={onOpenSidebar}
+          className="mobile-actions-next"
+          style={overdue ? { color: C.red, borderColor: "rgba(253, 99, 96, 0.4)" } : undefined}
+        >
+          <span className="mobile-actions-title">{next.item.title}</span>
+          <span className="mobile-actions-when">{next.label}</span>
+          {next.more > 0 && <span className="mobile-actions-more">+{next.more}</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ ctx, firstRun }: { ctx: TimeCtx; firstRun: boolean }) {
   return (
     <div className="rise" style={{ paddingTop: 30 }}>
       <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 38, letterSpacing: "-0.025em", lineHeight: 1.04, margin: "0 0 8px", color: C.ink, fontVariationSettings: '"opsz" 50' }}>{ctx.greeting}</h1>
-      <p style={{ color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 15.5, margin: "0 0 32px", fontVariationSettings: '"opsz" 22' }}>Say what's going on.</p>
+      <p style={{ color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 15.5, margin: "0 0 32px", fontVariationSettings: '"opsz" 22' }}>Say what&rsquo;s going on.</p>
+
+      {/*
+        Shown once, on a genuinely empty account.
+
+        A founder used to arrive here straight from setting a password, with no
+        idea what this was for and no statement that it was private. The
+        privacy promise existed only on the sign-in page they had already left.
+        Two sentences, then it never appears again: the second visit is not the
+        moment to explain the product.
+      */}
+      {firstRun && (
+        <div
+          style={{
+            maxWidth: 520,
+            padding: "14px 16px",
+            border: `1px solid ${C.line}`,
+            borderRadius: 10,
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
+            This is your space to think out loud. Sprint Buddy is software, not a
+            person, and it carries what this programme&rsquo;s mentors teach.
+          </p>
+          <p style={{ margin: "8px 0 0", fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
+            <strong style={{ color: C.ink }}>Nothing here is read by the team</strong> unless
+            you share a conversation on purpose. Start anywhere, or use today&rsquo;s
+            check-in.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -2128,6 +2256,69 @@ const CSS = `
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
 .composer-box:focus-within { border-color: var(--brand-blue)!important; }
+
+/* ---- Mobile actions -------------------------------------------------------
+   Hidden entirely on anything wide enough to show the sidebar, which is where
+   these two live properly. This is the phone fallback, not a second home. */
+.mobile-actions { display: none; }
+@media (max-width: 700px) {
+  .mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 10px 12px 10px 60px;
+    border-bottom: 1px solid var(--line-strong);
+    background: var(--card, rgba(255,255,255,0.03));
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mobile-actions::-webkit-scrollbar { display: none; }
+}
+.mobile-actions-checkin {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(70, 165, 255, 0.4);
+  background: rgba(70, 165, 255, 0.14);
+  color: var(--brand-blue);
+  font: 700 13.5px/1 var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mobile-actions-done {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  font: 600 13px/1 var(--font-family);
+  color: #7CB893;
+  white-space: nowrap;
+}
+.mobile-actions-next {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: inherit;
+  font: 500 13px/1.2 var(--font-family);
+  cursor: pointer;
+  text-align: left;
+}
+.mobile-actions-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-actions-when { flex: 0 0 auto; font-weight: 700; font-size: 12px; opacity: .85; }
+.mobile-actions-more { flex: 0 0 auto; font-size: 11.5px; opacity: .6; }
+.mobile-actions-checkin:focus-visible,
+.mobile-actions-next:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
 .send-button {
   /* 44px is the smallest reliable touch target on iOS and Android, and this
      is the control founders hit most. It was 36px. */

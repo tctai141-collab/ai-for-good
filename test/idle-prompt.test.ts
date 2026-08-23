@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
  * Read out of the source rather than rendered, because the component is
  * `client:only` and mounting React here to assert on a placeholder string
  * would cost more than it proves. What is worth pinning is the shape of the
- * list and, above all, that the two distress states kept their own wording.
+ * list and, above all, that nothing in it greets a bad day with a defeat.
  */
 
 const src = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
@@ -29,20 +29,40 @@ describe("the composer's idle prompt", () => {
   });
 
   test("the placeholder uses the rotating value, not a fixed line", () => {
-    const placeholder = src.slice(src.indexOf("placeholder={mode === \"panic\""));
-    expect(placeholder.slice(0, 200)).toContain(": idlePrompt}");
-    expect(placeholder.slice(0, 200)).not.toContain("What are you turning over?");
+    // Scoped to the JSX rather than the whole file: the comment above the list
+    // quotes the fixed line this replaced, and matching that is not a failure.
+    const line = src.split("\n").find((l) => l.includes("placeholder=")) ?? "";
+    expect(line).toContain("placeholder={idlePrompt}");
+    expect(line).not.toContain("What are you turning over?");
   });
 
-  test("panic and venting keep their own wording", () => {
+  test("nothing in the list greets a bad day with a defeat", () => {
     /*
-     * The one that matters. A founder who has just told the app they are
-     * panicking must not be met with "We're cooked." or "It's over." — both of
-     * which are in the list, and both of which are fine in the neutral state.
+     * This used to be guarded the other way round: the list could hold
+     * "It's over." because a panic-mode placeholder would override it. Panic
+     * mode turned out to be unreachable, so the override never ran and a
+     * founder who had just lost a pilot could open the app to "We're cooked."
+     *
+     * The register stays. These particular lines do not. "They cooked." and
+     * "You cooked." are compliments here and are deliberately not on this list.
      */
-    const placeholder = src.slice(src.indexOf("placeholder={mode === \"panic\""), src.indexOf("placeholder={mode === \"panic\"") + 200);
-    expect(placeholder).toContain("Say it plainly. One thing at a time.");
-    expect(placeholder).toContain("Let it out, nobody's grading this.");
+    const defeatist = [
+      "We're cooked.",
+      "Are we cooked?",
+      "Chat, are we cooked?",
+      "It's over.",
+      "We're finished.",
+      "Pack it up.",
+      "Massive L.",
+      "Mid.",
+      "Negative aura.",
+      "I'm crying.",
+      "I'm dead.",
+      "I fear…",
+    ];
+    for (const line of defeatist) {
+      expect([line, prompts.includes(line)]).toEqual([line, false]);
+    }
   });
 
   test("a new line is drawn on mount and again every hour", () => {

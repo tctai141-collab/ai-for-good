@@ -103,8 +103,17 @@ describe("persona policy", () => {
     expect(prompts.map(([name]) => name)).toEqual(["SPRINT_BUDDY_SYSTEM"]);
   });
 
-  test("posture prompts survive, because they describe the founder not the coach", () => {
-    expect(Object.keys(personas.POSTURE_PROMPTS).sort()).toEqual(["panic", "thinking", "venting"]);
+  test("no posture prompts, because no founder could ever reach two of them", () => {
+    /*
+     * There were three: panic, thinking, venting. The client declared the mode
+     * with no setter and nothing in the interface set it, so every conversation
+     * was "thinking" and the other two were unreachable code that looked
+     * shipped and passed a test asserting all three existed. That test is this
+     * one, inverted, so the same shape cannot come back without a decision.
+     */
+    expect("POSTURE_PROMPTS" in personas).toBe(false);
+    expect(lower).not.toContain("they are in panic");
+    expect(lower).not.toContain("they are venting");
   });
 
   test("no mock advisor corpus is shipped in the public repo", () => {

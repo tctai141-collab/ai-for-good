@@ -7,7 +7,6 @@ import { buildProgrammeContext } from "../../lib/programme";
 import { sprintBuddyPersona } from "../../lib/knowledge";
 import { capHistory, chatLimiter } from "../../lib/limits";
 import { reportError } from "../../lib/errors";
-import { POSTURE_PROMPTS } from "../../lib/personas";
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
@@ -103,7 +102,6 @@ function normalizeSignalStatus(status: string | undefined, score: number): strin
 }
 
 function buildSystem(body: {
-  posture?: string;
   personality?: string;
   kind?: string;
   userEmail?: string;
@@ -133,8 +131,6 @@ function buildSystem(body: {
       lastCheckinSummary: last?.prompt ?? null,
       founderName: body.founderName ?? null,
     });
-  } else if (body.posture && POSTURE_PROMPTS[body.posture]) {
-    variable = POSTURE_PROMPTS[body.posture]!;
   }
 
   /*
@@ -155,7 +151,6 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
     const body = await request.json() as {
       messages: { role: string; content: string }[];
-      posture?: "panic" | "thinking" | "venting";
       personality?: string;
       kind?: "checkin";
       userEmail?: string;

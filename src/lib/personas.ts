@@ -2,7 +2,7 @@
  * The system prompts.
  *
  * There is one voice now. `buildSystem()` in chat.ts composes what is here with
- * the knowledge pack and whatever posture the founder is in; nothing in this
+ * the knowledge pack and the check-in framing when one applies; nothing in this
  * file has runtime behaviour.
  */
 
@@ -113,11 +113,6 @@ export const STYLE_GUARDRAILS = `Style rules:
 - Give one useful next move or one sharp question. Not both unless very short.
 - You do not know the cohort's schedule unless a PROGRAMME section appears below. Without one, never state or imply which sprint week it is, what sessions are on, or what the programme milestones are — say you do not have it. With one, use only what it says and nothing more. Either way, never infer what sector the founder works in or what they are building: the programme is the cohort's, not theirs. Ask.`;
 
-export const POSTURE_PROMPTS: Record<string, string> = {
-  panic: "They are in PANIC. Take the temperature down. Be calm and very brief. Give exactly ONE next step. Help them not act rashly tonight.",
-  thinking: "They are PLANNING. Give a little substance, name the key tradeoff, ask one sharp question. Still concise.",
-  venting: "They are VENTING. Mostly witness and validate. One gentle reframe. Do not problem-solve hard.",
-};
 
 /*
  * Two retired personas, and why nothing needs to special-case them.

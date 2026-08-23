@@ -235,6 +235,27 @@ function Row({
 /** How many rows show before "N more". Three keeps the thread list alive. */
 const COLLAPSED_ROWS = 3;
 
+/**
+ * The one deadline worth a founder's attention right now, and how many others
+ * are waiting behind it.
+ *
+ * Exists for the phone. Everything else in this file lives in the sidebar, and
+ * the sidebar is collapsed to nothing below 700px, which hid both of the daily
+ * actions on the device founders actually carry between sessions.
+ */
+export function nextUp(state: DeadlinesState): { item: DeadlineItem; label: string; more: number } | null {
+  const items = state.data?.deadlines ?? [];
+  const open = items.filter((d) => !d.done);
+  if (!open.length) return null;
+  const order = { overdue: 0, thisWeek: 1, upcoming: 2, done: 3 } as Record<string, number>;
+  const sorted = [...open].sort(
+    (a, b) => (order[a.group] ?? 9) - (order[b.group] ?? 9) || a.dueDate.localeCompare(b.dueDate),
+  );
+  const item = sorted[0];
+  if (!item) return null;
+  return { item, label: statusLabel(item), more: sorted.length - 1 };
+}
+
 export default function Tasks({ state }: { state: DeadlinesState }) {
   const { data, toggle, busyId, pinned } = state;
   const [expanded, setExpanded] = useState(false);
