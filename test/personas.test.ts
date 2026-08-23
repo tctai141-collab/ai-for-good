@@ -130,3 +130,53 @@ describe("prompt injection", () => {
     }
   });
 });
+
+describe("the 2026-08-23 brief", () => {
+  /*
+   * A brief asked for a coach "modeled after Mårten Mickos" that shares
+   * "personal anecdotes (as if from mentor's experience)". Most of it shipped.
+   * Those two clauses did not, because between them they reconstruct the exact
+   * failure the earlier tests exist for: fabricated lived experience, told in a
+   * real person's name. These assertions are what stops the next brief
+   * reintroducing it without a decision being taken.
+   */
+  test("carries the beliefs the brief asked for", () => {
+    for (const belief of [
+      "trust is the foundation of leadership",
+      "courage is not the absence of fear",
+      "scaling leadership means scaling yourself",
+      "go deeper and find the essence",
+    ]) {
+      expect(lower).toContain(belief);
+    }
+  });
+
+  test("carries the register: paradox, metaphor, provocation, self-coaching", () => {
+    expect(lower).toContain("paradox that works");
+    expect(lower).toContain("practical metaphor");
+    expect(lower).toContain("provocative");
+    expect(lower).toContain("coach themselves");
+  });
+
+  test("still refuses first-person experience it does not have", () => {
+    expect(lower).toContain("no life to draw on");
+    // The specific phrasing the brief would have produced.
+    expect(lower).not.toContain("as if from");
+    expect(lower).toContain('never "i remember when"');
+  });
+
+  test("may name published thinkers but never a programme mentor", () => {
+    // Published work is citable: they chose to publish.
+    expect(SHIPPED).toContain("Peter Drucker");
+    expect(SHIPPED).toContain("Kim Scott");
+    // A closed room is not, and that guard is unchanged.
+    expect(lower).toContain("never name an individual mentor");
+    expect(lower).toContain("the distinction is consent");
+  });
+
+  test("naming a source is never licence to invent one", () => {
+    expect(lower).toContain("cite the idea, not a quotation");
+    expect(lower).toContain("never invent a quote");
+    expect(lower).toContain("do not name-drop for authority");
+  });
+});
