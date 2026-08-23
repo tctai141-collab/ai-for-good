@@ -247,6 +247,28 @@ export function initSchema(db: Database) {
   // landed. Null means nobody has read it yet.
   addColumn(db, "threads", "shared_seen_at", "TEXT");
 
+  // The working-style assessment grew from six items returning one "primary"
+  // type to thirty returning a full ranking in three bands. primary_type and
+  // counts_json stay because rows written by the old six-item quiz still exist
+  // and are still the founder's answer until they retake it; result_json holds
+  // everything the new scoring produces. A row with a null result_json is an
+  // old one and the UI says so rather than dressing it up as a full profile.
+  addColumn(db, "working_genius", "result_json", "TEXT");
+  // Kept out of the blob so a migration can find rows written by a superseded
+  // item bank without parsing every result document, which is the only reason
+  // either column is a column.
+  //
+  // An earlier version of this comment justified them as a way for the
+  // operating team to check data quality across the cohort. That was written
+  // before the founder-only rule, and it licensed exactly the cohort-wide read
+  // the assessment card promises will not happen. There is no organizer path
+  // to this table and there is not meant to be one: see the working-genius
+  // case in src/pages/api/persistence.ts and test/working-genius-privacy.ts.
+  // Do not add an aggregate query over these columns without changing what the
+  // founder is told first.
+  addColumn(db, "working_genius", "instrument_version", "TEXT");
+  addColumn(db, "working_genius", "consistency", "REAL");
+
   // Server-side sessions. The cookie holds an opaque random token and nothing
   // else, so a client cannot forge a role the way it could with the previous
   // plain-JSON cookie. Deleting a row revokes access immediately.

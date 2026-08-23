@@ -20,6 +20,7 @@ sees it.
 | Decisions captured from a conversation | The founder's own record | Deleted with the conversation they came from |
 | Check-in summaries, mood, theme | Lets the team see who is under strain | Until the account is deleted |
 | Deadline completions | Progress tracking | Until the account is deleted |
+| Working-style assessment: your thirty answers, scores and bands | Your own reflection. **Nobody else can read it, including organizers** | Until you retake it, or the account goes |
 | Session records | Staying signed in. Stored as SHA-256, never the cookie value | 24h idle / 14d absolute, then purged |
 | Invite and reset tokens | Account setup. Stored as SHA-256 | 14 days, single use |
 | Admin audit log | Accountability for organizer actions, including reading a shared conversation | Life of the deployment |
@@ -37,6 +38,13 @@ tests. Opening a shared conversation is written to the audit log and shown to
 the founder as "Read by the team".
 
 Founders can see only their own data.
+
+**The working-style assessment is the one thing nothing shares.** Shared
+conversations exist because a founder may choose to hand work over. A profile
+of how you are wired is not work, and a cohort-wide view of it is exactly what
+the assessment card promises will not happen, so there is no organizer view of
+it at all: not a summary, not an aggregate, not a redacted one. The read is
+owner-only in the API and a test fails if an organizer can reach it.
 
 ## Email from the programme
 

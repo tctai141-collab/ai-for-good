@@ -182,3 +182,54 @@ describe("migration 1: uniform ON DELETE policy", () => {
     }
   });
 });
+
+describe("the working-style columns", () => {
+  /*
+   * The three columns go on with addColumn, which is idempotent, so the risk is
+   * not the ALTER failing. It is the row already there: a founder who took the
+   * six-item quiz has primary_type and counts_json and no result_json, and
+   * that row has to survive and stay loadable. Losing it would silently delete
+   * an answer the founder gave, and the UI reads a null result_json as "you
+   * took the earlier version" rather than showing half a profile.
+   */
+  test("an existing six-item row survives the upgrade and stays readable", () => {
+    buildLegacyDatabase();
+
+    let db = open();
+    try {
+      const columns = (db.query("PRAGMA table_info(working_genius)").all() as { name: string }[])
+        .map((c) => c.name);
+      for (const added of ["result_json", "instrument_version", "consistency"]) {
+        expect(columns).toContain(added);
+      }
+
+      const row = db
+        .query("SELECT primary_type, counts_json, completed_at, result_json FROM working_genius WHERE user_email = 'alice@example.test'")
+        .get() as {
+          primary_type: string;
+          counts_json: string;
+          completed_at: string;
+          result_json: string | null;
+        };
+
+      // The founder's original answer is untouched.
+      expect(row.primary_type).toBe("wonder");
+      expect(row.completed_at).toBe("2026-08-01");
+      // And it is recognisably legacy, which is what the retake prompt keys on.
+      expect(row.result_json).toBeNull();
+    } finally {
+      db.close();
+    }
+
+    // Idempotent: opening again must not duplicate a column or throw.
+    db = open();
+    try {
+      expect(
+        (db.query("SELECT COUNT(*) AS n FROM working_genius").get() as { n: number }).n,
+      ).toBe(1);
+      expect(db.query("PRAGMA foreign_key_check").all()).toHaveLength(0);
+    } finally {
+      db.close();
+    }
+  });
+});
