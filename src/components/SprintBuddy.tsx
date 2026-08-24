@@ -206,9 +206,14 @@ async function callClaude(
 
 /* ---------- Palette: reads from DESIGN.md tokens defined in :root ---------- */
 const C = {
-  blue: "var(--brand-blue)",
+  /* The interactive accent, signal red since 2026-08-24. Was blue, and was
+     called blue here long enough that the rename is worth the diff. */
+  accent: "var(--brand-accent)",
   red: "var(--brand-red)",
   yellow: "var(--brand-yellow)",
+  /* Not a brand colour, but the only other hue the app already uses, and the
+     categorical sets need it now that blue is gone. */
+  green: "#7CB893",
   black: "oklch(8% 0.008 250)",
   white: "var(--ink)",
   ink: "var(--ink)",
@@ -248,10 +253,17 @@ const C = {
  */
 type StateKey = "panic" | "thinking" | "venting";
 const THREAD_STATE: StateKey = "thinking";
-const CHAT_ACCENT = C.blue;
+const CHAT_ACCENT = C.accent;
 
-const THEME_COLOR: Record<string, string> = { Runway: C.red, Hiring: C.blue, Cofounder: C.yellow, Product: C.blue, "Self-doubt": C.red, Fundraise: C.yellow, Growth: C.blue };
-const themeColor = (t: string) => THEME_COLOR[t] || C.blue;
+/*
+ * Spread across what is left after blue. Three themes used to be blue and would
+ * all have become the accent, putting five of seven on one of two reds. Runway
+ * and Self-doubt keep the alarm coral because that is what they are; the rest
+ * take green and yellow. Theme rows are labelled, so this is legibility rather
+ * than meaning.
+ */
+const THEME_COLOR: Record<string, string> = { Runway: C.red, Hiring: C.green, Cofounder: C.yellow, Product: C.accent, "Self-doubt": C.red, Fundraise: C.yellow, Growth: C.green };
+const themeColor = (t: string) => THEME_COLOR[t] || C.accent;
 
 type Thread = {
   id: string;
@@ -672,7 +684,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 4px 28px" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
             <span style={{ ...wordmarkType, fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Sprint</span>
-            <span style={{ display: "inline-block", background: C.blue, padding: "2px 12px 5px", marginLeft: -5, marginTop: 1 }}>
+            <span style={{ display: "inline-block", background: C.accent, padding: "2px 12px 5px", marginLeft: -5, marginTop: 1 }}>
               <span style={{ ...wordmarkType, color: "oklch(13% 0.008 250)", fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Buddy</span>
             </span>
           </div>
@@ -701,8 +713,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               <span aria-hidden="true" style={{ color: "#7CB893", fontSize: 14, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>✓</span>
             </div>
           ) : (
-            <button onClick={onStartCheckin} className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "rgba(70, 165, 255, 0.12)", border: "1px solid rgba(70, 165, 255, 0.35)", borderRadius: 12, padding: "12px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", color: C.blue, marginBottom: 14 }}>
-              <span style={{ width: 7, height: 7, borderRadius: 9, background: C.blue, flexShrink: 0 }} />
+            <button onClick={onStartCheckin} className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "rgba(232, 23, 10, 0.12)", border: "1px solid rgba(232, 23, 10, 0.35)", borderRadius: 12, padding: "12px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", color: C.accent, marginBottom: 14 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
               <span style={{ flex: 1, textAlign: "left" }}>Today's check-in</span>
               <span style={{ width: 8, height: 8, borderRadius: 9, background: C.red, flexShrink: 0 }} />
             </button>
@@ -883,7 +895,7 @@ function ShareToggle({ shared, seenAt, onChange }: { shared: boolean; seenAt?: s
         <button
           type="button"
           onClick={() => { onChange(true); setConfirming(false); }}
-          style={{ ...shareButtonStyle, borderColor: C.blue, color: C.blue }}
+          style={{ ...shareButtonStyle, borderColor: C.accent, color: C.accent }}
         >
           Share it
         </button>
@@ -906,8 +918,8 @@ function ShareToggle({ shared, seenAt, onChange }: { shared: boolean; seenAt?: s
       style={{
         ...shareButtonStyle,
         whiteSpace: "nowrap",
-        borderColor: shared ? C.blue : "var(--line-strong)",
-        color: shared ? C.blue : C.sub,
+        borderColor: shared ? C.accent : "var(--line-strong)",
+        color: shared ? C.accent : C.sub,
       }}
     >
       {shared ? "Shared with your coach" : "Private"}
@@ -1085,7 +1097,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const checkinInitiated = useRef(false);
 
   const threadId = existing?.id || null;
-  const accent = isCheckin ? C.blue : CHAT_ACCENT;
+  const accent = isCheckin ? C.accent : CHAT_ACCENT;
   const postureLabel = isCheckin ? "Check-in" : "Thinking";
 
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [msgs, busy, banner]);
@@ -1241,7 +1253,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
               ))}
               {busy && (
                 <div style={{ alignSelf: "flex-start", padding: "6px 4px" }} aria-label="Buddy is thinking">
-                  <span className="pulse-dot" style={{ display: "inline-block", width: 9, height: 9, borderRadius: 9, background: C.blue }} />
+                  <span className="pulse-dot" style={{ display: "inline-block", width: 9, height: 9, borderRadius: 9, background: C.accent }} />
                 </div>
               )}
               {banner && (
@@ -1285,10 +1297,20 @@ type TimeCtx = { clock: string; line: string; dotColor: string; greeting: string
  * so that the browser and the API score against one implementation. Only the
  * palette stays here, because it is presentation and the rest is not.
  */
+/*
+ * Six types, and after the recolour only five hues to tell them apart with.
+ *
+ * Blue used to carry discernment. With the accent now red, discernment and
+ * invention both landed on a red and sat next to each other in the wheel. They
+ * are separated as far as the remaining palette allows: the deep signal red
+ * against the softer coral. It is the weakest pair here and it is worth a
+ * proper sixth hue if this wheel matters, but nothing is encoded by colour
+ * alone. Every band and every gear carries its name.
+ */
 const WG_COLOR: Record<WorkingGeniusId, { tint: string; accent: string }> = {
   wonder: { tint: "rgba(247, 225, 89, 0.16)", accent: C.yellow },
-  invention: { tint: "rgba(253, 99, 96, 0.16)", accent: C.red },
-  discernment: { tint: "rgba(70, 165, 255, 0.16)", accent: C.blue },
+  invention: { tint: "rgba(232, 23, 10, 0.16)", accent: C.accent },
+  discernment: { tint: "rgba(253, 99, 96, 0.16)", accent: C.red },
   galvanizing: { tint: "rgba(255, 255, 255, 0.10)", accent: C.white },
   enablement: { tint: "rgba(124, 184, 147, 0.16)", accent: "#7CB893" },
   tenacity: { tint: "rgba(255, 255, 255, 0.08)", accent: C.ink },
@@ -1721,8 +1743,8 @@ function Reflections({
                 type="button"
                 onClick={startWorkingGenius}
                 style={{
-                  background: "none", border: `1px solid ${C.blue}`, borderRadius: 999,
-                  padding: "7px 15px", color: C.blue, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                  background: "none", border: `1px solid ${C.accent}`, borderRadius: 999,
+                  padding: "7px 15px", color: C.accent, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                 }}
               >
                 Retake it now
@@ -1782,7 +1804,7 @@ function Reflections({
               )}
             </div>
             <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-              <div style={{ width: `${(wgIndex / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.blue, transition: "width 200ms ease" }} />
+              <div style={{ width: `${(wgIndex / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.accent, transition: "width 200ms ease" }} />
             </div>
             <div
               style={{
@@ -1816,8 +1838,8 @@ function Reflections({
                       textAlign: "left",
                       padding: "16px 18px",
                       borderRadius: 14,
-                      border: `1px solid ${picked ? C.blue : C.line}`,
-                      background: picked ? "rgba(70, 165, 255, 0.10)" : "rgba(0,0,0,0.25)",
+                      border: `1px solid ${picked ? C.accent : C.line}`,
+                      background: picked ? "rgba(232, 23, 10, 0.10)" : "rgba(0,0,0,0.25)",
                       color: C.ink,
                       fontSize: 16,
                       fontWeight: 600,
@@ -1840,7 +1862,7 @@ function Reflections({
                 <button
                   type="button"
                   onClick={() => void submitWorkingGenius(wgAnswers)}
-                  style={{ background: "none", border: "none", color: C.blue, cursor: "pointer", padding: 0, fontSize: 13, textDecoration: "underline" }}
+                  style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", padding: 0, fontSize: 13, textDecoration: "underline" }}
                 >
                   Try again
                 </button>
@@ -1871,7 +1893,7 @@ function Reflections({
                   padding: "12px 22px",
                   borderRadius: 999,
                   border: "none",
-                  background: C.blue,
+                  background: C.accent,
                   color: "#04121f",
                   fontWeight: 700,
                   fontSize: 14.5,
@@ -2293,11 +2315,11 @@ function Arc({ checkins }: { checkins: Checkin[] }) {
         {[40, 70].map((band) => (
           <line key={band} x1={PAD} x2={W - PAD} y1={y(band)} y2={y(band)} stroke={C.line} strokeWidth="1" strokeDasharray="2 4" />
         ))}
-        <path d={area} fill={C.blue} opacity="0.08" />
-        <path d={line} fill="none" stroke={C.blue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={area} fill={C.accent} opacity="0.08" />
+        <path d={line} fill="none" stroke={C.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
           <circle key={i} cx={x(i)} cy={y(p.mood)} r={i === points.length - 1 ? 4.5 : 2.5}
-            fill={i === points.length - 1 ? endColor : C.blue}
+            fill={i === points.length - 1 ? endColor : C.accent}
             stroke={C.bg} strokeWidth="2">
             <title>{`${fmt(p.at)} · ${signalLabel(p.mood)} (${p.mood}/100)`}</title>
           </circle>
@@ -2383,7 +2405,7 @@ function ProgrammeRail() {
           <div key={w.week} style={{ padding: "0 4px" }}>
             <p style={{
               margin: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.2,
-              textTransform: "uppercase", color: w.week === now ? C.blue : C.faint,
+              textTransform: "uppercase", color: w.week === now ? C.accent : C.faint,
             }}>
               {w.week === now ? "This week" : `Week ${w.week}`}
             </p>
@@ -2448,7 +2470,7 @@ function ThemeRow({ t }: { t: ThemeArc }) {
 }
 
 function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision) => void }) {
-  const statusColor = d.status === "closed" ? C.blue : C.yellow;
+  const statusColor = d.status === "closed" ? C.accent : C.yellow;
   return (
     <li style={{ display: "grid", gridTemplateColumns: "5rem 1fr auto", gap: 20, alignItems: "start", padding: "16px 0", borderBottom: `1px solid ${C.line}`, fontSize: 15, lineHeight: 1.5 }}>
       <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.6, textTransform: "uppercase", color: statusColor, paddingTop: 3 }}>{d.status === "closed" ? "Closed" : "Open"}</span>
@@ -2495,7 +2517,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
         <p style={kicker}>The cohort, this week</p>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", margin: "10px 0 16px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>No founders yet.</h1>
         <p style={{ margin: "0 0 26px", fontFamily: "var(--font-serif)", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 28' }}>
-          Add the cohort in <a href="/admin" style={{ color: C.blue }}>Cohort admin</a> and send each founder their setup link. Their signals appear here once they start checking in.
+          Add the cohort in <a href="/admin" style={{ color: C.accent }}>Cohort admin</a> and send each founder their setup link. Their signals appear here once they start checking in.
         </p>
       </div>
     );
@@ -2581,7 +2603,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
  */
 function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
   const arrow = ({ tenser: "↗", calmer: "↘", steady: "→", quiet: "•" } as const)[team.trend] || "→";
-  const arrowColor = ({ tenser: C.red, calmer: C.blue, steady: C.sub, quiet: C.faint } as const)[team.trend] || C.sub;
+  const arrowColor = ({ tenser: C.red, calmer: C.accent, steady: C.sub, quiet: C.faint } as const)[team.trend] || C.sub;
 
   return (
     <div className="rise" style={{ maxWidth: 640, margin: "0 auto", padding: "26px 28px 90px" }}>
@@ -2648,7 +2670,7 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
       </div>
 
       <p style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, marginTop: 36, paddingTop: 18, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 8, fontVariationSettings: '"opsz" 18' }}>
-        <span style={{ width: 6, height: 6, borderRadius: 9, background: C.blue, flexShrink: 0 }} />
+        <span style={{ width: 6, height: 6, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
         Shared by the founder. Themes and trends only, never raw transcripts.
       </p>
     </div>
@@ -2738,7 +2760,7 @@ function useTimeContext(): TimeCtx {
 
   const i = roll % lines.length;
   const line = lines[i] ?? dayLines[0]!;
-  const dotColor = (h >= 23 || h < 5) ? C.red : (h < 11) ? C.yellow : C.blue;
+  const dotColor = (h >= 23 || h < 5) ? C.red : (h < 11) ? C.yellow : C.accent;
 
   const greetings = [
     "Let's go.", "Where to?", "What's the move?", "Talk to me.", "What are we building?",
@@ -2774,7 +2796,7 @@ const CSS = `
 .threadrow:hover .thread-delete,
 .threadrow:focus-within .thread-delete { opacity: 1; }
 .thread-delete:hover { color: var(--brand-red)!important; background: rgba(255,255,255,0.07)!important; }
-.thread-delete:focus-visible { opacity: 1; outline: 2px solid var(--brand-blue); outline-offset: 1px; }
+.thread-delete:focus-visible { opacity: 1; outline: 2px solid var(--brand-accent); outline-offset: 1px; }
 @media (hover: none) { .thread-delete { opacity: 0.5; } }
 
 /* Deadline checkboxes.
@@ -2797,8 +2819,8 @@ const CSS = `
   place-items: center;
   transition: background 120ms ease, border-color 120ms ease;
 }
-.deadline-check:hover:not(:disabled) { border-color: var(--brand-blue); }
-.deadline-check:checked { background: var(--brand-blue); border-color: var(--brand-blue); }
+.deadline-check:hover:not(:disabled) { border-color: var(--brand-accent); }
+.deadline-check:checked { background: var(--brand-accent); border-color: var(--brand-accent); }
 .deadline-check:checked::after {
   content: "";
   width: 3.5px;
@@ -2807,10 +2829,10 @@ const CSS = `
   border-width: 0 2px 2px 0;
   transform: translateY(-1px) rotate(45deg);
 }
-.deadline-check:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.deadline-check:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
-.composer-box:focus-within { border-color: var(--brand-blue)!important; }
+.composer-box:focus-within { border-color: var(--brand-accent)!important; }
 
 /* ---- The record, and printing it ------------------------------------------
    Printing is the export. A founder who wants to keep this should not need an
@@ -2827,7 +2849,7 @@ const CSS = `
   cursor: pointer;
 }
 .record-print:hover { background: rgba(255,255,255,.06); }
-.record-print:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.record-print:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 @media print {
   /* Only the record prints. Everything else on this page is navigation or
@@ -2871,7 +2893,7 @@ const CSS = `
   white-space: nowrap;
 }
 .quick-buttons button:hover { background: rgba(255,255,255,.06); }
-.quick-buttons button:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.quick-buttons button:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 .quick-note { display: flex; gap: 6px; margin: -6px 0 14px; }
 .quick-note input {
@@ -2885,14 +2907,14 @@ const CSS = `
   color: inherit;
   font: 400 13px/1 var(--font-family);
 }
-.quick-note input:focus { outline: none; border-color: var(--brand-blue); }
+.quick-note input:focus { outline: none; border-color: var(--brand-accent); }
 .quick-note button {
   flex: 0 0 auto;
   min-height: 38px;
   padding: 0 14px;
   border-radius: 9px;
   border: none;
-  background: var(--brand-blue);
+  background: var(--brand-accent);
   color: oklch(13% 0.008 250);
   font: 700 12.5px/1 var(--font-family);
   cursor: pointer;
@@ -2951,9 +2973,9 @@ const CSS = `
   min-height: 44px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(70, 165, 255, 0.4);
-  background: rgba(70, 165, 255, 0.14);
-  color: var(--brand-blue);
+  border: 1px solid rgba(232, 23, 10, 0.4);
+  background: rgba(232, 23, 10, 0.14);
+  color: var(--brand-accent);
   font: 700 13.5px/1 var(--font-family);
   cursor: pointer;
   white-space: nowrap;
@@ -2989,7 +3011,7 @@ const CSS = `
 .mobile-actions-when { flex: 0 0 auto; font-weight: 700; font-size: 12px; opacity: .85; }
 .mobile-actions-more { flex: 0 0 auto; font-size: 11.5px; opacity: .6; }
 .mobile-actions-checkin:focus-visible,
-.mobile-actions-next:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.mobile-actions-next:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .send-button {
   /* 44px is the smallest reliable touch target on iOS and Android, and this
      is the control founders hit most. It was 36px. */
