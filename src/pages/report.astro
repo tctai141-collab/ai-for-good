@@ -1,0 +1,510 @@
+---
+/**
+ * The founder's working-style report, as a printable document.
+ *
+ * A route plus `@page` CSS plus the browser's own "Save as PDF", rather than a
+ * PDF built server-side. That decision is worth writing down:
+ *
+ *   Nothing is stored. A server-rendered PDF is a second copy of a private
+ *   result living outside the guarantee that
+ *   test/working-genius-privacy.test.ts holds, and the moment it exists
+ *   somebody has to decide where it lives and for how long. This is generated
+ *   on demand, handed over, and kept nowhere.
+ *
+ *   No new runtime. The Dockerfile is slim and a headless browser would be the
+ *   single largest thing in it, for output that would be worse: the browser's
+ *   own export gives selectable text, and a rasteriser gives a picture of text.
+ *
+ *   It reads from the session, not from a query parameter naming a founder.
+ *   There is no id in the URL to change.
+ *
+ * The whole document is light. The app is dark-themed and printing dark-on-dark
+ * gives either an unreadable page or a cartridge emptied on one report.
+ */
+import { getSessionUser } from "../lib/auth";
+import { getWorkingGenius, listWorkingGeniusTakes } from "../db/index";
+import { WORKING_GENIUS_ITEMS, WIDGET_ORDER, typeById, bandCopy, type WorkingGeniusResult, type WorkingGeniusId } from "../lib/workingGenius";
+import { PAIRINGS, pairingFor, pairingTypes } from "../lib/workingGeniusPairs";
+
+const session = await getSessionUser(Astro.cookies, Astro.request);
+if (!session) return Astro.redirect("/");
+
+/*
+ * Which take to print. `take` names a date from the founder's own history, so
+ * a past result can be printed from WgHistory; anything that is not one of
+ * their own dates falls back to the current one rather than erroring, because
+ * an edited URL is not worth a stack trace.
+ *
+ * Note what is absent: any parameter naming a *founder*. The row comes from
+ * the session and nothing else, so there is nothing in this URL to tamper with.
+ */
+const wanted = Astro.url.searchParams.get("take");
+const current = getWorkingGenius(session.email);
+const takes = listWorkingGeniusTakes(session.email);
+
+let raw = current?.result_json ?? null;
+if (wanted) {
+  const match = takes.find((t) => t.taken_on === wanted);
+  if (match?.result_json) raw = match.result_json;
+}
+
+let result: WorkingGeniusResult | null = null;
+try {
+  result = raw ? (JSON.parse(raw) as WorkingGeniusResult) : null;
+} catch {
+  result = null;
+}
+
+/* Their name, never their email. An email address in a document somebody
+   prints and leaves on a desk is a different thing from one on a screen. */
+const displayName = session.name?.trim() || "";
+
+const ranked = result ? result.ranking.map((id) => typeById(id)) : [];
+const pairing = result ? pairingFor(result.ranking[0]!, result.ranking[1]!) : null;
+const others = result ? PAIRINGS.filter((p) => p !== pairing) : [];
+
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+const bandName = (b: string) =>
+  b === "genius" ? "Where your energy comes from"
+  : b === "competency" ? "What you can do without cost"
+  : "What drains you";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Where your energy goes</title>
+    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <style>
+      /* A light document, printed on paper, not the dark app. */
+      @page { size: A4; margin: 18mm 16mm; }
+
+      :root {
+        --ink: #14161a;
+        --ink-2: #3c4148;
+        --ink-3: #6b7178;
+        --rule: #d7dade;
+        --accent: #b5150c;
+        --serif: "Source Serif 4", ui-serif, Georgia, serif;
+        --sans: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: #fff; }
+      body {
+        font-family: var(--sans);
+        color: var(--ink);
+        font-size: 11.5pt;
+        line-height: 1.55;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .sheet { max-width: 178mm; margin: 0 auto; padding: 16mm 8mm 24mm; }
+
+      /* One section per page. break-after is the modern spelling; page-break
+         stays for anything that only knows the old one. */
+      section { page-break-after: always; break-after: page; }
+      section:last-of-type { page-break-after: auto; break-after: auto; }
+
+      /* A heading must never be the last thing on a page. */
+      h1, h2, h3 { page-break-after: avoid; break-after: avoid-page; }
+      h2, h3, p, li, tr, .card { page-break-inside: avoid; break-inside: avoid; }
+
+      h1 { font-family: var(--serif); font-size: 30pt; font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 6pt; }
+      h2 { font-family: var(--serif); font-size: 17pt; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 10pt; }
+      h3 { font-family: var(--sans); font-size: 11pt; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); margin: 18pt 0 6pt; }
+      p { margin: 0 0 9pt; }
+      .lede { font-family: var(--serif); font-size: 13pt; color: var(--ink-2); }
+      .kicker { font-size: 8.5pt; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8pt; }
+      .rule { height: 1px; background: var(--rule); margin: 14pt 0; border: 0; }
+      .quiet { color: var(--ink-3); font-size: 10pt; }
+
+      /* Cover */
+      .cover { display: flex; flex-direction: column; justify-content: center; min-height: 205mm; }
+      .wordmark { font-family: var(--serif); font-weight: 900; font-size: 15pt; letter-spacing: -0.02em; margin: 0 0 auto; }
+      .cover h1 { font-size: 40pt; margin-bottom: 14pt; }
+      .cover .who { font-family: var(--serif); font-size: 17pt; color: var(--ink-2); margin: 0; }
+
+      /* The six types, as a sequence */
+      .flow { display: flex; align-items: stretch; gap: 0; margin: 12pt 0 18pt; }
+      .flow-step { flex: 1; padding: 9pt 7pt; border-top: 2px solid var(--rule); }
+      .flow-step.is-yours { border-top-color: var(--accent); }
+      .flow-letter { font-family: var(--serif); font-weight: 900; font-size: 16pt; line-height: 1; }
+      .flow-name { font-size: 9pt; font-weight: 700; margin-top: 2pt; }
+      .flow-what { font-size: 8.5pt; color: var(--ink-3); line-height: 1.35; margin-top: 3pt; }
+
+      /* Ranking */
+      .rank { width: 100%; border-collapse: collapse; }
+      .rank td { padding: 7pt 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+      .rank .pos { width: 22pt; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+      .rank .nm { font-family: var(--serif); font-size: 14pt; font-weight: 800; }
+      .rank .bar { width: 62pt; }
+      .rank .bar span { display: block; height: 6pt; background: var(--accent); border-radius: 3pt; }
+      .rank .sc { width: 44pt; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+      .rank tr.band-start td { border-top: 2px solid var(--ink); }
+
+      .card { border: 1px solid var(--rule); border-radius: 4pt; padding: 11pt 12pt; margin: 0 0 10pt; }
+      .card h4 { margin: 0 0 4pt; font-family: var(--serif); font-size: 13pt; font-weight: 800; }
+      .card .types { font-size: 9pt; color: var(--ink-3); margin: 0 0 6pt; }
+      .card p { margin: 0 0 6pt; font-size: 10.5pt; }
+      .card p:last-child { margin-bottom: 0; }
+
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8pt 14pt; }
+      .grid .g-name { font-family: var(--serif); font-weight: 800; font-size: 11pt; }
+      .grid .g-types { font-size: 8.5pt; color: var(--ink-3); }
+      .grid .g-line { font-size: 9.5pt; color: var(--ink-2); }
+
+      blockquote { margin: 0 0 10pt; padding-left: 10pt; border-left: 2px solid var(--accent); }
+      blockquote .q { font-family: var(--serif); font-size: 12pt; }
+
+      footer { margin-top: 18pt; padding-top: 8pt; border-top: 1px solid var(--rule); font-size: 8.5pt; color: var(--ink-3); }
+
+      .toolbar { position: sticky; top: 0; display: flex; gap: 10px; justify-content: flex-end; padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--rule); }
+      .toolbar button, .toolbar a { font-family: var(--sans); font-size: 13px; font-weight: 700; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--rule); background: #fff; color: var(--ink); cursor: pointer; text-decoration: none; }
+      .toolbar button { background: var(--accent); border-color: var(--accent); color: #fff; }
+      @media print { .toolbar { display: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <a href="/">Back to Sprint Buddy</a>
+      <button type="button" id="print">Save as PDF</button>
+    </div>
+
+    {!result ? (
+      <div class="sheet">
+        <h1>Nothing to print yet</h1>
+        <p class="lede">Take the assessment in Sprint Buddy and this becomes your report.</p>
+      </div>
+    ) : (
+      <div class="sheet">
+
+        <!-- 1 Cover -->
+        <section class="cover">
+          <p class="wordmark">Aalto Founder Sprint</p>
+          <h1>Where your energy goes</h1>
+          {displayName && <p class="who">{displayName}</p>}
+          <p class="who quiet">{result.completedAt}</p>
+        </section>
+
+        <!-- 2 How to read this -->
+        <section>
+          <p class="kicker">How to read this</p>
+          <h2>This is about energy, not ability</h2>
+          <p class="lede">
+            There are six kinds of work in any piece of work. Two of them give you energy, two
+            you can do without much cost, and two take energy out of you.
+          </p>
+          <p>
+            The distinction that matters, and the one people get wrong: this is not a measure of
+            what you are good at. You can be excellent at something that drains you. Most people
+            reading this are, because being good at something is exactly how you end up doing more
+            of it. That is the trap this document exists to name. Competence and energy are
+            different axes, and a career built only on the first one runs out.
+          </p>
+          <p>
+            It is also worth saying what this is not. It is a self-report, answered on one day,
+            about how you behave. It is not a diagnosis, not a fixed trait, and not a reason to
+            turn down work. Read it as a description of where your attention goes when nobody is
+            making it go anywhere.
+          </p>
+          <hr class="rule" />
+          <p class="quiet">
+            The six-type model here is Patrick Lencioni's, from The 6 Types of Working Genius.
+            The assessment behind this report is the Sprint's own and is not the official
+            instrument.
+          </p>
+        </section>
+
+        <!-- 3 The six types -->
+        <section>
+          <p class="kicker">The six</p>
+          <h2>Six kinds of work, in the order work happens</h2>
+          <p>
+            Every project runs the same route: somebody notices the need, somebody has the idea,
+            somebody judges it, somebody gets people moving, somebody supports the work, somebody
+            finishes it. Yours are marked.
+          </p>
+          <div class="flow">
+            {WIDGET_ORDER.map((id) => {
+              const t = typeById(id);
+              const yours = result!.ranking.slice(0, 2).includes(id);
+              return (
+                <div class={`flow-step${yours ? " is-yours" : ""}`}>
+                  <div class="flow-letter">{t.letter}</div>
+                  <div class="flow-name">{t.label}</div>
+                  <div class="flow-what">{t.activity}</div>
+                </div>
+              );
+            })}
+          </div>
+          <p class="quiet">
+            Nobody has all six. A team that is missing one of them feels it, usually as a stage
+            where work reliably stalls.
+          </p>
+        </section>
+
+        <!-- 4 At a glance -->
+        <section>
+          <p class="kicker">At a glance</p>
+          <h2>{typeById(result.ranking[0]!).label} and {typeById(result.ranking[1]!).label}</h2>
+          <p class="lede">Your two strongest, out of six. Everything else follows from these.</p>
+          <table class="rank">
+            <tbody>
+              {ranked.map((t, i) => (
+                <tr class={i === 0 || i === 2 || i === 4 ? "band-start" : ""}>
+                  <td class="pos">{i + 1}</td>
+                  <td class="nm">{t.label}</td>
+                  <td class="bar"><span style={`width:${Math.max(4, Math.round(result!.rates[t.id] * 100))}%`}></span></td>
+                  <td class="sc">{result!.counts[t.id]}/{result!.contests[t.id]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <h3>{bandName("genius")}</h3>
+          <p>{result.bands.genius.map((id) => typeById(id).label).join(" and ")}</p>
+          <h3>{bandName("competency")}</h3>
+          <p>{result.bands.competency.map((id) => typeById(id).label).join(" and ")}</p>
+          <h3>{bandName("frustration")}</h3>
+          <p>{result.bands.frustration.map((id) => typeById(id).label).join(" and ")}</p>
+        </section>
+
+        <!-- 5, 6, 7 the three bands -->
+        {(["genius", "competency", "frustration"] as const).map((band) => (
+          <section>
+            <p class="kicker">{band === "genius" ? "Your strengths" : band === "competency" ? "Your middle" : "Your costs"}</p>
+            <h2>{bandName(band)}</h2>
+            {result!.bands[band].map((id) => (
+              <div>
+                <h3>{typeById(id).label}</h3>
+                <p class="lede">{bandCopy(typeById(id), band)}</p>
+              </div>
+            ))}
+            {band === "competency" && (
+              <>
+                <hr class="rule" />
+                <p>
+                  Worth being careful with this pair. People often become genuinely good at the
+                  work in this band, sometimes better than they are at the two above it, because
+                  circumstance put them there and they were stubborn enough to learn it. That
+                  competence is real. It is still not the same as energy, and a week made mostly
+                  of this work will leave you flat without ever being obviously wrong.
+                </p>
+              </>
+            )}
+            {band === "frustration" && (
+              <>
+                <hr class="rule" />
+                <p>
+                  Two things, and they pull in opposite directions on purpose. Do not build a role
+                  out of this pair; sustained time here is what burnout is usually made of. And do
+                  not feel bad about it. A frustration is not a weakness or a gap to close, it is
+                  a description of where your energy does not come from. Everybody has two.
+                </p>
+              </>
+            )}
+          </section>
+        ))}
+
+        <!-- 8 Your pairing -->
+        <section>
+          <p class="kicker">Your pairing</p>
+          <h2>{pairing!.name}</h2>
+          <p class="quiet">{pairingTypes(pairing!)}</p>
+          <p class="lede">{pairing!.inPractice}</p>
+          <h3>What it needs</h3>
+          <p>{pairing!.thrives}</p>
+          <h3>What grinds it down</h3>
+          <p>{pairing!.frustrates}</p>
+        </section>
+
+        <!-- 9 All fifteen -->
+        <section>
+          <p class="kicker">The other fourteen</p>
+          <h2>So you can recognise your team</h2>
+          <p>
+            Fifteen combinations, one per pair of types. Worth reading across a founding team:
+            the gaps tell you more than the overlaps.
+          </p>
+          <div class="grid">
+            {others.map((p) => (
+              <div>
+                <div class="g-name">{p.name}</div>
+                <div class="g-types">{pairingTypes(p)}</div>
+                <div class="g-line">{p.inPractice.split(". ")[0]}.</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <!-- 10 Confidence -->
+        <section>
+          <p class="kicker">Confidence</p>
+          <h2>How firm this result is</h2>
+          <p class="lede">
+            Every pair of types was asked twice, in different words and far apart. That buys a
+            reliability check most reports do not have, so here it is rather than a clean number
+            that hides its own softness.
+          </p>
+
+          <h3>Agreement between the two askings</h3>
+          <p>
+            You answered the same way both times on {pct(result.consistency)} of the fifteen
+            pairs.{" "}
+            {result.consistency >= 0.8
+              ? "That is high. The ranking below is a real signal rather than a set of coin tosses."
+              : result.consistency >= 0.6
+              ? "That is moderate. The broad shape is trustworthy; individual positions in the middle are not."
+              : "That is low. Read the bands rather than the order inside them, and consider taking it again when you are less rushed."}
+          </p>
+
+          {result.contested.length > 0 && (
+            <>
+              <h3>Ordered by a fallback</h3>
+              <p>
+                These finished exactly level, on total and on their head-to-head, so the order
+                between them came from a rule rather than from your answers:{" "}
+                {result.contested.map(([a, b]) => `${typeById(a).label} and ${typeById(b).label}`).join("; ")}.
+              </p>
+            </>
+          )}
+
+          {(result.boundaryMargins.geniusCompetency === 0 || result.boundaryMargins.competencyFrustration === 0) && (
+            <>
+              <h3>Band lines that were tie-breaks</h3>
+              <p>
+                {result.boundaryMargins.geniusCompetency === 0 && "The line between your top two and your middle two was a tie-break, not a finding. "}
+                {result.boundaryMargins.competencyFrustration === 0 && "The line between your middle two and your bottom two was a tie-break, not a finding. "}
+                Treat those two types as sitting together rather than either side of a line.
+              </p>
+            </>
+          )}
+
+          {result.abstentions.length > 0 && (
+            <>
+              <h3>Questions you answered in your own words</h3>
+              <p>
+                On {result.abstentions.length} of the thirty you said neither option matched.
+                Those were left out of the scoring rather than guessed at, which means the types
+                involved were compared fewer times than the others. The ranking accounts for that
+                by scoring on wins per comparison rather than on raw totals, but it is one more
+                reason to read the shape rather than the exact order.
+              </p>
+            </>
+          )}
+
+          {result.overrides.length > 0 && (
+            <>
+              <h3>Where what you wrote outranked what you clicked</h3>
+              <p>
+                On {result.overrides.length}{" "}
+                {result.overrides.length === 1 ? "question" : "questions"} your own description
+                pointed somewhere other than the option you selected. The description was used.
+                It is unprompted and specific, where a click is the nearest of two fits somebody
+                else wrote.
+              </p>
+            </>
+          )}
+        </section>
+
+        <!-- 11 In your own words -->
+        {result.responses && Object.values(result.responses).some((r) => typeof r === "object" && r && (r as { text?: string }).text) && (
+          <section>
+            <p class="kicker">In your own words</p>
+            <h2>What you wrote</h2>
+            <p class="lede">
+              The forced choice is what produces a ranking. This is what did not fit inside it,
+              which is often the more useful half.
+            </p>
+            {WORKING_GENIUS_ITEMS.map((item) => {
+              /* Walked in presentation order rather than over the response
+                 object, so the quotes come back in the order they were
+                 answered and each one carries the question it answered. An
+                 item id on its own would mean nothing to a founder. */
+              const raw = result!.responses[item.id];
+              if (typeof raw === "string" || !raw) return null;
+              const text = (raw as { text?: string }).text;
+              if (!text) return null;
+              const answer = raw as { choice?: string; resolved?: string };
+              const read =
+                answer.resolved && answer.resolved !== "neither"
+                  ? typeById(answer.resolved as WorkingGeniusId).label
+                  : null;
+              return (
+                <blockquote>
+                  <p class="quiet" style="margin-bottom:3pt">{item.prompt}</p>
+                  <p class="q">{text}</p>
+                  {read && (
+                    <p class="quiet" style="margin:4pt 0 0">
+                      Read as {read}
+                      {answer.choice && answer.choice !== "neither" && answer.choice !== answer.resolved
+                        ? `, where you had clicked ${typeById(answer.choice as WorkingGeniusId).label}. What you wrote was used.`
+                        : "."}
+                    </p>
+                  )}
+                </blockquote>
+              );
+            })}
+          </section>
+        )}
+
+        <!-- 12 What to do with this -->
+        <section>
+          <p class="kicker">What to do with this</p>
+          <h2>Practical, starting this week</h2>
+
+          <h3>For your own work</h3>
+          <p>
+            Lean into the top two deliberately rather than incidentally. Look at what is on your
+            plate this week and find the one thing that sits squarely in them; that is the thing
+            to do first and to do properly, not the thing to fit in around the rest.
+          </p>
+          <p>
+            Then find what you volunteer for out of habit that sits in the bottom two, and stop
+            volunteering. Not refuse when asked, stop offering. Most of the draining work people
+            carry was never assigned to them.
+          </p>
+          <p>
+            When work in your bottom two is genuinely yours to do, put it where your energy is
+            highest rather than saving it for the end of the day. Draining work done tired takes
+            twice as long and produces the result that makes you dread it more.
+          </p>
+          <p>
+            The signal to learn in the moment is a specific one: not boredom, but a task you keep
+            picking up and putting down without progress. That is usually not procrastination. It
+            is the shape of the work not matching the shape of your attention.
+          </p>
+
+          <h3>With your team</h3>
+          <p>
+            Swap results with your co-founders. The useful conversation is not who is what, it is
+            where the gaps are: read across the six types and find the stage nobody's energy
+            covers. That stage is where your work will reliably stall, and knowing which one it is
+            beforehand is worth more than any individual result here.
+          </p>
+          <p>
+            Three questions worth asking out loud, in the sprint, with the results on the table.
+            Who is doing work that lands in their bottom two, and does it have to be them? Which
+            stage of our work has nobody's energy behind it, and what do we do about that,
+            deliberately? And what has each of us been quietly carrying because we are good at it
+            rather than because it gives us anything back?
+          </p>
+
+          <footer>
+            Taken {result.completedAt} · instrument {result.version} ·
+            Aalto Founder Sprint
+          </footer>
+        </section>
+      </div>
+    )}
+
+    <script is:inline>
+      document.getElementById("print")?.addEventListener("click", () => window.print());
+    </script>
+  </body>
+</html>

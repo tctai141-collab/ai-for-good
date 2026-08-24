@@ -154,6 +154,101 @@ describe("writing a working-style profile", () => {
   });
 });
 
+describe("the printable report", () => {
+  /*
+   * /report is a new surface carrying the same private result, so it gets the
+   * same scrutiny as the API read that this file exists because of.
+   *
+   * The structural defence is that the route takes no parameter naming a
+   * founder: the row comes from the session. `take` names a date, and only a
+   * date in the caller's own history. These tests hold that shape, because the
+   * obvious "improvement" later is to add ?user= for an organizer view, and
+   * that is exactly the leak this file was written after.
+   */
+  const report = (who: Session | null, query = "") =>
+    get(h, `/report${query}`, who?.cookie);
+
+  test("a signed-out visitor is sent away, not shown a document", async () => {
+    const res = await report(null);
+    // Astro's redirect, or the login page. Either way, not the report.
+    expect([302, 303, 307, 200]).toContain(res.status);
+    const body = res.status === 200 ? await res.text() : "";
+    expect(body).not.toContain("Where your energy goes");
+  });
+
+  test("the founder gets their own report", async () => {
+    const res = await report(alice);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Where your energy goes");
+    expect(body).toContain("Alice Andersson");
+  });
+
+  test("an organizer cannot reach a founder's report by any parameter", async () => {
+    /*
+     * The whole point. Every shape somebody might reach for if they wanted an
+     * organizer view, tried explicitly.
+     */
+    for (const query of [
+      "?user=alice@example.test",
+      "?userEmail=alice@example.test",
+      "?email=alice@example.test",
+      "?founder=alice@example.test",
+      `?take=${encodeURIComponent("2026-09-10")}&user=alice@example.test`,
+    ]) {
+      const res = await report(organizer, query);
+      const body = res.status === 200 ? await res.text() : "";
+      expect([query, body.includes("Alice Andersson")]).toEqual([query, false]);
+      expect([query, body.includes("alice@example.test")]).toEqual([query, false]);
+    }
+  });
+
+  test("another founder cannot reach it either", async () => {
+    const res = await report(bob, "?user=alice@example.test");
+    const body = res.status === 200 ? await res.text() : "";
+    expect(body).not.toContain("Alice Andersson");
+    // Bob has taken nothing, so he gets the empty state rather than anyone's data.
+    expect(body).toContain("Nothing to print yet");
+  });
+
+  test("a take date that is not the caller's own falls back to their own", async () => {
+    // An edited URL is not worth a stack trace, and must not be worth anyone
+    // else's result either.
+    const res = await report(alice, "?take=1999-01-01");
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Alice Andersson");
+    expect(body).not.toContain("1999-01-01");
+  });
+
+  test("the founder's email is never in the document", async () => {
+    // A name on a page somebody prints and leaves on a desk is one thing. An
+    // address is another.
+    const res = await report(alice);
+    const body = await res.text();
+    const inBody = body.slice(body.indexOf("<body"));
+    expect(inBody).not.toContain("alice@example.test");
+  });
+
+  test("nothing about the report is written to disk", async () => {
+    /*
+     * The reason this is a print route rather than a server-side PDF. A stored
+     * document would be a second copy of a private result living outside every
+     * guarantee this file makes.
+     */
+    const before = h.db().query("SELECT COUNT(*) AS n FROM working_genius").get() as { n: number };
+    await report(alice);
+    await report(alice, "?take=2026-09-10");
+    const after = h.db().query("SELECT COUNT(*) AS n FROM working_genius").get() as { n: number };
+    expect(after.n).toBe(before.n);
+
+    const tables = h.db()
+      .query("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>;
+    expect(tables.map((t) => t.name).filter((n) => /report|pdf/i.test(n))).toEqual([]);
+  });
+});
+
 describe("no other surface exposes it", () => {
   test("an organizer's view of a founder carries no working-genius data", async () => {
     /*

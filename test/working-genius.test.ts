@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  INSTRUMENT_PREAMBLE,
+  readAnswer,
   INSTRUMENT_VERSION,
   WIDGET_ORDER,
   WORKING_GENIUS_ITEMS,
@@ -108,6 +110,213 @@ describe("item bank structure", () => {
     for (const t of WORKING_GENIUS_TYPES) {
       expect([t.id, t.asGenius.length > 40, t.asCompetency.length > 40, t.asFrustration.length > 40])
         .toEqual([t.id, true, true, true]);
+    }
+  });
+});
+
+describe("the escape hatch", () => {
+  /*
+   * Some people do neither, do both, or do something conditional. Forcing them
+   * to click one of two wrong answers puts noise in the score and tells nobody
+   * anything. The instrument stays a forced choice, because that is what keeps
+   * the comparison graph complete, and "neither" abstains rather than guessing.
+   */
+  const all = (pick: (item: (typeof WORKING_GENIUS_ITEMS)[number]) => unknown) => {
+    const r: Record<string, unknown> = {};
+    for (const item of WORKING_GENIUS_ITEMS) r[item.id] = pick(item);
+    return r as WorkingGeniusResponses;
+  };
+
+  test("a legacy bare type id still scores exactly as it did", () => {
+    // afs-1 rows are on disk. They must keep their result forever.
+    const legacy = all((item) => item.options[0]!.id);
+    const modern = all((item) => ({ choice: item.options[0]!.id }));
+    const a = scoreWorkingGenius(legacy, "2026-09-10");
+    const b = scoreWorkingGenius(modern, "2026-09-10");
+    expect(b.counts).toEqual(a.counts);
+    expect(b.ranking).toEqual(a.ranking);
+  });
+
+  test("an abstention removes the item from both of its types, not one", () => {
+    /*
+     * The whole point of the rate. If only the unchosen side lost a contest,
+     * abstaining would quietly reward whichever type happened to be listed
+     * first.
+     */
+    const responses = all((item) => item.options[0]!.id) as Record<string, unknown>;
+    const [first] = WORKING_GENIUS_ITEMS;
+    responses[first!.id] = { choice: "neither", text: "Depends entirely who is in the room." };
+
+    const result = scoreWorkingGenius(responses as WorkingGeniusResponses, "2026-09-10");
+    expect(result.abstentions).toEqual([first!.id]);
+    for (const opt of first!.options) expect(result.contests[opt.id]).toBe(9);
+    for (const t of WIDGET_ORDER) {
+      if (!first!.options.some((o) => o.id === t)) expect(result.contests[t]).toBe(10);
+    }
+  });
+
+  test("ranking on the rate, so abstaining does not cost you the band", () => {
+    /*
+     * A type asked eight times and winning all eight is stronger than one asked
+     * ten times and winning nine. Sorting on raw wins says the opposite, which
+     * is the bug this exists to prevent.
+     */
+    const responses: Record<string, unknown> = {};
+    for (const item of WORKING_GENIUS_ITEMS) {
+      // Wonder wins everything it contests.
+      const wonder = item.options.find((o) => o.id === "wonder");
+      responses[item.id] = wonder ? "wonder" : item.options[0]!.id;
+    }
+    // Now abstain on two of wonder's ten, so it wins 8 of 8.
+    const wonderItems = WORKING_GENIUS_ITEMS.filter((i) => i.options.some((o) => o.id === "wonder"));
+    for (const item of wonderItems.slice(0, 2)) {
+      responses[item.id] = { choice: "neither", text: "Neither, honestly." };
+    }
+
+    const result = scoreWorkingGenius(responses as WorkingGeniusResponses, "2026-09-10");
+    expect(result.counts.wonder).toBe(8);
+    expect(result.contests.wonder).toBe(8);
+    expect(result.rates.wonder).toBe(1);
+    expect(result.ranking[0]).toBe("wonder");
+  });
+
+  test("free text outranks the click when the two disagree", () => {
+    /*
+     * A click is a nearest fit against two options someone else wrote. The text
+     * is unprompted and specific. The disagreement is kept rather than
+     * smoothed over, because a founder who clicked one thing and described
+     * another has said something worth naming.
+     */
+    const [item] = WORKING_GENIUS_ITEMS;
+    const clicked = item!.options[0]!.id;
+    const described = item!.options[1]!.id;
+    const read = readAnswer({ choice: clicked, text: "In practice I do the other one.", resolved: described });
+    expect(read.effective).toBe(described);
+    expect(read.overrode).toBe(true);
+
+    const responses = all((i) => i.options[0]!.id) as Record<string, unknown>;
+    responses[item!.id] = { choice: clicked, text: "In practice I do the other one.", resolved: described };
+    const result = scoreWorkingGenius(responses as WorkingGeniusResponses, "2026-09-10");
+    expect(result.overrides).toEqual([{ itemId: item!.id, clicked, resolved: described }]);
+  });
+
+  test("text that was never classified does not silently abstain a real click", () => {
+    // Someone adds optional context to an answer they did make. The click
+    // stands until something reads the text.
+    const read = readAnswer({ choice: "wonder", text: "Only when it is early in a project." });
+    expect(read.effective).toBe("wonder");
+    expect(read.overrode).toBe(false);
+  });
+
+  test("consistency ignores pairs where either asking abstained", () => {
+    /*
+     * Scoring an abstention as disagreement would punish a founder for using
+     * the escape hatch honestly.
+     *
+     * Built from a fixed preference order, not from options[0]: round A and
+     * round B deliberately flip which type is listed first, so answering by
+     * position disagrees with itself every time and correctly scores
+     * consistency 0. That is the instrument working, and it is why this test
+     * needs a respondent with an actual preference.
+     */
+    const order: WorkingGeniusId[] = [
+      "invention", "enablement", "tenacity", "wonder", "galvanizing", "discernment",
+    ];
+    const prefer = (a: WorkingGeniusId, b: WorkingGeniusId) =>
+      order.indexOf(a) < order.indexOf(b) ? a : b;
+
+    const responses: Record<string, unknown> = {};
+    for (const item of WORKING_GENIUS_ITEMS) {
+      responses[item.id] = prefer(item.options[0]!.id, item.options[1]!.id);
+    }
+    expect(scoreWorkingGenius(responses as WorkingGeniusResponses, "2026-09-10").consistency).toBe(1);
+
+    const [first] = WORKING_GENIUS_ITEMS;
+    responses[first!.id] = { choice: "neither", text: "Neither." };
+    const result = scoreWorkingGenius(responses as WorkingGeniusResponses, "2026-09-10");
+    // Fourteen pairs still had both askings answered, and all fourteen agreed.
+    expect(result.consistency).toBe(1);
+    expect(result.abstentions).toHaveLength(1);
+  });
+
+  test("junk in the stored shape abstains rather than throwing", () => {
+    expect(readAnswer(undefined).effective).toBeNull();
+    expect(readAnswer({ choice: "not-a-type" } as never).effective).toBeNull();
+    expect(readAnswer("nonsense" as never).effective).toBeNull();
+  });
+});
+
+describe("items ask what happens, not what you would like", () => {
+  /*
+   * A cohort tester stalled on the old wording: "I might rather be able to
+   * rally them, but I'm not good at rallying people so in reality I do option
+   * 2. Based on the wording it would mean I pick option 1 because I would
+   * 'rather' rally, even if I can't."
+   *
+   * "You would rather" reads both as the thing you wish you did and as the
+   * thing you do, and those give opposite answers from the same person. The
+   * intent it was carrying is kept, the items still never ask which one you do
+   * better, but the phrasing that reopens the ambiguity is banned outright.
+   */
+  const ASPIRATIONAL = ["would rather", "prefer", "ideally", "wish", "want to", "would choose"];
+
+  test("no item uses an aspirational verb", () => {
+    for (const item of WORKING_GENIUS_ITEMS) {
+      const text = `${item.prompt} ${item.options.map((o) => o.label).join(" ")}`.toLowerCase();
+      for (const banned of ASPIRATIONAL) {
+        expect([item.id, banned, text.includes(banned)]).toEqual([item.id, banned, false]);
+      }
+    }
+  });
+
+  test("every prompt asks about actual behaviour", () => {
+    /*
+     * The sanctioned behavioural framings, as a whitelist rather than a
+     * pattern. Thirty items reworded by hand is exactly where one slips back
+     * into the aspirational voice, and a loose regex would wave it through.
+     *
+     * A new item either uses one of these or the list gets extended on
+     * purpose, which is the point: extending it is a decision someone makes
+     * with this comment in front of them.
+     */
+    const BEHAVIOURAL = [
+      "actual", "end up", "find yourself", "in practice", "come to you",
+      "what do you", "which do you", "what happens", "where does",
+      "what were you", "what had you", "has to have happened",
+      "first move", "were you doing", "what is it",
+    ];
+    for (const item of WORKING_GENIUS_ITEMS) {
+      const prompt = item.prompt.toLowerCase();
+      expect([item.id, BEHAVIOURAL.some((p) => prompt.includes(p))]).toEqual([item.id, true]);
+    }
+  });
+
+  test("prompts are situations, not bare comparisons", () => {
+    // "More energising..." and "More natural to you..." were three-word stubs
+    // with no situation in them at all, which is where the reader supplies
+    // their own framing and half of them supply the aspirational one.
+    for (const item of WORKING_GENIUS_ITEMS) {
+      expect([item.id, item.prompt.length]).toEqual([item.id, expect.any(Number)]);
+      expect(item.prompt.length).toBeGreaterThan(28);
+    }
+  });
+
+  test("the preamble says which reading is wanted", () => {
+    expect(INSTRUMENT_PREAMBLE).toContain("how you actually behave");
+    expect(INSTRUMENT_PREAMBLE).toContain("no better or worse answers");
+  });
+
+  test("the version is bumped, because the founder was asked something else", () => {
+    // The pairings and ids are untouched, so afs-1 rows still score the same
+    // and stay comparable. What changed is the wording, which is enough to
+    // make the two banks different instruments.
+    expect(INSTRUMENT_VERSION).toBe("afs-2");
+  });
+
+  test("no em dashes anywhere in the bank", () => {
+    for (const item of WORKING_GENIUS_ITEMS) {
+      const text = `${item.prompt} ${item.options.map((o) => o.label).join(" ")}`;
+      expect([item.id, text.includes("\u2014")]).toEqual([item.id, false]);
     }
   });
 });

@@ -288,7 +288,9 @@ export async function bumpVisits(userEmail: string): Promise<number> {
  */
 export async function saveWorkingGenius(
   userEmail: string,
-  workingGeniusResponses: Record<string, string>,
+  /* Either shape: a bare type id is what afs-1 sent and is still accepted, an
+     object carries the click plus whatever the founder typed. */
+  workingGeniusResponses: Record<string, string | { choice: string; text?: string }>,
 ): Promise<WorkingGeniusResult> {
   const data = await post({ action: "save-working-genius", userEmail, workingGeniusResponses });
   return data.result as WorkingGeniusResult;

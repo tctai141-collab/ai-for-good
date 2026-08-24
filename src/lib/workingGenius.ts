@@ -177,12 +177,26 @@ export type WorkingGeniusItem = {
 };
 
 /**
- * Every item asks which option the founder would rather do, never which they
- * are better at. The model's whole claim is that genius is gifted *and*
- * energising, and people answer "what am I good at" with their job description.
+ * Every item names a concrete situation and asks what actually happens.
+ *
+ * It used to ask what the founder "would rather" do. A cohort tester stalled on
+ * exactly the ambiguity that creates: "I might rather be able to rally them,
+ * but I'm not good at rallying people so in reality I do option 2." The phrase
+ * reads two ways, as the thing you wish you did and as the thing you do, and
+ * those give opposite answers from the same person.
+ *
+ * The intent behind it was right and is kept: the model's claim is that a
+ * genius is energising, not merely something you are competent at, and people
+ * answer "what are you good at" with their job description. So the items still
+ * never ask which one you do better. They ask which one you actually reach for,
+ * lose track of time inside, or do without being asked, which gets at energy
+ * without inviting the fantasy self.
+ *
+ * Banned outright, because each one reopens the ambiguity: "would rather",
+ * "prefer", "ideally", "wish", "want to", "would choose". There is a test.
  *
  * Both options are written to be attractive. An item where one side is
- * obviously the virtuous answer measures self-image, not preference.
+ * obviously the virtuous answer measures self-image, not behaviour.
  *
  * Polarity never flips: every item is "which of these two pulls you". Mixing in
  * reverse-scored items ("which do you dread") would add noise we have no sample
@@ -196,43 +210,43 @@ const ITEMS_ROUND_A: WorkingGeniusItem[] = [
   {
     id: "wi-a",
     round: "a",
-    prompt: "An afternoon opens up with nothing scheduled. You spend it…",
+    prompt: "An unplanned afternoon opens up. Where does your attention actually go?",
     options: [
-      { id: "wonder", label: "Sitting with the question nobody on the team has asked yet." },
-      { id: "invention", label: "Sketching a solution that does not exist yet." },
+      { id: "wonder", label: "Circling a question about the business you have not had time to sit with." },
+      { id: "invention", label: "Sketching something that does not exist yet, to see whether it could." },
     ],
   },
   {
     id: "wd-a",
     round: "a",
-    prompt: "Someone drops a plan in front of you. Your first instinct is to…",
+    prompt: "Someone drops a finished plan in front of you. What do you actually do first?",
     options: [
-      { id: "wonder", label: "Ask what bigger thing this is really about." },
-      { id: "discernment", label: "Feel out which parts of it are off." },
+      { id: "wonder", label: "Ask what larger problem this is really meant to solve." },
+      { id: "discernment", label: "Start feeling out which parts of it will not hold." },
     ],
   },
   {
     id: "wg-a",
     round: "a",
-    prompt: "The room has gone quiet on something hard. You would rather…",
+    prompt: "The room has gone quiet on something difficult. What do you find yourself doing?",
     options: [
-      { id: "wonder", label: "Put the uncomfortable question on the table." },
-      { id: "galvanizing", label: "Get people fired up about doing something." },
+      { id: "wonder", label: "Naming the question everyone is circling and nobody has said." },
+      { id: "galvanizing", label: "Getting people moving again on something concrete." },
     ],
   },
   {
     id: "we-a",
     round: "a",
-    prompt: "A teammate is stuck. You would rather…",
+    prompt: "A teammate is stuck and says so. What do you end up doing?",
     options: [
-      { id: "wonder", label: "Work out with them what they are actually solving for." },
-      { id: "enablement", label: "Take some of the work off their plate." },
+      { id: "wonder", label: "Working out with them what they are actually solving for." },
+      { id: "enablement", label: "Taking a piece of it off their plate so they can move." },
     ],
   },
   {
     id: "wt-a",
     round: "a",
-    prompt: "There is an unanswered question and an unfinished task. You reach for…",
+    prompt: "There is an open question on your list and an unfinished task. It is four in the afternoon. Which do you actually pick up?",
     options: [
       { id: "wonder", label: "The question." },
       { id: "tenacity", label: "The task." },
@@ -241,91 +255,91 @@ const ITEMS_ROUND_A: WorkingGeniusItem[] = [
   {
     id: "id-a",
     round: "a",
-    prompt: "You are handed three half-baked concepts. You would rather…",
+    prompt: "Three half-formed concepts are on the table. What do you end up contributing?",
     options: [
-      { id: "invention", label: "Add a fourth that is genuinely different." },
-      { id: "discernment", label: "Say which of the three is actually ripe." },
+      { id: "invention", label: "A fourth one, genuinely different from the other three." },
+      { id: "discernment", label: "A read on which of the three is actually ready." },
     ],
   },
   {
     id: "ig-a",
     round: "a",
-    prompt: "The idea is good. What do you want to do with it?",
+    prompt: "The idea is good and everyone agrees. What do you do next without being asked?",
     options: [
-      { id: "invention", label: "Make it sharper and stranger." },
-      { id: "galvanizing", label: "Get people behind it." },
+      { id: "invention", label: "Push it further, into something sharper and stranger." },
+      { id: "galvanizing", label: "Start getting people behind it." },
     ],
   },
   {
     id: "ie-a",
     round: "a",
-    prompt: "The team is mid-build. You would rather…",
+    prompt: "The team is halfway through building it and it is going slowly. What do you actually do?",
     options: [
-      { id: "invention", label: "Rethink the approach from scratch." },
-      { id: "enablement", label: "Give people what they need to keep going." },
+      { id: "invention", label: "Start reworking the approach, because there is a better one." },
+      { id: "enablement", label: "Get people what they need to keep going with this one." },
     ],
   },
   {
     id: "it-a",
     round: "a",
-    prompt: "Two jobs, one of them yours. You take…",
+    prompt: "Two jobs need doing and you can only take one. Which do you take?",
     options: [
-      { id: "invention", label: "Inventing the thing." },
-      { id: "tenacity", label: "Shipping the thing." },
+      { id: "invention", label: "Working out what the thing should be." },
+      { id: "tenacity", label: "Getting the thing out of the door." },
     ],
   },
   {
     id: "dg-a",
     round: "a",
-    prompt: "The team is split between two options. You would rather…",
+    prompt: "The team is split between two options and the meeting is nearly over. What do you end up doing?",
     options: [
-      { id: "discernment", label: "Work out which one is right." },
-      { id: "galvanizing", label: "Get everyone committed to one." },
+      { id: "discernment", label: "Working out which one is actually right." },
+      { id: "galvanizing", label: "Getting everyone committed to one so it moves." },
     ],
   },
   {
     id: "de-a",
     round: "a",
-    prompt: "A plan lands on your desk. First move…",
+    prompt: "A plan lands on your desk from someone else. What is your first move?",
     options: [
-      { id: "discernment", label: "Judge whether it holds up." },
-      { id: "enablement", label: "Ask the person what they need to make it work." },
+      { id: "discernment", label: "Testing whether it holds up." },
+      { id: "enablement", label: "Asking the person what they need to make it work." },
     ],
   },
   {
     id: "dt-a",
     round: "a",
-    prompt: "Late in a project, you would rather be…",
+    prompt: "It is late in a project and things are ragged. Which role do you actually end up in?",
     options: [
-      { id: "discernment", label: "The one who spots what is off." },
+      { id: "discernment", label: "The one who spots what is off before it ships." },
       { id: "tenacity", label: "The one who drives it over the line." },
     ],
   },
   {
     id: "ge-a",
     round: "a",
-    prompt: "The team has lost steam. You would rather…",
+    prompt: "The team's momentum has died halfway through. What do you actually end up doing?",
     options: [
-      { id: "galvanizing", label: "Rally them." },
-      { id: "enablement", label: "Quietly clear whatever is blocking them." },
+      { id: "galvanizing", label: "Pulling everyone together to re-align on why this matters." },
+      { id: "enablement", label: "Putting your head down and clearing whatever is blocking them." },
     ],
   },
   {
     id: "gt-a",
     round: "a",
-    prompt: "Two weeks to the demo. You would rather…",
+    prompt: "Two weeks to the demo and it is not ready. What do you find yourself doing?",
     options: [
-      { id: "galvanizing", label: "Get everyone aligned and moving." },
-      { id: "tenacity", label: "Personally make sure it is finished." },
+      { id: "galvanizing", label: "Getting everyone aligned and moving in the same direction." },
+      { id: "tenacity", label: "Personally making sure the remaining pieces get finished." },
     ],
   },
   {
     id: "et-a",
     round: "a",
-    prompt: "The last ten percent is all that is left. You would rather…",
+    prompt: "The last ten percent is all that is left and everyone is tired. What happens?",
     options: [
-      { id: "enablement", label: "Support whoever is carrying it." },
-      { id: "tenacity", label: "Carry it yourself." },
+      { id: "enablement", label: "You back whoever is carrying it and make their part easier." },
+      { id: "tenacity", label: "You pick it up and carry it yourself." },
     ],
   },
 ];
@@ -334,136 +348,136 @@ const ITEMS_ROUND_B: WorkingGeniusItem[] = [
   {
     id: "wi-b",
     round: "b",
-    prompt: "The best part of a blank page is…",
+    prompt: "You are given a blank page and an hour. What do you actually end up doing with it?",
     options: [
-      { id: "invention", label: "Putting something new on it." },
-      { id: "wonder", label: "Wondering what could go on it." },
+      { id: "invention", label: "Filling it with something that was not there before." },
+      { id: "wonder", label: "Turning over what is worth putting on it at all." },
     ],
   },
   {
     id: "wd-b",
     round: "b",
-    prompt: "You get more out of…",
+    prompt: "You have read the same document twice. What were you actually doing on the second pass?",
     options: [
-      { id: "discernment", label: "Reading whether an answer is any good." },
-      { id: "wonder", label: "Opening a question up." },
+      { id: "discernment", label: "Weighing whether the answer in it is any good." },
+      { id: "wonder", label: "Following a question it opened up and does not answer." },
     ],
   },
   {
     id: "wg-b",
     round: "b",
-    prompt: "A better use of your Monday…",
+    prompt: "Monday morning, nothing forced on the calendar. What do you actually spend it on?",
     options: [
-      { id: "galvanizing", label: "Getting everyone moving in one direction." },
-      { id: "wonder", label: "Thinking about what the team is missing." },
+      { id: "galvanizing", label: "Getting everyone moving in one direction for the week." },
+      { id: "wonder", label: "Working out what the team is missing." },
     ],
   },
   {
     id: "we-b",
     round: "b",
-    prompt: "More satisfying…",
+    prompt: "Think of a week you finished feeling good about. What had you actually been doing?",
     options: [
-      { id: "enablement", label: "Being the person who helped someone get it done." },
-      { id: "wonder", label: "Noticing the opportunity nobody else saw." },
+      { id: "enablement", label: "Being the person who made it possible for someone else to finish." },
+      { id: "wonder", label: "Noticing the thing nobody else had noticed." },
     ],
   },
   {
     id: "wt-b",
     round: "b",
-    prompt: "The week feels good when…",
+    prompt: "It is Friday. What has to have happened for the week to feel worth it?",
     options: [
-      { id: "tenacity", label: "You closed something out completely." },
-      { id: "wonder", label: "You opened up something worth chasing." },
+      { id: "tenacity", label: "Something was closed out completely." },
+      { id: "wonder", label: "Something worth chasing was opened up." },
     ],
   },
   {
     id: "id-b",
     round: "b",
-    prompt: "In a review, you are the one who…",
+    prompt: "In a review, what do people actually get from you?",
     options: [
-      { id: "discernment", label: "Senses what will and will not land." },
-      { id: "invention", label: "Proposes the different approach." },
+      { id: "discernment", label: "A read on what will and will not land." },
+      { id: "invention", label: "The different approach nobody had put forward." },
     ],
   },
   {
     id: "ig-b",
     round: "b",
-    prompt: "More energising…",
+    prompt: "You lose track of time. Which one were you doing?",
     options: [
-      { id: "galvanizing", label: "Selling the idea." },
-      { id: "invention", label: "Coming up with the idea." },
+      { id: "galvanizing", label: "Getting people fired up about an idea." },
+      { id: "invention", label: "Coming up with the idea in the first place." },
     ],
   },
   {
     id: "ie-b",
     round: "b",
-    prompt: "You would rather be known for…",
+    prompt: "People come to you. What do they usually come for?",
     options: [
-      { id: "enablement", label: "Being genuinely useful to the people around you." },
-      { id: "invention", label: "Thinking of things nobody else thought of." },
+      { id: "enablement", label: "Help getting something over a hump." },
+      { id: "invention", label: "A way of doing it that nobody has tried." },
     ],
   },
   {
     id: "it-b",
     round: "b",
-    prompt: "You lose track of time when…",
+    prompt: "You have been at the same thing for three hours without noticing. What is it?",
     options: [
-      { id: "tenacity", label: "You are grinding out the last details." },
-      { id: "invention", label: "You are making something up." },
+      { id: "tenacity", label: "Grinding out the last details until it is actually done." },
+      { id: "invention", label: "Making something up that did not exist this morning." },
     ],
   },
   {
     id: "dg-b",
     round: "b",
-    prompt: "Your contribution to a decision is usually…",
+    prompt: "A decision gets made in a meeting. Afterwards, what was your actual contribution?",
     options: [
-      { id: "galvanizing", label: "The push that makes it happen." },
-      { id: "discernment", label: "The read on what is actually true." },
+      { id: "galvanizing", label: "The push that got it moving." },
+      { id: "discernment", label: "The read on what was actually true." },
     ],
   },
   {
     id: "de-b",
     round: "b",
-    prompt: "More rewarding…",
+    prompt: "Something worked. Which part of it are you actually pleased about?",
     options: [
-      { id: "enablement", label: "Being the reason it worked." },
-      { id: "discernment", label: "Being right about what would work." },
+      { id: "enablement", label: "That you were the reason it worked." },
+      { id: "discernment", label: "That you had called it correctly." },
     ],
   },
   {
     id: "dt-b",
     round: "b",
-    prompt: "Pick the role you want on a hard project…",
+    prompt: "A hard project needs someone in each of these roles and you take one. Which do you end up in?",
     options: [
       { id: "tenacity", label: "Making certain it gets finished." },
-      { id: "discernment", label: "Making sure the judgment calls are good." },
+      { id: "discernment", label: "Making sure the judgment calls are right." },
     ],
   },
   {
     id: "ge-b",
     round: "b",
-    prompt: "You help a team most by…",
+    prompt: "Think of a team you actually helped. What did you do?",
     options: [
-      { id: "enablement", label: "Removing friction." },
-      { id: "galvanizing", label: "Creating urgency." },
+      { id: "enablement", label: "Took the friction out of the way." },
+      { id: "galvanizing", label: "Put urgency into the room." },
     ],
   },
   {
     id: "gt-b",
     round: "b",
-    prompt: "More natural to you…",
+    prompt: "A long push, week six of eight. What are you actually doing?",
     options: [
-      { id: "tenacity", label: "Sustaining the effort to the end." },
-      { id: "galvanizing", label: "Inspiring the effort in the first place." },
+      { id: "tenacity", label: "Still going, keeping the effort up to the end." },
+      { id: "galvanizing", label: "Getting the energy back into the room." },
     ],
   },
   {
     id: "et-b",
     round: "b",
-    prompt: "At the end of it, you would rather be able to say…",
+    prompt: "It is over. What do you actually check first?",
     options: [
-      { id: "tenacity", label: "It actually got done." },
-      { id: "enablement", label: "Everyone had what they needed." },
+      { id: "tenacity", label: "That it got done." },
+      { id: "enablement", label: "That everyone had what they needed." },
     ],
   },
 ];
@@ -503,12 +517,120 @@ function buildItems(): WorkingGeniusItem[] {
 
 export const WORKING_GENIUS_ITEMS: readonly WorkingGeniusItem[] = buildItems();
 
-/** Bumped whenever the item bank or the scoring changes, so old rows stay readable. */
-export const INSTRUMENT_VERSION = "afs-1";
+/**
+ * Shown above the first item.
+ *
+ * The ambiguity the rewrite removes from the wording is worth saying out loud
+ * once as well: someone who has met an instrument like this before arrives
+ * expecting to be asked what they are good at.
+ */
+export const INSTRUMENT_PREAMBLE =
+  "Answer for how you actually behave, not how you would like to. There are no better or worse answers here.";
+
+/**
+ * Bumped whenever the item bank or the scoring changes, so old rows stay
+ * readable.
+ *
+ * afs-1: the first thirty-item bank.
+ * afs-2: every item rewritten from "you would rather" to a concrete situation
+ *        and what actually happens. The pairings, the ids and the presentation
+ *        order are untouched, so afs-1 rows still score identically and remain
+ *        comparable; what changed is what the founder was asked, which is
+ *        enough to make the two banks different instruments.
+ */
+export const INSTRUMENT_VERSION = "afs-2";
 
 /* ---------------------------------------------------------------- scoring -- */
 
-export type WorkingGeniusResponses = Record<string, WorkingGeniusId>;
+/**
+ * One founder's answer to one item.
+ *
+ * The instrument is a forced choice and stays one, because that is what makes
+ * the comparison graph complete. But a cohort tester was right that some people
+ * do neither, do both, or do something conditional, and forcing them to click
+ * one of two wrong answers puts noise in the score and tells us nothing.
+ *
+ * So there is an escape hatch, and it is deliberately the third option rather
+ * than a required box on every item: if every question demands typing,
+ * completion craters and what comes back is the word "both", which is less
+ * informative than a forced choice.
+ */
+export type WorkingGeniusAnswer = {
+  /** What they clicked. "neither" is the escape hatch. */
+  choice: WorkingGeniusId | "neither";
+  /** What they typed, either instead of choosing or as context alongside one. */
+  text?: string;
+  /**
+   * What the free text was read as, resolved once at submission and stored.
+   *
+   * Not recomputed at scoring time. Scoring is a pure function over stored
+   * data, so re-scoring a row a year from now gives the same answer it gave on
+   * the day; if this were an LLM call inside the scorer, a founder's profile
+   * could move between two reads of the same row. Storing the classification
+   * beside the raw text also makes it auditable and correctable, which a live
+   * call is not.
+   */
+  resolved?: WorkingGeniusId | "neither";
+};
+
+/**
+ * Item id to answer.
+ *
+ * A bare type id is the afs-1 shape and is still read: those rows are on disk
+ * and must keep scoring identically. Everything below normalises through
+ * `readAnswer` rather than branching at each use.
+ */
+export type WorkingGeniusResponses = Record<string, WorkingGeniusId | WorkingGeniusAnswer>;
+
+const TYPE_IDS = new Set<string>(WIDGET_ORDER);
+
+const isTypeId = (v: unknown): v is WorkingGeniusId =>
+  typeof v === "string" && TYPE_IDS.has(v);
+
+export type ReadAnswer = {
+  /** The type this answer counts a win for, or null if it abstains. */
+  effective: WorkingGeniusId | null;
+  choice: WorkingGeniusId | "neither" | null;
+  text: string;
+  /** True when the text was read as a different type than the one clicked. */
+  overrode: boolean;
+};
+
+/**
+ * Normalises either stored shape into one thing.
+ *
+ * Where the two disagree, the text wins. A click is a nearest-fit against two
+ * options someone else wrote; the text is unprompted and specific, and it is
+ * the only place a founder can say what actually happens. The disagreement is
+ * kept rather than smoothed over: `overrode` is surfaced in the result and in
+ * the report, because a founder who clicked one thing and described another has
+ * told us something worth naming.
+ */
+export function readAnswer(raw: WorkingGeniusId | WorkingGeniusAnswer | undefined): ReadAnswer {
+  if (raw === undefined) return { effective: null, choice: null, text: "", overrode: false };
+  if (isTypeId(raw)) return { effective: raw, choice: raw, text: "", overrode: false };
+  if (typeof raw !== "object" || raw === null) {
+    return { effective: null, choice: null, text: "", overrode: false };
+  }
+
+  const text = typeof raw.text === "string" ? raw.text.trim() : "";
+  const choice = raw.choice === "neither" || isTypeId(raw.choice) ? raw.choice : null;
+  const resolved =
+    raw.resolved === "neither" || isTypeId(raw.resolved) ? raw.resolved : undefined;
+
+  // Text present and read as a type: that is the answer, whatever was clicked.
+  if (text && isTypeId(resolved)) {
+    return {
+      effective: resolved,
+      choice,
+      text,
+      overrode: isTypeId(choice) && choice !== resolved,
+    };
+  }
+  // Read as genuinely neither, or not read at all: abstain.
+  if (choice === "neither") return { effective: null, choice, text, overrode: false };
+  return { effective: isTypeId(choice) ? choice : null, choice, text, overrode: false };
+}
 
 export type WorkingGeniusResult = {
   version: string;
@@ -519,6 +641,20 @@ export type WorkingGeniusResult = {
   bands: Record<WorkingGeniusBand, WorkingGeniusId[]>;
   /** Share of the 15 pairs answered the same way both times, 0..1. */
   consistency: number;
+  /**
+   * How many items each type actually contested.
+   *
+   * Ten each for a complete set. An abstention removes an item from both of its
+   * types, so without this a type that was asked eight times and won six looks
+   * weaker than one asked ten times and won seven, which is backwards.
+   */
+  contests: Record<WorkingGeniusId, number>;
+  /** Wins over contests entered, 0..1. This is what the ranking sorts on. */
+  rates: Record<WorkingGeniusId, number>;
+  /** Item ids where the founder answered "neither" and the text agreed. */
+  abstentions: string[];
+  /** Items where the free text was read as a different type than was clicked. */
+  overrides: Array<{ itemId: string; clicked: WorkingGeniusId; resolved: WorkingGeniusId }>;
   /**
    * Pairs that finished level on both total wins and their head-to-head, so
    * the order between them came from a fallback rather than from the answers.
@@ -558,16 +694,49 @@ export function scoreWorkingGenius(
   items: readonly WorkingGeniusItem[] = WORKING_GENIUS_ITEMS,
 ): WorkingGeniusResult {
   const counts = emptyCounts();
+  const contests = emptyCounts();
+  const abstentions: string[] = [];
+  const overrides: Array<{ itemId: string; clicked: WorkingGeniusId; resolved: WorkingGeniusId }> = [];
   const h2h = new Map<string, number>();
   const key = (a: WorkingGeniusId, b: WorkingGeniusId) => `${a}>${b}`;
 
   for (const item of items) {
-    const chosen = responses[item.id];
+    const answer = readAnswer(responses[item.id]);
+    const [left, right] = item.options;
+
+    if (answer.choice === "neither" && answer.effective === null) {
+      abstentions.push(item.id);
+      continue;
+    }
+    const chosen = answer.effective;
     if (!chosen) continue;
+
     const other = item.options.find((o) => o.id !== chosen);
     if (!item.options.some((o) => o.id === chosen) || !other) continue;
+
+    if (answer.overrode && answer.choice && answer.choice !== "neither") {
+      overrides.push({ itemId: item.id, clicked: answer.choice, resolved: chosen });
+    }
+
     counts[chosen] += 1;
+    /* Both sides of the item entered this contest. An abstention above skips
+       the increment for both, which is what keeps the rate honest. */
+    contests[left.id] += 1;
+    contests[right.id] += 1;
     h2h.set(key(chosen, other.id), (h2h.get(key(chosen, other.id)) ?? 0) + 1);
+  }
+
+  /*
+   * Rate, not raw wins, is what the ranking sorts on.
+   *
+   * With no abstentions every type contests exactly ten items and rate is
+   * count/10, so the order is identical to sorting on counts and the
+   * validation anchor is unaffected. The two only diverge once somebody
+   * abstains, which is precisely when raw counts stop being comparable.
+   */
+  const rates = emptyCounts();
+  for (const t of WIDGET_ORDER) {
+    rates[t] = contests[t] === 0 ? 0 : counts[t] / contests[t];
   }
 
   const beats = (a: WorkingGeniusId, b: WorkingGeniusId) => h2h.get(key(a, b)) ?? 0;
@@ -576,11 +745,15 @@ export function scoreWorkingGenius(
   const contested: Array<[WorkingGeniusId, WorkingGeniusId]> = [];
   const ranking: WorkingGeniusId[] = [];
 
+  /* Keyed on the rate, rounded, because floating point division produces
+     values that are equal in every sense that matters here and unequal as map
+     keys: 6/8 and 3/4 must land in the same group. */
+  const rateKey = (t: WorkingGeniusId) => Math.round(rates[t] * 1e6);
   const byCount = new Map<number, WorkingGeniusId[]>();
   for (const t of WIDGET_ORDER) {
-    const group = byCount.get(counts[t]) ?? [];
+    const group = byCount.get(rateKey(t)) ?? [];
     group.push(t);
-    byCount.set(counts[t], group);
+    byCount.set(rateKey(t), group);
   }
 
   for (const count of [...byCount.keys()].sort((a, b) => b - a)) {
@@ -618,8 +791,15 @@ export function scoreWorkingGenius(
   for (const a of ITEMS_ROUND_A) {
     const b = ITEMS_ROUND_B.find((x) => x.id.slice(0, 2) === a.id.slice(0, 2));
     if (!b) continue;
-    const ra = responses[a.id];
-    const rb = responses[b.id];
+    /*
+     * Compared on the effective answer, so a click on one asking and a
+     * free-text answer on the other still count as agreeing when they land on
+     * the same type. A pair where either side abstained is not counted at all:
+     * it neither agrees nor disagrees, and scoring it as disagreement would
+     * punish the founder for using the escape hatch honestly.
+     */
+    const ra = readAnswer(responses[a.id]).effective;
+    const rb = readAnswer(responses[b.id]).effective;
     if (!ra || !rb) continue;
     pairsAnswered += 1;
     if (ra === rb) pairsAgreed += 1;
@@ -657,6 +837,10 @@ export function scoreWorkingGenius(
       frustration: ranking.slice(4, 6),
     },
     consistency: pairsAnswered === 0 ? 0 : pairsAgreed / pairsAnswered,
+    contests,
+    rates,
+    abstentions,
+    overrides,
     contested,
     boundaryMargins: {
       geniusCompetency: counts[placed[1]] - counts[placed[2]],

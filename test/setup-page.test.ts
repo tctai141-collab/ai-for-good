@@ -106,7 +106,20 @@ describe("the page", () => {
   test("it tells them it worked and points them back", async () => {
     expect(page).toContain("Password set");
     expect(page).toContain("Head back to the sign-in page and use it.");
-    expect(page).toContain('id="done-link"');
+  });
+
+  test("it is a message, not a way in", () => {
+    /*
+     * There was a "Go to sign in" button here. A note is enough, and it is the
+     * more honest end to the page: setting a password does not sign anyone in,
+     * and a button immediately after it reads like it might.
+     */
+    const done = page.slice(page.indexOf('id="done"'), page.indexOf("</section>", page.indexOf('id="done"')));
+    expect(done).not.toContain("<a ");
+    expect(done).not.toContain("<button");
+    // Focus still has somewhere to land, or a keyboard user is stranded on a
+    // submit button that has just been hidden.
+    expect(page).toContain("done.focus()");
   });
 
   test("it no longer redirects into the app", () => {
