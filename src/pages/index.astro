@@ -444,7 +444,6 @@ import App from "../components/App";
   .login-title-accent {
     color: var(--brand-accent);
   }
-  .login-submit,
   .organizer-logout {
     min-height: 44px;
     border: 0;
@@ -510,20 +509,98 @@ import App from "../components/App";
     font-size: var(--text-sm);
     line-height: 1.45;
   }
-  .login-submit {
-    border-radius: 10px;
-    background: var(--brand-accent);
-    color: oklch(13% 0.008 250);
-    font-weight: 900;
+  /* ── Liquid glass sign-in ──
+     Three stacked layers inside one <button>. Order matters: the label is
+     last and raised, because anything underneath the pane is refracted along
+     with the background. */
+  .glass-button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 52px;
+    padding: 0 var(--space-xl);
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--color-text);
+    font-family: var(--font-family);
     font-size: 1rem;
+    font-weight: 800;
     letter-spacing: 0.005em;
-    box-shadow: 0 6px 18px rgba(232, 23, 10, 0.18);
+    cursor: pointer;
+    isolation: isolate;
+    transition: transform 220ms var(--ease-out-quart), filter 220ms var(--ease-out-quart);
   }
-  .login-submit:hover {
-    filter: brightness(1.06);
+  .glass-button:disabled {
+    cursor: default;
+    opacity: 0.55;
   }
-  .login-submit:active {
-    transform: translateY(1px);
+  .glass-button:not(:disabled):hover {
+    transform: scale(1.015);
+    filter: brightness(1.08);
+  }
+  .glass-button:not(:disabled):active {
+    transform: scale(0.995) translateY(1px);
+  }
+  .glass-button:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 3px;
+  }
+
+  /* The refracting pane. Tinted, because on a near-black ground the
+     refraction alone returns near-black and the pane would not read as a
+     pane at all: measured against this app's own login background, displacing
+     by 8, 24 or 70 is indistinguishable. The tint is what makes it glass. */
+  .glass-button-pane {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.055);
+    backdrop-filter: url("#sprint-glass");
+    -webkit-backdrop-filter: url("#sprint-glass");
+  }
+
+  /* The bevel. Entirely box-shadow, and on this background it is the layer
+     doing nearly all the visible work. */
+  .glass-button-bevel {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      0 0 8px rgba(0, 0, 0, 0.03),
+      0 2px 6px rgba(0, 0, 0, 0.08),
+      inset 3px 3px 0.5px -3.5px rgba(255, 255, 255, 0.09),
+      inset -3px -3px 0.5px -3.5px rgba(255, 255, 255, 0.85),
+      inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.6),
+      inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.6),
+      inset 0 0 6px 6px rgba(255, 255, 255, 0.12),
+      inset 0 0 2px 2px rgba(255, 255, 255, 0.06),
+      0 0 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .glass-button-label {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* The filter lives in the flow but must never take space or paint. */
+  .glass-button-filter {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glass-button { transition: none; }
+    .glass-button:not(:disabled):hover { transform: none; }
   }
   .login-blurb {
     max-width: 26rem;

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import SprintBuddyMascot from "./SprintBuddyMascot";
+import LiquidGlassButton from "./LiquidGlassButton";
 import ConstellationField from "./ConstellationField";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
@@ -226,9 +227,9 @@ export default function App() {
                   </button>
                 </div>
                 {loginError && <p className="login-error" role="alert">{loginError}</p>}
-                <button className="login-submit" type="submit" disabled={loading}>
-                  {loading ? "Loading..." : "Continue"}
-                </button>
+                <LiquidGlassButton type="submit" disabled={loading}>
+                  {loading ? "Signing in..." : "Sign in"}
+                </LiquidGlassButton>
               </form>
             </div>
           </section>
