@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
-import Headline from "./Headline";
+import MorphingText from "./MorphingText";
 import WelcomeSplash from "./WelcomeSplash";
+import Onboarding, { hasOnboarded } from "./Onboarding";
 import KineticGrid from "./KineticGrid";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
@@ -19,6 +20,10 @@ type SessionUser = {
   name: string;
   role: Role;
 };
+
+/* Where this came from and what it became. The line melts through them in
+   order and loops. */
+const PROGRAMME_NAMES = ["Aalto Founder School", "Aalto Founder Sprint", "Sprint Buddy \u276F"];
 
 const STARTUP_TIPS = [
   "If your roadmap needs a legend, it is not a roadmap. It is a treasure map with burn rate.",
@@ -83,6 +88,17 @@ export default function App() {
    */
   const [splashing, setSplashing] = useState(false);
   const [held, setHeld] = useState(false);
+
+  /*
+   * The first-run walkthrough.
+   *
+   * Kept in localStorage per account rather than on the server. It is a
+   * dismissible explainer, not state anything depends on, and the tradeoff is
+   * plain: someone signing in on a second device sees it once more. Storing it
+   * server-side would mean a new persistence resource and a migration for a
+   * flag whose worst failure is showing four paragraphs twice.
+   */
+  const [onboarding, setOnboarding] = useState(false);
 
   /** Loads a signed-in user's data and drops them into the app. */
   const enter = useCallback(async (signedIn: SessionUser) => {
@@ -181,6 +197,7 @@ export default function App() {
       setPassword("");
       setHeld(false);
       setSplashing(true);
+      if (!hasOnboarded(data.user.email)) setOnboarding(true);
       await enter(data.user);
     } catch {
       setLoginError("Could not reach the server. Check your connection.");
@@ -221,12 +238,15 @@ export default function App() {
               <div className="login-halo" />
               <div className="login-mascot login-mascot-anchor" />
             </div>
-            <Headline />
             <div className="login-panel" aria-labelledby="login-title">
-              {/* The name is the flying ring behind the mascot now. The heading
-                  stays as text so the page keeps an h1 and the panel keeps
-                  something to be labelled by: the ring is aria-hidden, and a
-                  login screen whose only title is decoration has no title. */}
+              {/* The wordmark, above the fields rather than across the top of
+                  the page. It melts between the programme's three names; the
+                  readable copy for assistive tech is the heading below. */}
+              <MorphingText texts={PROGRAMME_NAMES} />
+              {/* The heading stays as text so the page keeps an h1 and the
+                  panel keeps something to be labelled by: the morphing line
+                  above is aria-hidden, and a login screen whose only title is
+                  decoration has no title. */}
               <h1 id="login-title" className="sr-only">Sprint Buddy</h1>
 
               <form className="login-form" onSubmit={handleLogin}>
@@ -272,9 +292,14 @@ export default function App() {
     );
   }
 
+  const walkthrough = onboarding ? (
+    <Onboarding email={user.email} role={user.role} onClose={() => setOnboarding(false)} />
+  ) : null;
+
   if (user.role === "organizer") {
     return (
       <>
+        {walkthrough}
         <SprintBuddy persona="coach" userEmail={user.email} onSignOut={handleSignOut} />
         <a
           href="/admin"
@@ -302,6 +327,7 @@ export default function App() {
 
   return (
     <>
+      {walkthrough}
       <SprintBuddy
         key={user.email}
         persona="founder"

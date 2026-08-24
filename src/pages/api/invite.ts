@@ -60,9 +60,17 @@ export const POST: APIRoute = async ({ cookies, request }) => {
   const claimed = redeemInvite(token, await hashPassword(password));
   if (!claimed) return Response.json({ error: INVALID_LINK }, { status: 400 });
 
-  // On a reset, drop any session opened with the old password.
+  /*
+   * Every session dies, and no new one is opened.
+   *
+   * Setting a password used to sign you straight in. Tai: it should not let
+   * them into the page right away. That is also the safer shape. On a reset it
+   * means a stolen live session cannot survive the password change, and on
+   * first setup it means the founder types the new password once before they
+   * depend on it, which is the only moment anyone discovers that what their
+   * password manager saved is not what they think it is.
+   */
   endAllSessions(invite.email);
-  startSession(cookies, request, invite.email);
 
   return Response.json({ ok: true, email: invite.email, name: invite.name });
 };

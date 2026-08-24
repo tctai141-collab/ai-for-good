@@ -311,12 +311,21 @@ export function tokenFromEmail(h: Harness, address: string): string | null {
   return match ? match[1]! : null;
 }
 
-/** Redeems an invite and returns the resulting signed-in session. */
+/**
+ * Redeems an invite, then signs in with the password it just set.
+ *
+ * Two calls, because that is now two steps for a real founder: redeeming a
+ * setup link no longer opens a session. It used to, and this helper used to
+ * read the cookie straight off the redemption response.
+ */
 export async function activate(h: Harness, email: string, password: string): Promise<Session> {
   const token = tokenFromEmail(h, email) ?? inviteToken(h, email);
-  const res = await post(h, "/api/invite", { token, password });
-  if (!res.ok) throw new Error(`activation failed for ${email}: ${await res.text()}`);
-  return { cookie: sessionCookie(res), email };
+  const redeemed = await post(h, "/api/invite", { token, password });
+  if (!redeemed.ok) throw new Error(`activation failed for ${email}: ${await redeemed.text()}`);
+
+  const signedIn = await post(h, "/api/session", { action: "login", email, password });
+  if (!signedIn.ok) throw new Error(`sign-in after activation failed for ${email}: ${await signedIn.text()}`);
+  return { cookie: sessionCookie(signedIn), email };
 }
 
 /**
