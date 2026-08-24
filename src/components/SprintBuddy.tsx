@@ -713,10 +713,20 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               <span aria-hidden="true" style={{ color: "#7CB893", fontSize: 14, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>✓</span>
             </div>
           ) : (
-            <button onClick={onStartCheckin} className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "rgba(232, 23, 10, 0.12)", border: "1px solid rgba(232, 23, 10, 0.35)", borderRadius: 12, padding: "12px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", color: C.accent, marginBottom: 14 }}>
-              <span style={{ width: 7, height: 7, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
+            /*
+             * Prominent, not alarming, and one dot rather than two.
+             *
+             * This was a red-tinted panel with red text. Once the accent became
+             * signal red it read as a warning rather than an invitation, and it
+             * sat a shade away from the overdue deadline directly above it. A
+             * routine daily action should not look like something has gone
+             * wrong. The dot on the right still carries "not done yet", which
+             * was always the actual signal; the bullet on the left was
+             * decorative and became a second red dot saying nothing.
+             */
+            <button onClick={onStartCheckin} className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid var(--line-strong)", borderRadius: 12, padding: "12px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", color: C.ink, marginBottom: 14 }}>
               <span style={{ flex: 1, textAlign: "left" }}>Today's check-in</span>
-              <span style={{ width: 8, height: 8, borderRadius: 9, background: C.red, flexShrink: 0 }} />
+              <span style={{ width: 8, height: 8, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
             </button>
           )}
 
@@ -1839,7 +1849,7 @@ function Reflections({
                       padding: "16px 18px",
                       borderRadius: 14,
                       border: `1px solid ${picked ? C.accent : C.line}`,
-                      background: picked ? "rgba(232, 23, 10, 0.10)" : "rgba(0,0,0,0.25)",
+                      background: picked ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.25)",
                       color: C.ink,
                       fontSize: 16,
                       fontWeight: 600,
@@ -2914,7 +2924,9 @@ const CSS = `
   padding: 0 14px;
   border-radius: 9px;
   border: none;
-  background: var(--brand-accent);
+  /* White, like every other confirm here. A solid accent on a routine save
+     read as destructive once the accent went red. */
+  background: var(--ink);
   color: oklch(13% 0.008 250);
   font: 700 12.5px/1 var(--font-family);
   cursor: pointer;
@@ -2973,9 +2985,9 @@ const CSS = `
   min-height: 44px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(232, 23, 10, 0.4);
-  background: rgba(232, 23, 10, 0.14);
-  color: var(--brand-accent);
+  border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,0.05);
+  color: var(--ink);
   font: 700 13.5px/1 var(--font-family);
   cursor: pointer;
   white-space: nowrap;
