@@ -34,8 +34,9 @@ import { getSessionUser, type SessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import {
   cap, MAX_MESSAGES_PER_THREAD, MAX_MESSAGE_CHARS,
-  MAX_SUMMARY_CHARS, MAX_TITLE_CHARS,
+  MAX_SUMMARY_CHARS, MAX_TITLE_CHARS, MAX_WG_TEXT_CHARS,
 } from "../../lib/limits";
+import { resolveFreeText } from "../../lib/workingGeniusText";
 
 /**
  * Reading and writing founder data, under the cohort's privacy rule:
@@ -102,8 +103,13 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       thread?: { id: string; title: string; theme: string; state: string; lastAt: string; personality?: string; messages: { role: string; content: string }[] };
       decision?: { id: string; summary: string; door: string; theme: string; status?: string; outcome?: string; threadId?: string; at?: string };
       checkin?: { id: string; theme?: string; prompt: string; mood?: number; refDecisionId?: string };
-      /** Raw per-item answers. The server scores them; see save-working-genius. */
-      workingGeniusResponses?: Record<string, string>;
+      /**
+       * Raw per-item answers. The server scores them; see save-working-genius.
+       *
+       * Either a bare type id, which is the afs-1 shape and still accepted, or
+       * an object carrying the click plus whatever the founder typed.
+       */
+      workingGeniusResponses?: Record<string, unknown>;
       checkinId?: string;
     };
 
@@ -250,11 +256,32 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         // submission is still worth more to the founder than an error.
         const byItem = new Map(WORKING_GENIUS_ITEMS.map((i) => [i.id, i]));
         const responses: WorkingGeniusResponses = {};
-        for (const [itemId, choice] of Object.entries(body.workingGeniusResponses)) {
+        for (const [itemId, raw] of Object.entries(body.workingGeniusResponses)) {
           const item = byItem.get(itemId);
-          if (item && item.options.some((o) => o.id === choice)) {
-            responses[itemId] = choice as WorkingGeniusId;
+          if (!item) continue;
+
+          if (typeof raw === "string") {
+            if (item.options.some((o) => o.id === raw)) responses[itemId] = raw as WorkingGeniusId;
+            continue;
           }
+          if (typeof raw !== "object" || raw === null) continue;
+
+          const a = raw as { choice?: unknown; text?: unknown };
+          const choiceOk = a.choice === "neither" || item.options.some((o) => o.id === a.choice);
+          if (!choiceOk) continue;
+
+          /*
+           * `resolved` is never taken from the client. It is what the
+           * classifier decided, and accepting it from a request body would let
+           * a founder hand themselves any profile they liked while the raw
+           * text said something else.
+           */
+          responses[itemId] = {
+            choice: a.choice as WorkingGeniusId | "neither",
+            ...(typeof a.text === "string" && a.text.trim()
+              ? { text: cap(a.text, MAX_WG_TEXT_CHARS).trim() }
+              : {}),
+          };
         }
         if (Object.keys(responses).length < WORKING_GENIUS_ITEMS.length) {
           return err("assessment incomplete");
@@ -280,7 +307,17 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           );
         }
 
-        const result = scoreWorkingGenius(responses, today);
+        /*
+         * The classifier runs here, once, and what it decides is stored with
+         * the answers. Scoring below is then a pure function over stored data:
+         * re-reading this row later returns the same profile it returns now.
+         */
+        const { responses: resolved } = await resolveFreeText(
+          responses,
+          import.meta.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY,
+        );
+
+        const result = scoreWorkingGenius(resolved, today);
         upsertWorkingGenius({
           user_email: session!.email,
           primary_type: result.primary,

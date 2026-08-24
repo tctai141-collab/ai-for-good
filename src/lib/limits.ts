@@ -20,6 +20,16 @@ export const MAX_BODY_BYTES = 1_000_000;
 export const MAX_MESSAGE_CHARS = 20_000;
 export const MAX_MESSAGES_PER_THREAD = 500;
 export const MAX_TITLE_CHARS = 300;
+
+/**
+ * One free-text answer on the working-style assessment.
+ *
+ * Generous enough for the conditional someone actually wants to describe
+ * ("usually X, but when the team is under time pressure, Y"), short enough that
+ * thirty of them cannot fill a row. The box on screen is a single line that
+ * grows, which does more to keep answers short than any limit.
+ */
+export const MAX_WG_TEXT_CHARS = 600;
 export const MAX_SUMMARY_CHARS = 2_000;
 
 /** What actually gets forwarded to the paid API on any one call. */
