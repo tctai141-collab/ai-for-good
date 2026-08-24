@@ -121,17 +121,8 @@
         font-size: 1.5rem;
         color: var(--accent);
       }
-      .done p { margin: 0 0 18px; color: var(--muted); line-height: 1.6; }
-      .done a {
-        display: inline-block;
-        padding: 11px 20px;
-        border-radius: 10px;
-        background: var(--accent);
-        color: #0b0c0f;
-        font-weight: 800;
-        text-decoration: none;
-      }
-      .done a:hover { filter: brightness(1.08); }
+      .done p { margin: 0; color: var(--muted); line-height: 1.6; }
+      .done:focus { outline: none; }
     </style>
   </head>
   <body>
@@ -176,10 +167,16 @@
       -->
       <section class="panel done" id="done" hidden>
         <h2>Password set</h2>
+        <!--
+          A message, not a way in.
+
+          There was a "Go to sign in" link here. Tai: a note is enough. It is
+          also the more honest end to this page: setting a password does not
+          sign anyone in, and a button straight after it reads like it might.
+        -->
         <p id="done-text">
           Your password is saved. Head back to the sign-in page and use it.
         </p>
-        <a href="/" id="done-link">Go to sign in</a>
       </section>
 
       <p class="message error" id="fatal" hidden></p>
@@ -271,8 +268,13 @@
           document.getElementById("panel").hidden = true;
           document.getElementById("heading").textContent = "You are all set";
           document.getElementById("lede").hidden = true;
-          document.getElementById("done").hidden = false;
-          document.getElementById("done-link").focus();
+          const done = document.getElementById("done");
+          done.hidden = false;
+          /* Focus the message itself. There is no control left to move to, and
+             leaving focus on a submit button that is now hidden strands anyone
+             using a keyboard or a screen reader. */
+          done.setAttribute("tabindex", "-1");
+          done.focus();
         } catch {
           submit.disabled = false;
           show("Could not reach the server. Try again.", true);

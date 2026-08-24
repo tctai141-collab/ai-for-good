@@ -1334,6 +1334,15 @@ import App from "../components/App";
     }
   }
 
+  /* The report link wears the sign-in button's glass, and has to opt back into
+     the things an <a> does not inherit from a <button>. */
+  .wg-download {
+    text-decoration: none;
+    justify-self: start;
+    width: auto;
+    padding: 0 var(--space-xl);
+  }
+
   /* ── Working Genius quiz ──
      The question is text on the ground; the answers are the only surfaces. It
      used to be three near-identical cards, same padding, same radius, same

@@ -1905,6 +1905,7 @@ function Reflections({
             ))}
             <WgRanking result={wgResult} />
             <WgCaveats result={wgResult} />
+            <WgDownload />
             <WgHistory takes={takes ?? []} />
           </div>
         ) : wgStarted && wgItem ? (
@@ -2345,6 +2346,28 @@ function WgRanking({ result }: { result: WorkingGeniusResult }) {
  * Shows nothing until there are two, and says plainly when nothing changed.
  * A profile that reports movement every time is measuring noise.
  */
+/**
+ * The way out to the printable report.
+ *
+ * A link, not a fetch. /report renders from the session and nothing else, and
+ * the founder's browser turns it into a PDF, so no document containing a
+ * private result is ever built on the server or stored anywhere.
+ */
+function WgDownload({ takenOn }: { takenOn?: string }) {
+  return (
+    <a
+      className="glass-button wg-download"
+      href={takenOn ? `/report?take=${encodeURIComponent(takenOn)}` : "/report"}
+      target="_blank"
+      rel="noopener"
+    >
+      <span className="glass-button-pane" aria-hidden="true" />
+      <span className="glass-button-bevel" aria-hidden="true" />
+      <span className="glass-button-label">Download your report</span>
+    </a>
+  );
+}
+
 function WgHistory({ takes }: { takes: Array<{ takenOn: string; result: WorkingGeniusResult }> }) {
   if (takes.length < 2) return null;
 
@@ -2364,7 +2387,16 @@ function WgHistory({ takes }: { takes: Array<{ takenOn: string; result: WorkingG
               {readableWindow(t.takenOn)}
             </span>
             <span style={{ fontSize: 13.5, color: i === takes.length - 1 ? C.ink : C.sub }}>
-              {label(t.result.bands.genius)}
+              {label(t.result.bands.genius)}{" "}
+              {/* Any past take is printable, not just the current one. */}
+              <a
+                href={`/report?take=${encodeURIComponent(t.takenOn)}`}
+                target="_blank"
+                rel="noopener"
+                style={{ marginLeft: 6, fontSize: 12, color: C.faint, textDecoration: "underline", textUnderlineOffset: 3 }}
+              >
+                report
+              </a>
             </span>
           </li>
         ))}
