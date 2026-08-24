@@ -43,6 +43,14 @@ const css = strip(
   readFileSync("src/pages/admin.astro", "utf-8").match(/<style[^>]*>([\s\S]*?)<\/style>/)![1]!,
 );
 
+/*
+ * The quick menu is a React island shared with the founder-side app, so its
+ * behaviour and its CSS live in the component, not in this page. It is
+ * server-rendered (client:load, not client:only), which is why the markup
+ * assertions below can still read it out of the response.
+ */
+const quick = strip(readFileSync("src/components/QuickActions.tsx", "utf-8"));
+
 beforeAll(async () => {
   h = await startServer();
   organizer = await createOrganizer(h, "organizer@example.test");
@@ -85,33 +93,67 @@ describe("quick actions", () => {
     for (const [, tab, field] of items) expect(owner.get(field!)).toBe(tab!);
   });
 
-  test("the menu is hidden in the markup and unhidden by script", () => {
-    // With no JS the buttons do nothing, so they should not be on screen.
-    expect(html).toContain('<div class="quick" id="quick" hidden>');
-    expect(script).toContain("quick.hidden = false");
+  test("the menu is hidden until the component is running", () => {
+    // With no JS the buttons do nothing, and five dead circles in the corner
+    // are worse than none. Server-rendered hidden, unhidden on mount.
+    expect(html).toMatch(/class="quick[^"]*" id="quick" hidden/);
+    expect(quick).toContain("useEffect(() => setReady(true), [])");
+    expect(quick).toContain("hidden={!ready}");
   });
 
   test("parked items are out of the tab order", () => {
     // Otherwise five invisible buttons sit between the page and whatever
     // follows it for anyone tabbing through.
-    expect(script).toMatch(/item\.tabIndex = open \? 0 : -1/);
-    expect(script).toMatch(/item\.tabIndex = -1/);
+    expect(quick).toContain("tabIndex={open ? 0 : -1}");
   });
 
   test("Escape closes it and returns focus to the trigger", () => {
-    expect(script).toContain('event.key !== "Escape"');
-    expect(script).toContain("trigger.focus()");
+    expect(quick).toContain('event.key !== "Escape"');
+    expect(quick).toContain("trigger.current?.focus()");
   });
 
   test("the trigger says what it is to a screen reader", () => {
     // The button's only visible content is a plus glyph.
     expect(html).toMatch(/class="quick-trigger"[^>]*aria-expanded="false"/);
-    expect(html).toContain('<span class="sr-only">Quick actions</span>');
-    expect(script).toContain('trigger.setAttribute("aria-expanded", String(open))');
+    expect(html).toContain("Quick actions</span>");
+    expect(quick).toContain("aria-expanded={open}");
   });
 
   test("it is fixed, so it stays put while a long tab scrolls", () => {
-    expect(css).toMatch(/\.quick \{[^}]*position: fixed/);
+    expect(quick).toMatch(/\.quick \{[^}]*position: fixed/);
+  });
+
+  test("the two placements are one component", () => {
+    // 130 lines of arc geometry in two stylesheets would drift the first time
+    // either was touched.
+    expect(readFileSync("src/pages/admin.astro", "utf-8")).toContain(
+      '<QuickActions client:load mode="inline" />',
+    );
+    expect(readFileSync("src/components/App.tsx", "utf-8")).toContain(
+      '<QuickActions mode="navigate" />',
+    );
+    // And the page's own stylesheet no longer carries a copy.
+    expect(css).not.toContain(".quick-item");
+  });
+
+  test("from the founder app it links, carrying the same instruction", () => {
+    // It cannot switch a tab on a page it is not on. Landing on the admin
+    // front door with the form four tabs away is the thing this avoids.
+    expect(quick).toContain("/admin?go=${tab}&focus=${focus}");
+    expect(script).toContain('params.get("go")');
+    expect(script).toContain('params.get("focus")');
+  });
+
+  test("the arriving instruction is taken out of the address bar", () => {
+    // A reload would otherwise re-run it and steal focus from wherever the
+    // organizer had moved to.
+    expect(script).toContain('history.replaceState(null, "", location.pathname)');
+  });
+
+  test("in place it goes through the same handler as an arrival", () => {
+    expect(quick).toContain('new CustomEvent(QUICK_ACTION_EVENT');
+    expect(script).toContain('window.addEventListener("sprintbuddy:quick-action"');
+    expect(script.match(/function goToAction\(/g)?.length).toBe(1);
   });
 });
 

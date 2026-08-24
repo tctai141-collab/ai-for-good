@@ -7,6 +7,7 @@ import Onboarding, { hasOnboarded } from "./Onboarding";
 import KineticGrid from "./KineticGrid";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
+import QuickActions from "./QuickActions";
 
 type Role = "founder" | "organizer";
 
@@ -325,6 +326,12 @@ export default function App() {
         >
           Cohort admin
         </a>
+        {/* The same menu that sits on /admin. Here it links rather than
+            switching tab, so picking "Add deadline" lands in the deadline
+            form instead of on the admin page's front door with the form four
+            tabs away. Organizers only: every item leads somewhere a founder
+            cannot go. */}
+        <QuickActions mode="navigate" />
         <PersistentBuddy stage={buddyStage} />
       </>
     );
