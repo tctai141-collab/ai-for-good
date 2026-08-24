@@ -319,13 +319,18 @@ import App from "../components/App";
     top: 0;
     left: 0;
     display: block;
-    width: 22ch;
-    margin: -0.5em 0 0 -11ch;
+    /* Wide enough for the whole phrase at any viewport. The box is much
+       wider than the glyphs and is centred on the hub by the negative
+       margin; it is inert, so its size costs nothing. */
+    width: 34ch;
+    margin: -0.5em 0 0 -17ch;
     font-family: var(--font-serif);
     font-weight: 900;
     /* Sized to the band it lives in: tall enough to be the headline, short
-       enough to clear the mascot's crown below it. */
-    font-size: clamp(3.2rem, 13.5vw, 12rem);
+       enough to clear the mascot's crown below it, and narrow enough that the
+       whole name fits across the viewport. Twelve characters rather than the
+       six it was when SPRINT and BUDDY took turns, so roughly half the size. */
+    font-size: clamp(1.7rem, 10vw, 9rem);
     line-height: 1;
     letter-spacing: -0.03em;
     text-align: center;

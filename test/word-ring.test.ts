@@ -52,7 +52,22 @@ describe("the ring", () => {
     expect(ring).not.toMatch(/^\s*import\s+"/m);
   });
 
-  test("each word is seated on the ring and turned to face inward", () => {
+  test("the name arrives whole, never a word at a time", () => {
+    /*
+     * The first version put SPRINT on one seat and BUDDY on the seat opposite,
+     * so the two halves of the product's name took turns: SPRINT swung in,
+     * left, and BUDDY turned up nine seconds later on its own. A name is not a
+     * sequence. Every seat carries the whole phrase.
+     */
+    expect(ring).toContain('const PHRASE = "SPRINT BUDDY"');
+    // One string, rendered on every seat — not an array of words dealt out.
+    const strings = [...ring.matchAll(/^const (?:PHRASE|WORDS)\b.*$/gm)].map((m) => m[0]);
+    expect(strings).toHaveLength(1);
+    expect(ring).not.toMatch(/\["SPRINT",\s*"BUDDY"\]/);
+    expect(ring).toContain("{PHRASE}");
+  });
+
+  test("each seat is placed on the ring and turned to face inward", () => {
     // Facing inward is what puts the readable moment on the far side of the
     // ring, so the word passes behind the mascot and gets cropped by it
     // rather than sailing across in front of the reader.
