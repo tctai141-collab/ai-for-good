@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
-import MorphingText from "./MorphingText";
+import ScrambleText from "./ScrambleText";
 import WelcomeSplash from "./WelcomeSplash";
 import Onboarding, { hasOnboarded } from "./Onboarding";
 import KineticGrid from "./KineticGrid";
@@ -240,9 +240,9 @@ export default function App() {
             </div>
             <div className="login-panel" aria-labelledby="login-title">
               {/* The wordmark, above the fields rather than across the top of
-                  the page. It melts between the programme's three names; the
-                  readable copy for assistive tech is the heading below. */}
-              <MorphingText texts={PROGRAMME_NAMES} />
+                  the page. Each of the programme's three names scrambles in;
+                  the readable copy for assistive tech is the heading below. */}
+              <ScrambleText texts={PROGRAMME_NAMES} />
               {/* The heading stays as text so the page keeps an h1 and the
                   panel keeps something to be labelled by: the morphing line
                   above is aria-hidden, and a login screen whose only title is
