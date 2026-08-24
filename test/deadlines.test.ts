@@ -201,6 +201,85 @@ describe("cascade behaviour", () => {
   });
 });
 
+describe("deleting a deadline", () => {
+  /*
+   * Archiving already existed and is right for something that happened and is
+   * over: it keeps the completion history and hides the row from founders.
+   * This is for the other case, a deadline set up wrong, where leaving the
+   * record is leaving a mistake on the cohort's list.
+   */
+  const listFor = async (who: Session) => {
+    const res = await get(h, "/api/deadlines", who.cookie);
+    const body = await res.json();
+    return (body.deadlines ?? body.items ?? []) as { id: string; title: string }[];
+  };
+
+  test("an organizer can delete one, and it leaves the founders' list", async () => {
+    const made = await createDeadline(organizer, { title: "Set up wrong", dueDate: "2026-10-01" });
+    const id = made.body.id as string;
+    expect((await listFor(alice)).some((d) => d.id === id)).toBe(true);
+
+    const res = await post(h, "/api/deadlines", { action: "delete", id }, organizer.cookie);
+    expect(res.status).toBe(200);
+
+    expect((await listFor(alice)).some((d) => d.id === id)).toBe(false);
+    expect((await listFor(organizer)).some((d) => d.id === id)).toBe(false);
+  });
+
+  test("a founder cannot delete one", async () => {
+    // The same gate every other organizer action has. A founder deleting a
+    // cohort deadline would take it off everyone's list.
+    const made = await createDeadline(organizer, { title: "Not yours", dueDate: "2026-10-02" });
+    const id = made.body.id as string;
+
+    const res = await post(h, "/api/deadlines", { action: "delete", id }, alice.cookie);
+    expect(res.status).toBe(403);
+    expect((await listFor(alice)).some((d) => d.id === id)).toBe(true);
+  });
+
+  test("completions go with it rather than being left pointing at nothing", async () => {
+    /*
+     * deadline_completions and deadline_reminders both reference deadlines(id)
+     * ON DELETE CASCADE, and this database runs with foreign_keys ON. Worth a
+     * test rather than a comment: if either constraint were ever rebuilt
+     * without the cascade, the rows would survive and the only symptom would
+     * be a slowly growing table nobody reads.
+     */
+    const made = await createDeadline(organizer, { title: "Ticked then deleted", dueDate: "2026-10-03" });
+    const id = made.body.id as string;
+    await post(h, "/api/deadlines", { action: "toggle", id, done: true }, alice.cookie);
+
+    /* Named bindings, as everywhere else in this codebase: bun:sqlite's types
+       do not accept a bare positional argument. */
+    const db = h.db();
+    const completions = () =>
+      (db
+        .query("SELECT COUNT(*) AS n FROM deadline_completions WHERE deadline_id = $id")
+        .get({ $id: id }) as { n: number }).n;
+
+    expect(completions()).toBe(1);
+    await post(h, "/api/deadlines", { action: "delete", id }, organizer.cookie);
+    expect(completions()).toBe(0);
+  });
+
+  test("deleting something that is not there says so", async () => {
+    const res = await post(h, "/api/deadlines", { action: "delete", id: "no-such-id" }, organizer.cookie);
+    expect(res.status).toBe(404);
+  });
+
+  test("the audit records what was deleted, not just its id", async () => {
+    // Once the row is gone the id says nothing about what was removed.
+    const made = await createDeadline(organizer, { title: "Audited removal", dueDate: "2026-10-04" });
+    const id = made.body.id as string;
+    await post(h, "/api/deadlines", { action: "delete", id }, organizer.cookie);
+
+    const row = h.db()
+      .query("SELECT detail FROM admin_audit WHERE action = 'deadline:delete' ORDER BY rowid DESC LIMIT 1")
+      .get() as { detail: string } | null;
+    expect(row?.detail).toContain("Audited removal");
+  });
+});
+
 describe("input validation", () => {
   test("a missing or invalid due date is refused", async () => {
     for (const dueDate of [undefined, "", "not-a-date", "2026-13-01", "2026-02-31", "30-09-2026"]) {

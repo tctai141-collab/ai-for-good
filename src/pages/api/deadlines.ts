@@ -3,6 +3,7 @@ import {
   completedDeadlineIds,
   createDeadline,
   deadlineCompletionCounts,
+  deleteDeadline,
   foundersBehindOn,
   getDeadline,
   listActiveDeadlines,
@@ -247,6 +248,37 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
         updateDeadline(body.id, fields);
         recordAdminAction(session.email, "deadline:update", null, `${body.id} ${JSON.stringify(fields).slice(0, 120)}`);
+        return json({ ok: true });
+      }
+
+      /*
+       * Removes a deadline outright, for one set up wrong.
+       *
+       * Archiving already existed and is the right move for something that
+       * happened and is over: it keeps the completion history and hides the
+       * row from founders. This is for the other case, a deadline that should
+       * never have existed, where leaving the record is leaving a mistake.
+       *
+       * The completions and the sent-reminder rows go with it: both reference
+       * deadlines(id) ON DELETE CASCADE and this database runs with
+       * foreign_keys ON, so there is nothing to clean up by hand and nothing
+       * left pointing at an id that is gone.
+       *
+       * Founders see it disappear because their dashboard reads the deadlines
+       * table; there is no separate copy to keep in step.
+       */
+      case "delete": {
+        const denied = organizerOnly();
+        if (denied) return denied;
+
+        if (typeof body.id !== "string" || !body.id) return err("id required.");
+        const existing = getDeadline(body.id);
+        if (!existing) return err("No such deadline.", 404);
+
+        deleteDeadline(body.id);
+        /* Audited with the title, not just the id: after the row is gone the
+           id says nothing about what was removed. */
+        recordAdminAction(session.email, "deadline:delete", null, `${body.id} ${existing.title}`);
         return json({ ok: true });
       }
 

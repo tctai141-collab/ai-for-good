@@ -634,7 +634,9 @@
           <h2>Deadlines</h2>
           <p class="note" style="margin-top:0">
             Cohort-wide milestones. Everyone sees the same list, and each founder ticks
-            off their own. Archive rather than delete — archiving hides it from founders
+            off their own. Archive something that happened and is over: it hides the
+            row from founders and keeps who finished it. Delete is for a deadline set
+            up wrong, and takes the completions with it
             and keeps the completion history.
           </p>
           <p class="note" style="margin-top:0">
@@ -1084,6 +1086,9 @@
       // ---- Deadlines ----------------------------------------------------
 
       const deadlineList = document.getElementById("deadline-list");
+      /* The submit handler looks this up again locally; the row buttons are
+         rendered outside it and need their own reference. */
+      const dlMessage = document.getElementById("dl-message");
 
       async function deadlineApi(body) {
         let res;
@@ -1192,7 +1197,36 @@
             loadDeadlines();
           });
 
-          actions.append(archive);
+          /*
+           * Delete, for a deadline that should never have existed.
+           *
+           * Two-step rather than confirm(): a modal blocks the page, and this
+           * is how Archive all and the knowledge rows already ask. The armed
+           * label says what archiving does not, that there is no way back.
+           */
+          const remove = document.createElement("button");
+          remove.className = "ghost danger";
+          remove.textContent = "Delete";
+          remove.addEventListener("click", async () => {
+            if (remove.dataset.armed !== "yes") {
+              remove.dataset.armed = "yes";
+              remove.textContent = "Delete for good?";
+              setTimeout(() => {
+                if (!remove.isConnected) return;
+                remove.dataset.armed = "";
+                remove.textContent = "Delete";
+              }, 4000);
+              return;
+            }
+            remove.disabled = true;
+            const { ok, data: body } = await deadlineApi({ action: "delete", id: d.id });
+            remove.disabled = false;
+            if (!ok) return alert(body.error || "Could not delete this deadline.");
+            say(dlMessage, "Deleted \u201c" + d.title + "\u201d. It is gone from the founders' list too.", false);
+            loadDeadlines();
+          });
+
+          actions.append(archive, remove);
           row.append(actions);
           deadlineList.append(row);
         }
