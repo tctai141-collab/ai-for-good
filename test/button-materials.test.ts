@@ -23,8 +23,9 @@ import { describe, expect, test } from "bun:test";
 const sprint = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
 const admin = readFileSync("src/pages/admin.astro", "utf-8");
 const index = readFileSync("src/pages/index.astro", "utf-8");
-/* Defines #sprint-glass, so it belongs in the id sweep below. */
+/* Both define a filter id of their own, so they belong in the sweep below. */
 const liquid = readFileSync("src/components/LiquidGlassButton.tsx", "utf-8");
+const quick = readFileSync("src/components/QuickActions.tsx", "utf-8");
 const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
 
 /** One CSS rule's declarations, by selector, comments stripped. */
@@ -54,7 +55,7 @@ describe("no new dependencies", () => {
 describe("glass filter ids", () => {
   test("every id defined for a glass surface is defined exactly once", () => {
     // Across the whole app, not per file: the ids are global to the document.
-    const all = [sprint, admin, index, liquid].join("\n");
+    const all = [sprint, admin, index, liquid, quick].join("\n");
     const defined = [...all.matchAll(/<filter\s+id="([a-z-]+)"/g)].map((m) => m[1]!);
     const fromProp = [...all.matchAll(/<GlassFilter id="([a-z-]+)"/g)].map((m) => m[1]!);
     const ids = [...defined, ...fromProp];
@@ -63,7 +64,7 @@ describe("glass filter ids", () => {
   });
 
   test("every filter a surface samples through is one that exists", () => {
-    const all = [sprint, admin, index, liquid].join("\n");
+    const all = [sprint, admin, index, liquid, quick].join("\n");
     const defined = new Set([
       ...[...all.matchAll(/<filter\s+id="([a-z-]+)"/g)].map((m) => m[1]!),
       ...[...all.matchAll(/<GlassFilter id="([a-z-]+)"/g)].map((m) => m[1]!),
