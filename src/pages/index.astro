@@ -1264,6 +1264,76 @@ import App from "../components/App";
     .onb-dots li, .onb-arrow { transition: none; }
   }
 
+  /* ── The in-app wordmark ──
+     Cut from moving light instead of set in a red block.
+
+     Three blobs drift across the two words at different rates over a silver
+     base, all clipped to the glyphs. Unequal rates on purpose: match them and
+     the mark pulses in time rather than flowing.
+
+     This is the same technique the login headline used before it became a
+     scramble, and it is here for the same reason the supplied component is
+     not: that one masks a WebGL shader with an SVG <text> in a data URI, and
+     a data-URI SVG cannot see a webfont. Measured against the real face, it
+     falls back to a generic serif 4.1% narrower with different letterforms,
+     so the wordmark would quietly stop being set in the Sprint's type. It
+     also loads an image from shaders.paper.design, which this app's CSP
+     blocks outright. */
+  @property --mark-a { syntax: "<length>"; inherits: true; initial-value: 0px; }
+  @property --mark-b { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+  .wordmark-liquid {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 30px;
+    line-height: 0.9;
+    letter-spacing: -0.045em;
+    font-variation-settings: "opsz" 36;
+
+    color: transparent;
+    background-image:
+      radial-gradient(closest-side, rgba(255, 255, 255, 1), transparent 100%),
+      radial-gradient(closest-side, rgba(196, 200, 210, 0.9), transparent 100%),
+      linear-gradient(
+        168deg,
+        rgba(255, 255, 255, 0.98) 0%,
+        rgba(236, 239, 244, 0.94) 38%,
+        rgba(196, 201, 211, 0.88) 72%,
+        rgba(166, 171, 182, 0.85) 100%
+      );
+    background-repeat: no-repeat;
+    /* The blobs are wider than the mark so a highlight crosses it rather than
+       sitting inside one word. */
+    background-size: 85% 240%, 65% 200%, 100% 100%;
+    background-position: var(--mark-a) 15%, var(--mark-b) 85%, 0 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+
+    animation:
+      mark-a 11s ease-in-out infinite alternate,
+      mark-b 17s ease-in-out infinite alternate;
+  }
+  /* Distances in em, so they scale with the mark rather than being pinned to a
+     pixel count that only suits one size. */
+  @keyframes mark-a {
+    from { --mark-a: -1.2em; }
+    to { --mark-a: 4.6em; }
+  }
+  @keyframes mark-b {
+    from { --mark-b: 4.2em; }
+    to { --mark-b: -0.8em; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* Held on a frame that still has both blobs over the words, rather than at
+       the 0px initial value, which parks one of them off the mark entirely. */
+    .wordmark-liquid {
+      animation: none;
+      --mark-a: 0.8em;
+      --mark-b: 2.6em;
+    }
+  }
+
   /* ── Working Genius quiz ── */
   .wg-quiz-option {
     position: relative;

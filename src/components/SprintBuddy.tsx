@@ -684,12 +684,17 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
     >
       <div style={{ width: 304, height: "100%", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 4px 28px" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-            <span style={{ ...wordmarkType, fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Sprint</span>
-            <span style={{ display: "inline-block", background: C.accent, padding: "2px 12px 5px", marginLeft: -5, marginTop: 1 }}>
-              <span style={{ ...wordmarkType, color: "oklch(13% 0.008 250)", fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Buddy</span>
-            </span>
-          </div>
+          {/*
+            One wordmark, cut from moving light.
+
+            It was "Sprint" over "Buddy" in a solid red block, which Tai called
+            ugly and which also put the loudest colour in the product on a
+            label nobody clicks. Both words are one element now, so the fill is
+            clipped across the whole mark at once rather than per line.
+          */}
+          <span className="wordmark-liquid" aria-label="Sprint Buddy">
+            Sprint<br />Buddy
+          </span>
           <button
             onClick={onToggle}
             aria-label="Collapse sidebar"
