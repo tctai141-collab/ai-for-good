@@ -2842,7 +2842,70 @@ const CSS = `
 .deadline-check:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
-.composer-box:focus-within { border-color: var(--brand-accent)!important; }
+/* ---- Composer edge ---------------------------------------------------------
+   A light travels slowly around the border of the box a founder types into,
+   brighter and quicker once it has focus.
+
+   Asked for as a liquid-metal shader component. That component is a button
+   built on @paper-design/shaders, and using it here would mean a WebGL context
+   running continuously behind the one control that is on screen the entire time
+   a founder is in the app, for a border. This is a rotating conic gradient
+   masked to the edge: no dependency, no canvas, compositor-only.
+
+   The angle animates through a registered custom property, because a gradient
+   is not interpolable but an angle is. Without @property the sweep would jump
+   between keyframes instead of travelling. */
+@property --edge-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.composer-box { position: relative; }
+
+.composer-box::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--edge-angle),
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 7%,
+    var(--brand-accent) 13%,
+    rgba(255, 255, 255, 0.5) 19%,
+    transparent 30%,
+    transparent 100%
+  );
+  /* Two boxes, one subtracted from the other: what is left is the 1px ring. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.42;
+  pointer-events: none;
+  animation: composer-edge 7s linear infinite;
+  transition: opacity .25s ease;
+}
+
+.composer-box:focus-within::before {
+  opacity: 1;
+  animation-duration: 3.4s;
+}
+
+@keyframes composer-edge {
+  to { --edge-angle: 360deg; }
+}
+
+/* Focus lifts the underlying border only part of the way to the accent. Taking
+   it all the way made a solid red rectangle and the travelling light had
+   nothing to travel against. */
+.composer-box:focus-within { border-color: rgba(232, 23, 10, 0.38)!important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-box::before { animation: none; }
+}
 
 /* ---- The record, and printing it ------------------------------------------
    Printing is the export. A founder who wants to keep this should not need an
