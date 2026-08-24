@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
-import Headline from "./Headline";
+import MorphingText from "./MorphingText";
 import WelcomeSplash from "./WelcomeSplash";
 import KineticGrid from "./KineticGrid";
 import SprintBuddy from "./SprintBuddy";
@@ -19,6 +19,10 @@ type SessionUser = {
   name: string;
   role: Role;
 };
+
+/* Where this came from and what it became. The line melts through them in
+   order and loops. */
+const PROGRAMME_NAMES = ["Aalto Founder School", "Aalto Founder Sprint", "Sprint Buddy \u276F"];
 
 const STARTUP_TIPS = [
   "If your roadmap needs a legend, it is not a roadmap. It is a treasure map with burn rate.",
@@ -221,12 +225,15 @@ export default function App() {
               <div className="login-halo" />
               <div className="login-mascot login-mascot-anchor" />
             </div>
-            <Headline />
             <div className="login-panel" aria-labelledby="login-title">
-              {/* The name is the flying ring behind the mascot now. The heading
-                  stays as text so the page keeps an h1 and the panel keeps
-                  something to be labelled by: the ring is aria-hidden, and a
-                  login screen whose only title is decoration has no title. */}
+              {/* The wordmark, above the fields rather than across the top of
+                  the page. It melts between the programme's three names; the
+                  readable copy for assistive tech is the heading below. */}
+              <MorphingText texts={PROGRAMME_NAMES} />
+              {/* The heading stays as text so the page keeps an h1 and the
+                  panel keeps something to be labelled by: the morphing line
+                  above is aria-hidden, and a login screen whose only title is
+                  decoration has no title. */}
               <h1 id="login-title" className="sr-only">Sprint Buddy</h1>
 
               <form className="login-form" onSubmit={handleLogin}>
