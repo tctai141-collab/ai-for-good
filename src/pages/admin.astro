@@ -74,6 +74,9 @@
       .pill.organizer { color: var(--accent); border-color: rgba(232, 23, 10, 0.4); }
       .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
       label { display: block; }
+      /* The date picker is not a <label>: it wraps a button, and a label
+         wrapping a button swallows the click on some browsers. */
+      .field { display: block; }
       .label-text {
         display: block;
         font-size: 0.6875rem;
@@ -345,6 +348,165 @@
         border-bottom: 1px solid var(--border);
         margin-bottom: 8px;
       }
+
+      /* ── Date picker ──
+         Ported from a supplied shadcn dropdown range picker. Single date, not
+         a range: the one calendar field in this app is a deadline's due date.
+         Month and year are dropdowns rather than arrow-paging, which is the
+         part of that component worth having: the sprint runs into December
+         and paging one month at a time to reach it is four clicks. */
+      .datepicker { position: relative; }
+      .dp-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 15rem;
+        min-height: 40px;
+        padding: 9px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: rgba(10, 11, 14, 0.7);
+        color: var(--text);
+        font: inherit;
+        font-size: 0.9375rem;
+        text-align: left;
+        cursor: pointer;
+      }
+      .dp-trigger:hover { border-color: rgba(255, 255, 255, 0.24); }
+      .dp-trigger:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .dp-icon {
+        flex: 0 0 auto;
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: var(--muted);
+        stroke-width: 1.6;
+        stroke-linecap: round;
+      }
+      /* Until a date is chosen the trigger is showing placeholder text, so it
+         reads as muted rather than as a value. */
+      .dp-trigger[data-empty="true"] .dp-value { color: var(--muted); }
+
+      .dp-pop {
+        position: absolute;
+        z-index: 60;
+        top: calc(100% + 6px);
+        left: 0;
+        width: max-content;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #14161b;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+      }
+      .dp-pop[hidden] { display: none; }
+      /* Near the right edge the popover would otherwise run off the page. */
+      .dp-pop[data-align="right"] { left: auto; right: 0; }
+
+      .dp-selects { display: flex; gap: 8px; margin-bottom: 12px; }
+      .dp-selects select {
+        min-height: 36px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: rgba(10, 11, 14, 0.7);
+        color: var(--text);
+        font: inherit;
+        font-size: 0.875rem;
+      }
+      .dp-selects select:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+
+      .dp-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 2.25rem);
+        gap: 2px;
+      }
+      .dp-weekday {
+        display: grid;
+        place-items: center;
+        height: 1.75rem;
+        color: var(--muted);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .dp-day {
+        position: relative;
+        height: 2.25rem;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 0.875rem;
+        cursor: pointer;
+      }
+      .dp-day:hover { background: rgba(255, 255, 255, 0.08); }
+      .dp-day:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      .dp-day[data-outside="true"] { color: rgba(244, 244, 245, 0.3); }
+      .dp-day[data-selected="true"] {
+        background: var(--accent);
+        color: #fff;
+        font-weight: 700;
+      }
+      /* Today gets a dot rather than a ring, so it never reads as selected. */
+      .dp-day[data-today="true"]::after {
+        content: "";
+        position: absolute;
+        bottom: 5px;
+        left: 50%;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: var(--accent);
+        transform: translateX(-50%);
+      }
+      .dp-day[data-today="true"][data-selected="true"]::after { background: #fff; }
+
+      .dp-foot {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .dp-foot button {
+        min-height: 34px;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 0.8125rem;
+      }
+      .dp-clear {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 0.8125rem;
+        cursor: pointer;
+      }
+      .dp-clear:hover:not(:disabled) { color: var(--text); }
+      .dp-clear:disabled { opacity: 0.45; cursor: default; }
+      .dp-today {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 0.8125rem;
+        cursor: pointer;
+      }
+      .dp-today:hover { border-color: rgba(255, 255, 255, 0.24); }
+
     </style>
   </head>
   <body>
@@ -491,10 +653,29 @@
               <span class="label-text">Description (optional)</span>
               <input id="dl-description" maxlength="2000" placeholder="Five minutes, no slides" />
             </label>
-            <label>
-              <span class="label-text">Due date</span>
-              <input id="dl-due" type="date" required />
-            </label>
+            <div class="field">
+              <span class="label-text" id="dl-due-label">Due date</span>
+              <!-- The picker writes the ISO string into the hidden input below,
+                   which keeps the id the submit handler already reads. Swapping
+                   the visible control does not touch the form logic. -->
+              <input id="dl-due" type="hidden" required />
+              <div class="datepicker" data-datepicker data-for="dl-due">
+                <button
+                  type="button"
+                  class="dp-trigger"
+                  data-dp-trigger
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-labelledby="dl-due-label dl-due-value"
+                >
+                  <svg class="dp-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="16" rx="2" />
+                    <path d="M3 10h18M8 3v4M16 3v4" />
+                  </svg>
+                  <span class="dp-value" id="dl-due-value" data-dp-value>Pick a date</span>
+                </button>
+              </div>
+            </div>
             <label>
               <span class="label-text">Due time (optional)</span>
               <input id="dl-time" type="time" />
@@ -1017,6 +1198,256 @@
         }
       }
 
+      /* ── Date picker ──────────────────────────────────────────────────────
+         Ported from a supplied shadcn dropdown range picker. Two departures
+         from it, both forced by what this app actually is:
+
+           Single date, not a range. The one calendar field here is a
+           deadline's due date, and a range picker cannot express that.
+
+           Vanilla, not React. This page has no React island at all, and its
+           whole 590-line script is inline. Mounting a framework for one
+           control would add a hydration boundary and a bundle to a page that
+           currently ships neither.
+
+         What is kept is the reason to bother: month and year as dropdowns.
+         The cohort runs to December, and arrow-paging there is four clicks.
+
+         Dates are built from local year/month/day components throughout.
+         Never toISOString(): west of UTC that returns the previous day, which
+         is precisely the bug that would make a deadline land a day early. */
+      const DP_MONTHS = ["January","February","March","April","May","June",
+                         "July","August","September","October","November","December"];
+      /* Monday first. Finland, and the sprint week starts Tuesday. */
+      const DP_WEEKDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+      function dpIso(y, m, d) {
+        return String(y) + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+      }
+
+      function dpLabel(iso) {
+        const [y, m, d] = iso.split("-").map(Number);
+        if (!y) return iso;
+        const at = new Date(Date.UTC(y, m - 1, d));
+        const day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][at.getUTCDay()];
+        return day + " " + d + " " + DP_MONTHS[m - 1].slice(0, 3) + " " + y;
+      }
+
+      function initDatePicker(root) {
+        const target = document.getElementById(root.dataset.for);
+        const trigger = root.querySelector("[data-dp-trigger]");
+        const valueEl = root.querySelector("[data-dp-value]");
+        const placeholder = valueEl.textContent;
+
+        const today = new Date();
+        let viewYear = today.getFullYear();
+        let viewMonth = today.getMonth();
+        let pop = null;
+
+        function paintTrigger() {
+          const has = !!target.value;
+          valueEl.textContent = has ? dpLabel(target.value) : placeholder;
+          trigger.dataset.empty = has ? "false" : "true";
+        }
+
+        function close(refocus) {
+          if (!pop) return;
+          pop.remove();
+          pop = null;
+          trigger.setAttribute("aria-expanded", "false");
+          document.removeEventListener("mousedown", onOutside, true);
+          document.removeEventListener("keydown", onKeydown, true);
+          if (refocus) trigger.focus();
+        }
+
+        function onOutside(event) {
+          if (!root.contains(event.target)) close(false);
+        }
+
+        function onKeydown(event) {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            close(true);
+          }
+        }
+
+        /* Arrow keys move a day at a time and roll over month boundaries, so
+           the grid is navigable without reaching for the dropdowns. */
+        function onGridKeydown(event) {
+          const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
+          if (step === undefined) return;
+          event.preventDefault();
+          const day = Number(event.target.dataset.day);
+          const moved = new Date(viewYear, viewMonth, day + step);
+          viewYear = moved.getFullYear();
+          viewMonth = moved.getMonth();
+          paintPop(moved.getDate());
+        }
+
+        function pick(y, m, d) {
+          target.value = dpIso(y, m, d);
+          target.dispatchEvent(new Event("change", { bubbles: true }));
+          paintTrigger();
+          close(true);
+        }
+
+        function paintPop(focusDay) {
+          pop.innerHTML = "";
+
+          const selects = document.createElement("div");
+          selects.className = "dp-selects";
+
+          const monthSel = document.createElement("select");
+          monthSel.setAttribute("aria-label", "Month");
+          DP_MONTHS.forEach((name, i) => {
+            const opt = document.createElement("option");
+            opt.value = String(i);
+            opt.textContent = name;
+            if (i === viewMonth) opt.selected = true;
+            monthSel.append(opt);
+          });
+          monthSel.addEventListener("change", () => {
+            viewMonth = Number(monthSel.value);
+            paintPop(null);
+          });
+
+          const yearSel = document.createElement("select");
+          yearSel.setAttribute("aria-label", "Year");
+          /* Two back and five forward. A deadline is set for the sprint ahead,
+             not for 2006, and the supplied component's 40-year span is a
+             scroll for no reason. Back at all because a typo is easier to
+             correct than to work around. */
+          for (let y = today.getFullYear() - 2; y <= today.getFullYear() + 5; y++) {
+            const opt = document.createElement("option");
+            opt.value = String(y);
+            opt.textContent = String(y);
+            if (y === viewYear) opt.selected = true;
+            yearSel.append(opt);
+          }
+          yearSel.addEventListener("change", () => {
+            viewYear = Number(yearSel.value);
+            paintPop(null);
+          });
+
+          selects.append(monthSel, yearSel);
+          pop.append(selects);
+
+          const grid = document.createElement("div");
+          grid.className = "dp-grid";
+          grid.setAttribute("role", "grid");
+          grid.setAttribute("aria-label", DP_MONTHS[viewMonth] + " " + viewYear);
+
+          for (const name of DP_WEEKDAYS) {
+            const cell = document.createElement("div");
+            cell.className = "dp-weekday";
+            cell.setAttribute("aria-hidden", "true");
+            cell.textContent = name.slice(0, 2);
+            grid.append(cell);
+          }
+
+          /* getDay() is Sunday-based; shift so Monday is column one. */
+          const lead = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7;
+          const days = new Date(viewYear, viewMonth + 1, 0).getDate();
+          const prevDays = new Date(viewYear, viewMonth, 0).getDate();
+          const todayIso = dpIso(today.getFullYear(), today.getMonth(), today.getDate());
+
+          const cells = [];
+          for (let i = 0; i < lead; i++) {
+            cells.push({ day: prevDays - lead + 1 + i, outside: true, delta: -1 });
+          }
+          for (let d = 1; d <= days; d++) cells.push({ day: d, outside: false, delta: 0 });
+          while (cells.length % 7 !== 0) {
+            cells.push({ day: cells.length - lead - days + 1, outside: true, delta: 1 });
+          }
+
+          let toFocus = null;
+          for (const cell of cells) {
+            const at = new Date(viewYear, viewMonth + cell.delta, cell.day);
+            const iso = dpIso(at.getFullYear(), at.getMonth(), at.getDate());
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "dp-day";
+            button.textContent = String(cell.day);
+            button.dataset.day = String(cell.day);
+            button.dataset.outside = cell.outside ? "true" : "false";
+            button.dataset.today = iso === todayIso ? "true" : "false";
+            button.dataset.selected = iso === target.value ? "true" : "false";
+            button.setAttribute("aria-label", dpLabel(iso));
+            if (iso === target.value) button.setAttribute("aria-current", "date");
+            button.addEventListener("click", () => pick(at.getFullYear(), at.getMonth(), at.getDate()));
+            if (!cell.outside) button.addEventListener("keydown", onGridKeydown);
+            if (!cell.outside && focusDay === cell.day) toFocus = button;
+            grid.append(button);
+          }
+          pop.append(grid);
+
+          const foot = document.createElement("div");
+          foot.className = "dp-foot";
+
+          const clear = document.createElement("button");
+          clear.type = "button";
+          clear.className = "dp-clear";
+          clear.textContent = "Clear";
+          clear.disabled = !target.value;
+          clear.addEventListener("click", () => {
+            target.value = "";
+            target.dispatchEvent(new Event("change", { bubbles: true }));
+            paintTrigger();
+            close(true);
+          });
+
+          /* The supplied component's second footer button was "Apply", which
+             had nothing to apply: clicking a day already commits it. Jumping
+             back to the current month is the thing actually wanted after
+             scrolling to next April by accident. */
+          const jump = document.createElement("button");
+          jump.type = "button";
+          jump.className = "dp-today";
+          jump.textContent = "Today";
+          jump.addEventListener("click", () => {
+            viewYear = today.getFullYear();
+            viewMonth = today.getMonth();
+            paintPop(today.getDate());
+          });
+
+          foot.append(clear, jump);
+          pop.append(foot);
+
+          if (toFocus) toFocus.focus();
+        }
+
+        function open() {
+          if (pop) return close(true);
+          if (target.value) {
+            const [y, m] = target.value.split("-").map(Number);
+            viewYear = y;
+            viewMonth = m - 1;
+          }
+          pop = document.createElement("div");
+          pop.className = "dp-pop";
+          pop.setAttribute("role", "dialog");
+          pop.setAttribute("aria-modal", "false");
+          pop.setAttribute("aria-label", "Choose a date");
+          root.append(pop);
+          trigger.setAttribute("aria-expanded", "true");
+
+          const selectedDay = target.value ? Number(target.value.split("-")[2]) : null;
+          paintPop(selectedDay || 1);
+
+          /* Flip to the right edge if the popover would leave the viewport. */
+          const box = pop.getBoundingClientRect();
+          if (box.right > window.innerWidth - 8) pop.dataset.align = "right";
+
+          document.addEventListener("mousedown", onOutside, true);
+          document.addEventListener("keydown", onKeydown, true);
+        }
+
+        trigger.addEventListener("click", open);
+        paintTrigger();
+      }
+
+      for (const root of document.querySelectorAll("[data-datepicker]")) initDatePicker(root);
+
       document.getElementById("add-deadline").addEventListener("submit", async (event) => {
         event.preventDefault();
         const message = document.getElementById("dl-message");
@@ -1025,6 +1456,13 @@
         const due = document.getElementById("dl-due");
         const time = document.getElementById("dl-time");
         const week = document.getElementById("dl-week");
+
+        /* `required` on a hidden input does nothing: hidden inputs are barred
+           from constraint validation, so the browser will not stop an empty
+           submit the way it did when this was <input type="date" required>.
+           The server still rejects it, but saying so here is faster and says
+           which field. */
+        if (!due.value) return say(message, "Pick a due date.", true);
 
         const { ok, data } = await deadlineApi({
           action: "create",
