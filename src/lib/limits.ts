@@ -148,3 +148,18 @@ export function capHistory<T extends { role: string; content: string }>(messages
   }
   return kept;
 }
+
+/**
+ * How many failed sign-ins one address gets inside the lockout window.
+ *
+ * Here rather than beside the lockout itself in auth.ts, because the test that
+ * asserts the boundary has to import it, and auth.ts opens the database on the
+ * way in. In the test runner's own process that means a second connection to a
+ * path no test has set, which CI turns into "unable to open database file" in
+ * whichever unrelated suite happens to run next. This file imports nothing.
+ *
+ * Deliberately looser than the per-email limit. A shared office NAT can put
+ * the whole cohort behind one address, and locking out a room of founders
+ * because one of them fumbled a password is a worse failure than the attack.
+ */
+export const IP_FAILURE_LIMIT = 30;

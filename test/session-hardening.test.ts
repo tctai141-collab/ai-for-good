@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { createFounder, createOrganizer, post, startServer, type Harness, type Session } from "./helpers/harness";
-import { IP_FAILURE_LIMIT } from "../src/lib/auth";
+/* From limits.ts, not auth.ts: auth.ts opens the database on import, and a
+   second connection in the test runner's own process breaks whichever suite
+   runs next. */
+import { IP_FAILURE_LIMIT } from "../src/lib/limits";
 
 /**
  * The properties that make a hand-rolled session scheme safe.
@@ -100,6 +104,21 @@ describe("signing in again", () => {
         .get({ $h: sha256(before) }) as { n: number }).n;
       expect(stillThere).toBe(0);
     } finally { db2.close(); }
+  });
+});
+
+describe("what this file may import", () => {
+  test("limits.ts stays free of imports, so a test can read it safely", () => {
+    /*
+     * This is the whole reason IP_FAILURE_LIMIT lives there. auth.ts opens the
+     * database at module load; importing it here opened a second connection in
+     * the test runner's own process, against a path no test had set, and CI
+     * failed with "unable to open database file" in an unrelated suite three
+     * files later. The first import added to limits.ts brings that back.
+     */
+    const src = readFileSync("src/lib/limits.ts", "utf-8");
+    expect(src).not.toMatch(/^\s*import[\s{]/m);
+    expect(src).toContain("export const IP_FAILURE_LIMIT");
   });
 });
 
