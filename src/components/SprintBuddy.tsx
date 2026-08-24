@@ -15,6 +15,7 @@ import {
 } from "../lib/workingGenius";
 import type { Checkin, UserData } from "../lib/persistence";
 import { advisorErrorMessage } from "../lib/advisor-errors";
+import TextShimmer from "./TextShimmer";
 
 function formatMarkdown(text: string): string {
   let out = text
@@ -1305,8 +1306,15 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
                 <div key={i} style={{ alignSelf: "flex-end", maxWidth: "32rem", background: C.bubble, borderRadius: "14px 14px 4px 14px", padding: "10px 14px", fontSize: 15, lineHeight: 1.55, color: C.ink }}>{m.content}</div>
               ))}
               {busy && (
-                <div style={{ alignSelf: "flex-start", padding: "6px 4px" }} aria-label="Buddy is thinking">
-                  <span className="pulse-dot" style={{ display: "inline-block", width: 9, height: 9, borderRadius: 9, background: C.accent }} />
+                /* Was an unlabelled pulsing dot. A founder waiting on an answer
+                   should be told what is happening, not shown a light. */
+                <div
+                  style={{ alignSelf: "flex-start", padding: "6px 4px", display: "flex", alignItems: "center", gap: 9 }}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="pulse-dot" style={{ display: "inline-block", width: 9, height: 9, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
+                  <TextShimmer duration={1.5} className="composer-wait">Generating answers</TextShimmer>
                 </div>
               )}
               {banner && (

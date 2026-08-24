@@ -990,6 +990,121 @@ import App from "../components/App";
     height: calc(var(--size) * 0.12);
   }
 
+  /* ── The welcome screen ──
+     Shown for three seconds between a successful sign-in and the app: code
+     rain on a canvas, the message typed over it. */
+  .splash {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    background: #05070a;
+    animation: splash-in 320ms var(--ease-out-quart);
+  }
+  .splash-canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .splash-line {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    padding: 0 var(--space-lg);
+    max-width: 24ch;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: clamp(1.1rem, 3.4vw, 2.4rem);
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    text-align: center;
+    color: #d8ffe8;
+    /* The rain is busy; the glow is what keeps the line legible over it
+       without putting a panel behind the words. */
+    text-shadow:
+      0 0 12px rgba(0, 255, 102, 0.55),
+      0 0 34px rgba(0, 255, 102, 0.28),
+      0 2px 18px rgba(0, 0, 0, 0.9);
+  }
+  .typewriter-cursor {
+    margin-left: 0.08em;
+    animation: caret 1s steps(1) infinite;
+  }
+  /* Once the line is finished the caret keeps blinking; it is the only thing
+     still moving, and a frozen caret reads as a hang. */
+  .typewriter-cursor--done {
+    animation-duration: 1.15s;
+  }
+  @keyframes caret {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+  @keyframes splash-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .splash { animation: none; }
+    .typewriter-cursor { animation: none; opacity: 1; }
+  }
+
+  /* ── Shimmering text ──
+     A highlight travelling through the glyphs, used on the wait while Sprint
+     Buddy is answering. Two background layers clipped to the text: a flat base
+     colour, and a moving window of brighter colour over it. */
+  .shimmer {
+    --shimmer-base: rgba(255, 255, 255, 0.34);
+    --shimmer-high: rgba(255, 255, 255, 0.96);
+    --shimmer-spread: 40px;
+    --shimmer-duration: 1.6s;
+    display: inline-block;
+    background-image:
+      linear-gradient(
+        90deg,
+        transparent calc(50% - var(--shimmer-spread)),
+        var(--shimmer-high),
+        transparent calc(50% + var(--shimmer-spread))
+      ),
+      linear-gradient(var(--shimmer-base), var(--shimmer-base));
+    background-repeat: no-repeat, padding-box;
+    /* The moving layer is far wider than the text so the highlight has
+       somewhere to travel from and to. */
+    background-size: 250% 100%, auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer var(--shimmer-duration) linear infinite;
+  }
+  /* Sized and coloured for the chat's own type scale rather than inheriting a
+     headline's weight. */
+  .composer-wait {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    --shimmer-base: rgba(255, 255, 255, 0.28);
+    --shimmer-high: rgba(255, 255, 255, 0.92);
+  }
+  @keyframes shimmer {
+    /* Both layers have to be listed: a keyframe that names one position for a
+       two-layer background drops the second layer for the duration. */
+    from { background-position: 100% center, 0 0; }
+    to { background-position: 0% center, 0 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* No travelling highlight, and the text painted flat rather than left
+       transparent with nothing moving through it. */
+    .shimmer {
+      animation: none;
+      background-image: none;
+      color: var(--shimmer-base);
+    }
+  }
+
   /* ── Working Genius quiz ── */
   .wg-quiz-option {
     position: relative;

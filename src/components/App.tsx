@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
 import Headline from "./Headline";
+import WelcomeSplash from "./WelcomeSplash";
 import KineticGrid from "./KineticGrid";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
@@ -70,6 +71,19 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
+  /*
+   * The welcome screen between a successful sign-in and the app.
+   *
+   * Two flags, not one, because the three seconds are a floor rather than a
+   * cut: `held` is the timer expiring, and the splash also waits for `user` to
+   * be set, so a slow data load is covered by the welcome instead of showing a
+   * half-empty app. It is deliberately not driven by `enter`, which also runs
+   * when an existing session is restored on a page load; the splash belongs to
+   * the act of signing in, not to arriving already signed in.
+   */
+  const [splashing, setSplashing] = useState(false);
+  const [held, setHeld] = useState(false);
+
   /** Loads a signed-in user's data and drops them into the app. */
   const enter = useCallback(async (signedIn: SessionUser) => {
     try {
@@ -83,6 +97,10 @@ export default function App() {
     setUser(signedIn);
     setBuddyStage("docked");
   }, []);
+
+  useEffect(() => {
+    if (splashing && held && user) setSplashing(false);
+  }, [splashing, held, user]);
 
   useEffect(() => {
     fetch("/api/session")
@@ -161,6 +179,8 @@ export default function App() {
       }
 
       setPassword("");
+      setHeld(false);
+      setSplashing(true);
       await enter(data.user);
     } catch {
       setLoginError("Could not reach the server. Check your connection.");
@@ -168,6 +188,17 @@ export default function App() {
 
     setLoading(false);
   }, [email, password, enter]);
+
+  if (splashing) {
+    return (
+      <>
+        <WelcomeSplash onDone={() => setHeld(true)} />
+        {/* The cube keeps its place through the transition rather than
+            disappearing and coming back once the app is behind. */}
+        <PersistentBuddy stage={buddyStage} />
+      </>
+    );
+  }
 
   if (checking) {
     return (
