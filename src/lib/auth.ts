@@ -291,7 +291,13 @@ export function clientIp(request: Request): string | null {
  * the whole cohort behind one address, and locking out a room of founders
  * because one of them fumbled a password is a worse failure than the attack.
  */
-const IP_FAILURE_LIMIT = 30;
+/*
+ * Exported so the test can assert the boundary rather than hunt for it. It
+ * used to try up to forty times and stop at the first 429, which meant the
+ * suite paid an Argon2id verify for every attempt with no idea how many it
+ * would need.
+ */
+export const IP_FAILURE_LIMIT = 30;
 const ipFailures = new Map<string, { count: number; firstAt: number }>();
 const MAX_TRACKED_IPS = 5_000;
 
