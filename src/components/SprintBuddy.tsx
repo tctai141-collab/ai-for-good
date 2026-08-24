@@ -16,6 +16,7 @@ import {
 import type { Checkin, UserData } from "../lib/persistence";
 import { advisorErrorMessage } from "../lib/advisor-errors";
 import TextShimmer from "./TextShimmer";
+import InteractiveHoverButton from "./InteractiveHoverButton";
 
 function formatMarkdown(text: string): string {
   let out = text
@@ -917,24 +918,27 @@ function ShareToggle({ shared, seenAt, onChange }: { shared: boolean; seenAt?: s
     );
   }
 
+  /*
+   * The resting label is the state; the hover label is the act.
+   *
+   * It used to be one muted grey pill reading "Private", which told a founder
+   * what was true and nothing about what they could do, so nobody found it.
+   * Now the pill says what will happen the moment it is pointed at, and the
+   * accessible name says it too rather than leaving it to a title attribute.
+   */
   const button = (
-    <button
+    <InteractiveHoverButton
       type="button"
       onClick={() => (shared ? onChange(false) : setConfirming(true))}
-      title={
+      emphasis={shared}
+      label={shared ? "Shared with your coach" : "Private"}
+      action={shared ? "Make it private" : "Share with your coach"}
+      aria-label={
         shared
-          ? "Your coach can read this conversation. Click to make it private again."
-          : "Only you can read this. Click to share it with your coach."
+          ? "Shared with your coach. Activate to make this conversation private again."
+          : "Private. Activate to share this conversation with your coach."
       }
-      style={{
-        ...shareButtonStyle,
-        whiteSpace: "nowrap",
-        borderColor: shared ? C.accent : "var(--line-strong)",
-        color: shared ? C.accent : C.sub,
-      }}
-    >
-      {shared ? "Shared with your coach" : "Private"}
-    </button>
+    />
   );
 
   if (!shared || !seenAt) return button;
@@ -1289,7 +1293,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       <div ref={scroller} style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "26px 24px 10px" }}>
           {isFresh && msgs.length === 0 && !isCheckin ? (
-            <EmptyState ctx={ctx} firstRun={firstRun} />
+            <EmptyState firstRun={firstRun} />
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {msgs.map((m, i) => m.role === "assistant" ? (
@@ -1355,7 +1359,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   );
 }
 
-type TimeCtx = { clock: string; line: string; dotColor: string; greeting: string };
+type TimeCtx = { clock: string; line: string; dotColor: string };
 
 /*
  * The six types, the thirty items and the scoring live in lib/workingGenius.ts
@@ -1537,12 +1541,23 @@ function MobileActions({
   );
 }
 
-function EmptyState({ ctx, firstRun }: { ctx: TimeCtx; firstRun: boolean }) {
+/*
+ * The empty chat.
+ *
+ * There used to be a rotating greeting here at 38px ("What's the move?",
+ * "Let's go.") over "Say what's going on." in italics. Tai: not needed. It
+ * asked the founder a question the composer already asks, in type large enough
+ * to be the page's subject, and then the composer asked it again three inches
+ * below.
+ *
+ * What is left is the thing that only appears once and actually carries
+ * information.
+ */
+function EmptyState({ firstRun }: { firstRun: boolean }) {
+  if (!firstRun) return null;
+
   return (
     <div className="rise" style={{ paddingTop: 30 }}>
-      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 38, letterSpacing: "-0.025em", lineHeight: 1.04, margin: "0 0 8px", color: C.ink, fontVariationSettings: '"opsz" 50' }}>{ctx.greeting}</h1>
-      <p style={{ color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 15.5, margin: "0 0 32px", fontVariationSettings: '"opsz" 22' }}>Say what&rsquo;s going on.</p>
-
       {/*
         Shown once, on a genuinely empty account.
 
@@ -1552,27 +1567,25 @@ function EmptyState({ ctx, firstRun }: { ctx: TimeCtx; firstRun: boolean }) {
         Two sentences, then it never appears again: the second visit is not the
         moment to explain the product.
       */}
-      {firstRun && (
-        <div
-          style={{
-            maxWidth: 520,
-            padding: "14px 16px",
-            border: `1px solid ${C.line}`,
-            borderRadius: 10,
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
-            This is your space to think out loud. Sprint Buddy is software, not a
-            person, and it carries what this programme&rsquo;s mentors teach.
-          </p>
-          <p style={{ margin: "8px 0 0", fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
-            <strong style={{ color: C.ink }}>Nothing here is read by the team</strong> unless
-            you share a conversation on purpose. Start anywhere, or use today&rsquo;s
-            check-in.
-          </p>
-        </div>
-      )}
+      <div
+        style={{
+          maxWidth: 520,
+          padding: "14px 16px",
+          border: `1px solid ${C.line}`,
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.03)",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
+          This is your space to think out loud. Sprint Buddy is software, not a
+          person, and it carries what this programme&rsquo;s mentors teach.
+        </p>
+        <p style={{ margin: "8px 0 0", fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
+          <strong style={{ color: C.ink }}>Nothing here is read by the team</strong> unless
+          you share a conversation on purpose. Start anywhere, or use today&rsquo;s
+          check-in.
+        </p>
+      </div>
     </div>
   );
 }
@@ -2827,15 +2840,9 @@ function useTimeContext(): TimeCtx {
   const line = lines[i] ?? dayLines[0]!;
   const dotColor = (h >= 23 || h < 5) ? C.red : (h < 11) ? C.yellow : C.accent;
 
-  const greetings = [
-    "Let's go.", "Where to?", "What's the move?", "Talk to me.", "What are we building?",
-    "You up?", "What's on your mind?", "State your business.", "Go on then.", "I'm listening.",
-    "Spill it.", "What's keeping you up?", "Fresh start.", "Run it.", "Say the thing.",
-    "No bad ideas. (Some bad ideas, but say them anyway.)",
-  ];
-  const greeting = greetings[roll % greetings.length]!;
-
-  return { clock, line, dotColor, greeting };
+  /* The rotating greeting that used to head the empty chat is gone with it;
+     the composer's own idle prompt asks the same question, once. */
+  return { clock, line, dotColor };
 }
 
 function titleFrom(s: string): string {
