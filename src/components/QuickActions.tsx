@@ -20,6 +20,11 @@ import GlassFilter from "./GlassFilter";
  * lines of arc geometry in two stylesheets that would drift the first time
  * either was touched. It ships its own CSS for the same reason.
  *
+ * Everything it owns is prefixed qa-. It mounts on a page that also carries
+ * SprintBuddy's global stylesheet, and the obvious names collided: the check-in
+ * strip called its caption .quick-label too, and whichever <style> mounted
+ * second silently won.
+ *
  * Server-rendered by design (`client:load`, not `client:only`): the markup is
  * then in the served HTML where the tests can read it, and there is no corner
  * of the page that pops in a frame late.
@@ -144,22 +149,22 @@ export default function QuickActions({ mode }: Props) {
   return (
     <div
       ref={root}
-      className={`quick${open ? " is-open" : ""}${mode === "navigate" ? " quick--floating" : ""}`}
-      id="quick"
+      className={`qa${open ? " is-open" : ""}${mode === "navigate" ? " qa--floating" : ""}`}
+      id="qa"
       hidden={!ready}
     >
       <style>{CSS}</style>
       {/* Its own id. SVG filter ids are global to the document, and both pages
           this mounts on already define others. */}
-      <GlassFilter id="quick-glass" />
+      <GlassFilter id="qa-glass" />
 
-      <div className="quick-items" id="quick-items">
+      <div className="qa-items" id="qa-items">
         {ITEMS.map((item, i) => (
           <button
             key={item.tab}
             ref={i === 0 ? first : undefined}
             type="button"
-            className="quick-item"
+            className="qa-item"
             data-go={item.tab}
             data-focus={item.focus}
             /* Out of the tab order while parked, or five invisible buttons sit
@@ -170,7 +175,7 @@ export default function QuickActions({ mode }: Props) {
             <span aria-hidden="true">
               <svg viewBox="0 0 24 24">{item.path}</svg>
             </span>
-            <span className="quick-label">{item.label}</span>
+            <span className="qa-label">{item.label}</span>
           </button>
         ))}
       </div>
@@ -178,18 +183,18 @@ export default function QuickActions({ mode }: Props) {
       <button
         ref={trigger}
         type="button"
-        className="quick-trigger"
-        id="quick-trigger"
+        className="qa-trigger"
+        id="qa-trigger"
         aria-expanded={open}
-        aria-controls="quick-items"
+        aria-controls="qa-items"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="quick-trigger-icon" aria-hidden="true">
+        <span className="qa-trigger-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" />
           </svg>
         </span>
-        <span className="quick-sr">Quick actions</span>
+        <span className="qa-sr">Quick actions</span>
       </button>
     </div>
   );
@@ -202,7 +207,7 @@ export default function QuickActions({ mode }: Props) {
  * near-black, so the literals below hold on either.
  */
 const CSS = `
-.quick {
+.qa {
   position: fixed;
   right: 26px;
   bottom: 26px;
@@ -215,13 +220,13 @@ const CSS = `
 /* The glass material, shared by the trigger and the five circles: no fill at
    all, a rim built entirely from layered inset shadows, and the page behind
    refracted through the filter above. */
-.quick-trigger, .quick-item {
+.qa-trigger, .qa-item {
   border: 0;
   background: none;
   color: #f4f4f5;
   cursor: pointer;
-  backdrop-filter: url("#quick-glass");
-  -webkit-backdrop-filter: url("#quick-glass");
+  backdrop-filter: url("#qa-glass");
+  -webkit-backdrop-filter: url("#qa-glass");
   box-shadow:
     0 0 8px rgba(0, 0, 0, 0.03),
     0 2px 6px rgba(0, 0, 0, 0.08),
@@ -233,12 +238,12 @@ const CSS = `
     inset 0 0 2px 2px rgba(255, 255, 255, 0.06),
     0 0 12px rgba(0, 0, 0, 0.15);
 }
-.quick-trigger:focus-visible, .quick-item:focus-visible {
+.qa-trigger:focus-visible, .qa-item:focus-visible {
   outline: 2px solid var(--brand-accent, var(--accent, #e8170a));
   outline-offset: 3px;
 }
 
-.quick-trigger {
+.qa-trigger {
   position: absolute;
   inset: 0;
   display: grid;
@@ -246,18 +251,18 @@ const CSS = `
   border-radius: 999px;
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.quick-trigger svg {
+.qa-trigger svg {
   width: 22px; height: 22px; display: block;
   fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round;
 }
 /* The plus becomes a cross. One element, one rotation, no icon swap. */
-.quick.is-open .quick-trigger { transform: rotate(135deg); }
+.qa.is-open .qa-trigger { transform: rotate(135deg); }
 
 /* The items are circles, not labelled pills. Labelled pills on this arc
    overlap: five labels up to 160px wide cannot sit 53px apart. The label
    appears beside the circle on hover and focus instead, and stays in the DOM
    the whole time so it is the button's accessible name. */
-.quick-item {
+.qa-item {
   position: absolute;
   /* Centred on the trigger, which is 56px: 5 + 23 = 28 from each edge. */
   right: 5px;
@@ -275,7 +280,7 @@ const CSS = `
     transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 180ms ease;
 }
-.quick-item svg {
+.qa-item svg {
   width: 19px; height: 19px; display: block;
   fill: none; stroke: currentColor; stroke-width: 1.9;
   stroke-linecap: round; stroke-linejoin: round;
@@ -284,7 +289,7 @@ const CSS = `
 /* Sits to the left of its circle. Solid rather than glass: a frosted chip over
    a frosted circle is two rims and no text. Non-interactive, so it never gets
    between the pointer and the button it names. */
-.quick-label {
+.qa-label {
   position: absolute;
   right: calc(100% + 10px);
   padding: 6px 11px;
@@ -300,58 +305,58 @@ const CSS = `
   transform: translateX(6px);
   transition: opacity 140ms ease, transform 140ms ease;
 }
-.quick-item:hover .quick-label,
-.quick-item:focus-visible .quick-label { opacity: 1; transform: translateX(0); }
+.qa-item:hover .qa-label,
+.qa-item:focus-visible .qa-label { opacity: 1; transform: translateX(0); }
 /* Above its neighbours, or a long label is clipped by the next circle. */
-.quick-item:hover, .quick-item:focus-visible { z-index: 1; }
+.qa-item:hover, .qa-item:focus-visible { z-index: 1; }
 
-.quick.is-open .quick-item { opacity: 1; pointer-events: auto; }
+.qa.is-open .qa-item { opacity: 1; pointer-events: auto; }
 /* A quarter arc at radius 136, from straight up round to straight left.
    Quarter rather than the half a fan usually draws: in a corner, half of a
    full circle is off-screen. The radius is set by the circles, not by taste —
    five of them over 90 degrees sit 2·136·sin(11.25°) = 53px apart, which is a
    7px gap at 46px across. */
-.quick.is-open .quick-item:nth-child(1) { transform: translate(0, -136px) scale(1); }
-.quick.is-open .quick-item:nth-child(2) { transform: translate(-52px, -126px) scale(1); }
-.quick.is-open .quick-item:nth-child(3) { transform: translate(-96px, -96px) scale(1); }
-.quick.is-open .quick-item:nth-child(4) { transform: translate(-126px, -52px) scale(1); }
-.quick.is-open .quick-item:nth-child(5) { transform: translate(-136px, 0) scale(1); }
+.qa.is-open .qa-item:nth-child(1) { transform: translate(0, -136px) scale(1); }
+.qa.is-open .qa-item:nth-child(2) { transform: translate(-52px, -126px) scale(1); }
+.qa.is-open .qa-item:nth-child(3) { transform: translate(-96px, -96px) scale(1); }
+.qa.is-open .qa-item:nth-child(4) { transform: translate(-126px, -52px) scale(1); }
+.qa.is-open .qa-item:nth-child(5) { transform: translate(-136px, 0) scale(1); }
 /* Opening runs first to last; closing runs last to first, so the fan collapses
    back the way a hand of cards does. */
-.quick-item:nth-child(1) { transition-delay: 100ms; }
-.quick-item:nth-child(2) { transition-delay: 75ms; }
-.quick-item:nth-child(3) { transition-delay: 50ms; }
-.quick-item:nth-child(4) { transition-delay: 25ms; }
-.quick-item:nth-child(5) { transition-delay: 0ms; }
-.quick.is-open .quick-item:nth-child(1) { transition-delay: 0ms; }
-.quick.is-open .quick-item:nth-child(2) { transition-delay: 25ms; }
-.quick.is-open .quick-item:nth-child(3) { transition-delay: 50ms; }
-.quick.is-open .quick-item:nth-child(4) { transition-delay: 75ms; }
-.quick.is-open .quick-item:nth-child(5) { transition-delay: 100ms; }
+.qa-item:nth-child(1) { transition-delay: 100ms; }
+.qa-item:nth-child(2) { transition-delay: 75ms; }
+.qa-item:nth-child(3) { transition-delay: 50ms; }
+.qa-item:nth-child(4) { transition-delay: 25ms; }
+.qa-item:nth-child(5) { transition-delay: 0ms; }
+.qa.is-open .qa-item:nth-child(1) { transition-delay: 0ms; }
+.qa.is-open .qa-item:nth-child(2) { transition-delay: 25ms; }
+.qa.is-open .qa-item:nth-child(3) { transition-delay: 50ms; }
+.qa.is-open .qa-item:nth-child(4) { transition-delay: 75ms; }
+.qa.is-open .qa-item:nth-child(5) { transition-delay: 100ms; }
 
 /* On a narrow screen the arc runs off the left edge. Stack it instead, and pin
    the labels open, since there is no hover on a phone. */
 @media (max-width: 760px) {
-  .quick { right: 16px; bottom: 16px; }
-  .quick.is-open .quick-item:nth-child(1) { transform: translate(0, -60px) scale(1); }
-  .quick.is-open .quick-item:nth-child(2) { transform: translate(0, -116px) scale(1); }
-  .quick.is-open .quick-item:nth-child(3) { transform: translate(0, -172px) scale(1); }
-  .quick.is-open .quick-item:nth-child(4) { transform: translate(0, -228px) scale(1); }
-  .quick.is-open .quick-item:nth-child(5) { transform: translate(0, -284px) scale(1); }
-  .quick.is-open .quick-label { opacity: 1; transform: translateX(0); }
+  .qa { right: 16px; bottom: 16px; }
+  .qa.is-open .qa-item:nth-child(1) { transform: translate(0, -60px) scale(1); }
+  .qa.is-open .qa-item:nth-child(2) { transform: translate(0, -116px) scale(1); }
+  .qa.is-open .qa-item:nth-child(3) { transform: translate(0, -172px) scale(1); }
+  .qa.is-open .qa-item:nth-child(4) { transform: translate(0, -228px) scale(1); }
+  .qa.is-open .qa-item:nth-child(5) { transform: translate(0, -284px) scale(1); }
+  .qa.is-open .qa-label { opacity: 1; transform: translateX(0); }
   /* The founder-side app puts its own action bar and composer along the bottom
      of a phone screen. A floating trigger there covers the thing the founder
      is actually typing into, and the admin page it leads to is not usable at
      that width anyway. */
-  .quick--floating { display: none; }
+  .qa--floating { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .quick-trigger, .quick-item, .quick-label { transition: none; }
-  .quick-item { transition-delay: 0ms !important; }
+  .qa-trigger, .qa-item, .qa-label { transition: none; }
+  .qa-item { transition-delay: 0ms !important; }
 }
 
-.quick-sr {
+.qa-sr {
   position: absolute;
   width: 1px; height: 1px;
   margin: -1px; padding: 0;

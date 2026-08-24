@@ -67,7 +67,7 @@ describe("quick actions", () => {
     const tabs = new Set(
       [...html.matchAll(/class="tab" data-tab="([a-z]+)"/g)].map((m) => m[1]!),
     );
-    const targets = [...html.matchAll(/class="quick-item" data-go="([a-z]+)"/g)].map((m) => m[1]!);
+    const targets = [...html.matchAll(/class="qa-item" data-go="([a-z]+)"/g)].map((m) => m[1]!);
     expect(targets.length).toBe(5);
     for (const target of targets) expect(tabs).toContain(target);
   });
@@ -96,7 +96,7 @@ describe("quick actions", () => {
   test("the menu is hidden until the component is running", () => {
     // With no JS the buttons do nothing, and five dead circles in the corner
     // are worse than none. Server-rendered hidden, unhidden on mount.
-    expect(html).toMatch(/class="quick[^"]*" id="quick" hidden/);
+    expect(html).toMatch(/class="qa[^"]*" id="qa" hidden/);
     expect(quick).toContain("useEffect(() => setReady(true), [])");
     expect(quick).toContain("hidden={!ready}");
   });
@@ -114,13 +114,13 @@ describe("quick actions", () => {
 
   test("the trigger says what it is to a screen reader", () => {
     // The button's only visible content is a plus glyph.
-    expect(html).toMatch(/class="quick-trigger"[^>]*aria-expanded="false"/);
+    expect(html).toMatch(/class="qa-trigger"[^>]*aria-expanded="false"/);
     expect(html).toContain("Quick actions</span>");
     expect(quick).toContain("aria-expanded={open}");
   });
 
   test("it is fixed, so it stays put while a long tab scrolls", () => {
-    expect(quick).toMatch(/\.quick \{[^}]*position: fixed/);
+    expect(quick).toMatch(/\.qa \{[^}]*position: fixed/);
   });
 
   test("the two placements are one component", () => {
@@ -133,7 +133,7 @@ describe("quick actions", () => {
       '<QuickActions mode="navigate" />',
     );
     // And the page's own stylesheet no longer carries a copy.
-    expect(css).not.toContain(".quick-item");
+    expect(css).not.toContain(".qa-item");
   });
 
   test("from the founder app it links, carrying the same instruction", () => {
@@ -225,5 +225,24 @@ describe("the tab bar", () => {
       expect(["#fff", "#0b0c0f"]).toContain(colour);
     }
     expect(bar).toMatch(/\.tab-cursor \{[^}]*background: #fff/);
+  });
+});
+
+describe("class names", () => {
+  test("the quick menu namespaces everything it owns", () => {
+    /*
+     * It mounts on a page that also carries SprintBuddy's global stylesheet.
+     * The obvious names collided — the check-in strip called its caption
+     * .quick-label too — and whichever <style> mounted second silently won.
+     * Prefixing is the fix; this stops it drifting back.
+     */
+    const sprint = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
+    const owned = [...quick.matchAll(/className="([a-z-]+)"/g)].map((m) => m[1]!);
+    expect(owned.length).toBeGreaterThan(3);
+    for (const name of owned) {
+      expect(name.startsWith("qa")).toBe(true);
+      expect(sprint).not.toContain(`.${name} `);
+      expect(sprint).not.toContain(`.${name}{`);
+    }
   });
 });
