@@ -3,10 +3,15 @@
  *
  * Taken from a supplied jellyfish hero. What is worth having there is one
  * idea, and it is not the jellyfish: the words are not animated individually.
- * They are pinned at fixed seats on a vertical ring standing around the
- * creature, each facing inward, and a single container rotates. Everything
- * else, the swell into centre, the trapezoidal sweep, the turn away, falls out
- * of that one rotation and the browser's own perspective maths.
+ * They are pinned at fixed seats on a vertical ring, each facing inward, and a
+ * single container rotates. Everything else, the swell into centre, the
+ * trapezoidal sweep, the turn away, falls out of that one rotation and the
+ * browser's own perspective maths.
+ *
+ * The ring flies in the empty band across the top rather than around the
+ * mascot. Around the mascot the silhouette ate the middle of every word and
+ * left the band up here dead; up here the words are unobstructed and the page
+ * has a headline where it had a gap. The glass treatment lives in the CSS.
  *
  * So none of the supplied dependencies come with it. three and
  * @react-three/fiber existed to draw the jellyfish procedurally, and this app

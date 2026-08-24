@@ -293,20 +293,18 @@ import App from "../components/App";
      seats facing inward and .ring-stage turns, so the swell into centre and
      the trapezoidal sweep come free from perspective.
 
-     Fixed, and centred on the same point as .persistent-buddy--login, because
-     the mascot is fixed too: anchoring the ring to its column instead would
-     let the two drift apart at every viewport width. */
+     It sits in the empty band across the top, above both the mascot and the
+     form, rather than behind the mascot. Behind the mascot the silhouette ate
+     the middle of every word and the band up here was left dead. */
   .ring {
     position: fixed;
-    top: 50%;
-    left: clamp(9rem, 25vw, 26rem);
+    top: 16%;
+    left: 50%;
     z-index: 2;
     width: 0;
     height: 0;
-    /* Radius scales with the viewport. Too large and BUDDY reaches the login
-       form on the right; this keeps it inside the mascot's own column. */
-    --ring-r: clamp(11rem, 21vw, 24rem);
-    perspective: 1500px;
+    --ring-r: clamp(12rem, 26vw, 32rem);
+    perspective: 1600px;
     pointer-events: none;
   }
   .ring-stage {
@@ -325,23 +323,46 @@ import App from "../components/App";
     margin: -0.5em 0 0 -11ch;
     font-family: var(--font-serif);
     font-weight: 900;
-    /* Big enough that the mascot crops the middle of the word rather than
-       swallowing it. Measured: at 13vw the word was 1.24x the mascot's width,
-       so only ~85px of it ever cleared the silhouette and it read as a smudge.
-       The reference hero runs about 2.5x, which is what this is. */
-    font-size: clamp(5rem, 19vw, 17rem);
+    /* Sized to the band it lives in: tall enough to be the headline, short
+       enough to clear the mascot's crown below it. */
+    font-size: clamp(3.2rem, 13.5vw, 12rem);
     line-height: 1;
-    letter-spacing: -0.04em;
+    letter-spacing: -0.03em;
     text-align: center;
     white-space: nowrap;
-    /* Bright enough to read as a headline, dim enough that the mascot stays
-         the subject. At 10% on this ground it was invisible. */
-    color: rgba(255, 255, 255, 0.16);
     opacity: 0;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
     animation: ring-fade 18s linear infinite;
     will-change: opacity;
+
+    /* Glass, in the same language as the sign-in button: a bright top rim
+       fading to almost nothing at the baseline, so the letters read as
+       something the light is passing through rather than paint.
+
+       background-clip rather than a flat colour: a single colour at this size
+       is a wall, and the whole point of glass is that it is not one. */
+    color: transparent;
+    background: linear-gradient(
+      172deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.62) 26%,
+      rgba(255, 255, 255, 0.28) 52%,
+      rgba(253, 99, 96, 0.34) 78%,
+      rgba(232, 23, 10, 0.5) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    /* The rim. Drawn under the fill so it reads as the edge of the glass
+       rather than an outline sitting on top of it, and it is the layer that
+       keeps the bottom of each letter from dissolving into the ground once
+       the fill has faded out. */
+    -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.34);
+    paint-order: stroke fill;
+    filter:
+      drop-shadow(0 1px 0 rgba(255, 255, 255, 0.18))
+      drop-shadow(0 0 26px rgba(232, 23, 10, 0.18))
+      drop-shadow(0 18px 34px rgba(0, 0, 0, 0.55));
   }
   @keyframes ring-orbit {
     from { transform: rotateY(0deg); }
