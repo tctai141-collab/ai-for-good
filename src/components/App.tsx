@@ -3,6 +3,7 @@ import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
 import MorphingText from "./MorphingText";
 import WelcomeSplash from "./WelcomeSplash";
+import Onboarding, { hasOnboarded } from "./Onboarding";
 import KineticGrid from "./KineticGrid";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
@@ -87,6 +88,17 @@ export default function App() {
    */
   const [splashing, setSplashing] = useState(false);
   const [held, setHeld] = useState(false);
+
+  /*
+   * The first-run walkthrough.
+   *
+   * Kept in localStorage per account rather than on the server. It is a
+   * dismissible explainer, not state anything depends on, and the tradeoff is
+   * plain: someone signing in on a second device sees it once more. Storing it
+   * server-side would mean a new persistence resource and a migration for a
+   * flag whose worst failure is showing four paragraphs twice.
+   */
+  const [onboarding, setOnboarding] = useState(false);
 
   /** Loads a signed-in user's data and drops them into the app. */
   const enter = useCallback(async (signedIn: SessionUser) => {
@@ -185,6 +197,7 @@ export default function App() {
       setPassword("");
       setHeld(false);
       setSplashing(true);
+      if (!hasOnboarded(data.user.email)) setOnboarding(true);
       await enter(data.user);
     } catch {
       setLoginError("Could not reach the server. Check your connection.");
@@ -279,9 +292,14 @@ export default function App() {
     );
   }
 
+  const walkthrough = onboarding ? (
+    <Onboarding email={user.email} role={user.role} onClose={() => setOnboarding(false)} />
+  ) : null;
+
   if (user.role === "organizer") {
     return (
       <>
+        {walkthrough}
         <SprintBuddy persona="coach" userEmail={user.email} onSignOut={handleSignOut} />
         <a
           href="/admin"
@@ -309,6 +327,7 @@ export default function App() {
 
   return (
     <>
+      {walkthrough}
       <SprintBuddy
         key={user.email}
         persona="founder"

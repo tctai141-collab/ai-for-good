@@ -1134,6 +1134,126 @@ import App from "../components/App";
     .ihb { border-color: var(--brand-accent); color: var(--color-text); }
   }
 
+  /* ── First-run walkthrough ──
+     A native <dialog>: showModal() brings the focus trap, Escape, the inert
+     background and ::backdrop with it. */
+  .onb {
+    width: min(30rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 4rem);
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 16px;
+    background: #14161b;
+    color: var(--color-text);
+    font-family: var(--font-family);
+    overflow: hidden;
+    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+  }
+  .onb::backdrop {
+    background: rgba(4, 5, 8, 0.72);
+    backdrop-filter: blur(3px);
+  }
+  .onb-mark {
+    display: grid;
+    place-items: center;
+    height: 108px;
+    background:
+      radial-gradient(90% 130% at 20% 0%, rgba(232, 23, 10, 0.55), transparent 62%),
+      radial-gradient(70% 120% at 90% 100%, rgba(247, 225, 89, 0.18), transparent 60%),
+      #0d0f13;
+    border-bottom: 1px solid var(--color-border-strong);
+  }
+  .onb-mark span {
+    font-family: var(--font-serif);
+    font-weight: 900;
+    font-size: 3rem;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.9);
+  }
+  .onb-body { padding: 20px 22px 20px; }
+  .onb-title {
+    margin: 0 0 8px;
+    font-family: var(--font-serif);
+    font-size: 1.3rem;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+  .onb-text {
+    margin: 0 0 22px;
+    font-size: 0.94rem;
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+  }
+  .onb-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .onb-dots {
+    display: flex;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .onb-dots li {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--brand-accent);
+    opacity: 0.2;
+    transition: opacity 200ms var(--ease-out-quart);
+  }
+  .onb-dots li.is-on { opacity: 1; }
+  .onb-actions { display: flex; align-items: center; gap: 8px; }
+  .onb-skip,
+  .onb-next {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .onb-skip {
+    border: 0;
+    background: transparent;
+    color: var(--color-text-tertiary);
+  }
+  .onb-skip:hover { color: var(--color-text); }
+  .onb-next {
+    border: 0;
+    background: var(--brand-accent);
+    color: oklch(13% 0.008 250);
+  }
+  .onb-next:hover { filter: brightness(1.08); }
+  .onb-skip:focus-visible,
+  .onb-next:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+  }
+  .onb-arrow {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 200ms var(--ease-out-quart);
+  }
+  .onb-next:hover .onb-arrow { transform: translateX(2px); }
+  @media (prefers-reduced-motion: reduce) {
+    .onb-dots li, .onb-arrow { transition: none; }
+  }
+
   /* ── Working Genius quiz ── */
   .wg-quiz-option {
     position: relative;
