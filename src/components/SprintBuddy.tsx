@@ -516,6 +516,11 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
   return (
     <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.ink, fontFamily: "var(--font-family)", overflow: "hidden", ["--col-pad-left" as string]: sidebarOpen ? "24px" : "60px" } as React.CSSProperties}>
       <style>{CSS}</style>
+      {/* What .btn-glass refracts through. Mounted at the root rather than
+          inside a button: SVG filter ids are global to the document, and one
+          per button would mean twenty elements all defining #btn-glass, with
+          every reference resolving to whichever mounted first. */}
+      <GlassFilter id="btn-glass" />
 
       <Sidebar
         persona={persona} view={view} active={active} threads={threads}
@@ -851,8 +856,9 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             </ul>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button
+                className="btn-glass"
                 onClick={() => setConfirmDelete(null)}
-                style={{ background: "transparent", color: C.sub, border: `1px solid ${C.line}`, borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", minHeight: 40 }}
+                style={{ minHeight: 40 }}
               >
                 Cancel
               </button>
@@ -2027,14 +2033,14 @@ function Reflections({
                 <div className="wg-write-actions">
                   <button
                     type="button"
-                    className="wg-write-cancel"
+                    className="wg-write-cancel btn-glass"
                     onClick={() => { setWgHatch(false); setWgText(""); }}
                   >
                     Back to the two options
                   </button>
                   <button
                     type="button"
-                    className="wg-write-send"
+                    className="wg-write-send btn-metal"
                     disabled={wgSaving || !wgText.trim()}
                     onClick={() => answerWorkingGenius("neither")}
                   >
@@ -2083,19 +2089,10 @@ function Reflections({
             <div>
               <button
                 type="button"
+                className="btn-metal"
                 onClick={startWorkingGenius}
                 disabled={!userEmail}
-                style={{
-                  padding: "12px 22px",
-                  borderRadius: 999,
-                  border: "none",
-                  background: C.accent,
-                  color: "#04121f",
-                  fontWeight: 700,
-                  fontSize: 14.5,
-                  cursor: userEmail ? "pointer" : "not-allowed",
-                  opacity: userEmail ? 1 : 0.5,
-                }}
+                style={{ padding: "12px 22px", fontSize: 14.5, fontWeight: 700 }}
               >
                 {wgLegacy ? "Retake it properly" : "Start"}
               </button>
@@ -2164,7 +2161,7 @@ function SprintRecord({
         {!nothingYet && (
           <button
             type="button"
-            className="record-print"
+            className="record-print btn-glass"
             onClick={() => window.print()}
           >
             Print or save as PDF
@@ -2712,8 +2709,8 @@ function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision
         <button
           type="button"
           onClick={() => onClose(d)}
-          className="navitem"
-          style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+          className="btn-glass"
+          style={{ padding: "7px 12px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}
         >
           Mark closed
         </button>
@@ -2836,6 +2833,7 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
     <div className="rise" style={{ maxWidth: 640, margin: "0 auto", padding: "26px 28px 90px" }}>
       <button
         onClick={onBack}
+        className="btn-glass"
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -2845,16 +2843,9 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
           marginBottom: 22,
           minHeight: 46,
           padding: "11px 18px",
-          borderRadius: 13,
-          border: `1px solid rgba(255,255,255,0.16)`,
-          background: "rgba(255,255,255,0.05)",
-          color: C.white,
-          cursor: "pointer",
           fontSize: 14,
-          fontWeight: 600,
           lineHeight: 1,
           letterSpacing: 0.25,
-          boxShadow: "0 8px 20px rgba(0,0,0,0.28)",
         }}
       >
         <span
@@ -3020,21 +3011,124 @@ const CSS = `
 .thread-delete:focus-visible { opacity: 1; outline: 2px solid var(--brand-accent); outline-offset: 1px; }
 @media (hover: none) { .thread-delete { opacity: 0.5; } }
 
+/* ---- Buttons ---------------------------------------------------------------
+   Two materials, and the tier is read off the material rather than off a
+   colour.
+
+   .btn-metal is the primary: brushed steel, a fixed gradient of greys that
+   sweeps across the face on hover. The supplied component drives that surface
+   with a WebGL shader from @paper-design/shaders and runs it permanently at
+   speed 0.6. Neither is here: a renderer plus a shader bundle for one button
+   is a lot of weight, and a face that never stops moving would compete with
+   the mascot, the composer and the deadline column all at once. A
+   background-position transition on a multi-stop gradient sweeps the same way
+   and only moves under the pointer.
+
+   .btn-glass is the secondary: no fill, a rim built entirely from layered
+   inset shadows, and the page behind it refracted. That shadow stack is
+   carried over from the supplied component almost unchanged, because it is the
+   component.
+
+   Neither carries the accent. Red still marks state — focus, overdue, the
+   destructive confirm — where it means something. */
+.btn-metal, .btn-glass {
+  position: relative;
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-metal {
+  padding: 10px 20px;
+  font-size: 14px;
+  color: oklch(18% 0.008 250);
+  background: linear-gradient(
+    104deg,
+    #6e737d 0%, #b9bec7 12%, #f2f4f7 22%, #9aa0aa 34%,
+    #d7dbe1 46%, #7c828c 58%, #eef0f4 70%, #a7adb7 82%, #6e737d 100%
+  );
+  /* Wider than the button, so the sweep has somewhere to go. */
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 9px 9px rgba(0, 0, 0, 0.12),
+    0 2px 5px rgba(0, 0, 0, 0.15);
+  transition:
+    background-position 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+.btn-metal:hover:not(:disabled) { background-position: 100% 50%; }
+.btn-metal:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 2px 4px rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.btn-glass {
+  padding: 9px 16px;
+  font-size: 13px;
+  color: var(--ink);
+  background: none;
+  backdrop-filter: url("#btn-glass");
+  -webkit-backdrop-filter: url("#btn-glass");
+  box-shadow:
+    0 0 8px rgba(0, 0, 0, 0.03),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    inset 3px 3px 0.5px -3.5px rgba(255, 255, 255, 0.09),
+    inset -3px -3px 0.5px -3.5px rgba(255, 255, 255, 0.85),
+    inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.6),
+    inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.6),
+    inset 0 0 6px 6px rgba(255, 255, 255, 0.12),
+    inset 0 0 2px 2px rgba(255, 255, 255, 0.06),
+    0 0 12px rgba(0, 0, 0, 0.15);
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1), color 160ms ease;
+}
+.btn-glass:hover:not(:disabled) { transform: scale(1.05); }
+.btn-glass:active:not(:disabled) { transform: scale(0.98); }
+.btn-metal:disabled, .btn-glass:disabled { opacity: 0.5; cursor: default; }
+.btn-metal:focus-visible, .btn-glass:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-metal, .btn-glass { transition: none; }
+  .btn-metal:hover:not(:disabled) { background-position: 0% 50%; }
+  .btn-glass:hover:not(:disabled), .btn-glass:active:not(:disabled) { transform: none; }
+}
+
 /* Deadline checkboxes.
    The browser default paints an unchecked box as a filled white square, which
-   on this sidebar reads as the loudest thing in the column — louder than the
+   on this sidebar reads as the loudest thing in the column, louder than the
    overdue label it sits next to. accentColor only styles the checked state, so
-   the unchecked one has to be drawn. */
+   the unchecked one has to be drawn.
+
+   The mark is the tick path from the supplied component, carried over as a
+   mask rather than redrawn: it is a real glyph with a long tail and a slight
+   lift at the end, where the previous version was two CSS borders rotated 45
+   degrees. At 16px that difference is the whole character of the control.
+
+   A mask, not a background image, because the path then takes currentColor and
+   the same rule works whatever the box is filled with. The page's CSP allows
+   img-src 'self' data:, which is what governs this. */
 .deadline-check {
   appearance: none;
   -webkit-appearance: none;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   margin: 0;
   flex-shrink: 0;
-  border: 1.5px solid var(--line-strong);
+  border: 1px solid var(--line-strong);
   border-radius: 4px;
   background: transparent;
+  /* The supplied component's shadow-sm shadow-black/5. Barely there, and it is
+     what stops the box reading as a hole punched in the row. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   cursor: inherit;
   display: grid;
   place-items: center;
@@ -3042,15 +3136,28 @@ const CSS = `
 }
 .deadline-check:hover:not(:disabled) { border-color: var(--brand-accent); }
 .deadline-check:checked { background: var(--brand-accent); border-color: var(--brand-accent); }
-.deadline-check:checked::after {
+.deadline-check::after {
   content: "";
-  width: 3.5px;
-  height: 7px;
-  border: solid oklch(13% 0.008 250);
-  border-width: 0 2px 2px 0;
-  transform: translateY(-1px) rotate(45deg);
+  width: 9px;
+  height: 9px;
+  /* Nothing to show until it is ticked; the box is drawn by the input. */
+  background: currentColor;
+  color: transparent;
+  -webkit-mask-image: url("data:image/svg+xml,<svg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%209%209'><path%20fill-rule='evenodd'%20clip-rule='evenodd'%20d='M8.53547%200.62293C8.88226%200.849446%208.97976%201.3142%208.75325%201.66099L4.5083%208.1599C4.38833%208.34356%204.19397%208.4655%203.9764%208.49358C3.75883%208.52167%203.53987%208.45309%203.3772%208.30591L0.616113%205.80777C0.308959%205.52987%200.285246%205.05559%200.563148%204.74844C0.84105%204.44128%201.31533%204.41757%201.62249%204.69547L3.73256%206.60459L7.49741%200.840706C7.72393%200.493916%208.18868%200.396414%208.53547%200.62293Z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%209%209'><path%20fill-rule='evenodd'%20clip-rule='evenodd'%20d='M8.53547%200.62293C8.88226%200.849446%208.97976%201.3142%208.75325%201.66099L4.5083%208.1599C4.38833%208.34356%204.19397%208.4655%203.9764%208.49358C3.75883%208.52167%203.53987%208.45309%203.3772%208.30591L0.616113%205.80777C0.308959%205.52987%200.285246%205.05559%200.563148%204.74844C0.84105%204.44128%201.31533%204.41757%201.62249%204.69547L3.73256%206.60459L7.49741%200.840706C7.72393%200.493916%208.18868%200.396414%208.53547%200.62293Z'/></svg>");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transition: color 120ms ease;
 }
-.deadline-check:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.deadline-check:checked::after { color: oklch(13% 0.008 250); }
+.deadline-check:focus-visible {
+  /* offset-2, from the supplied component. It clears the 4px radius, where an
+     offset of 0 would trace the corners and look broken. */
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
 /* ---- Composer placeholder --------------------------------------------------
@@ -3155,17 +3262,11 @@ const CSS = `
    account to read it later, and a PDF is the one format that outlives the
    programme without anything being built to serve it. */
 .record-print {
+  /* Positioning only. The material comes from .btn-glass, which this carries
+     alongside. */
+  align-self: flex-start;
   min-height: 34px;
-  padding: 0 12px;
-  border-radius: 9px;
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  color: inherit;
-  font: 600 12.5px/1 var(--font-family);
-  cursor: pointer;
 }
-.record-print:hover { background: rgba(255,255,255,.06); }
-.record-print:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 @media print {
   /* Only the record prints. Everything else on this page is navigation or
@@ -3224,18 +3325,14 @@ const CSS = `
   font: 400 13px/1 var(--font-family);
 }
 .quick-note input:focus { outline: none; border-color: var(--brand-accent); }
+/* The confirm on this strip, so it wears the primary material. It used to be
+   flat white: a solid accent on a routine save read as destructive once the
+   accent went red, and flat white then read as nothing at all. */
 .quick-note button {
   flex: 0 0 auto;
   min-height: 38px;
-  padding: 0 14px;
-  border-radius: 9px;
-  border: none;
-  /* White, like every other confirm here. A solid accent on a routine save
-     read as destructive once the accent went red. */
-  background: var(--ink);
-  color: oklch(13% 0.008 250);
+  padding: 0 16px;
   font: 700 12.5px/1 var(--font-family);
-  cursor: pointer;
 }
 /* The strip is the touch surface, so its controls get the 44px the rest of the
    app already treats as the floor. The row scrolls rather than shrinking the
