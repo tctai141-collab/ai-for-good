@@ -1334,6 +1334,235 @@ import App from "../components/App";
     }
   }
 
+  /* ── Working Genius quiz ──
+     The question is text on the ground; the answers are the only surfaces. It
+     used to be three near-identical cards, same padding, same radius, same
+     border, two pixels apart in size, thirty times in a row. */
+  .wg-preamble {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink-sub);
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+  .wg-ask { margin: 6px 0 4px; }
+  .wg-kicker {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    /* Constant on every item, so it can be quiet. */
+    color: var(--ink-faint, rgba(255, 255, 255, 0.38));
+  }
+  .wg-prompt {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(1.35rem, 3.4vw, 1.75rem);
+    font-weight: 600;
+    line-height: 1.18;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    text-wrap: balance;
+  }
+  /* The gap is the hierarchy. */
+  .wg-options {
+    display: grid;
+    gap: 12px;
+    margin-top: 30px;
+  }
+
+  .wg-option {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    isolation: isolate;
+    transition: transform 160ms var(--ease-out-quart), filter 160ms var(--ease-out-quart);
+  }
+  .wg-option:disabled { cursor: progress; opacity: 0.55; }
+  .wg-option:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.06); }
+  .wg-option:not(:disabled):active { transform: translateY(1px); }
+  /* Must be clearly visible against glass, which eats a subtle ring. */
+  .wg-option:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 3px;
+  }
+
+  /* The refracting pane. Tinted, because refracting a near-black ground
+     returns near-black: the tint is what makes it read as glass at all, and
+     the bevel below does nearly all the rest of the visible work. */
+  .wg-option-pane {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.055);
+    backdrop-filter: url("#wg-glass");
+    -webkit-backdrop-filter: url("#wg-glass");
+  }
+  .wg-option-bevel {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      0 0 8px rgba(0, 0, 0, 0.03),
+      0 2px 6px rgba(0, 0, 0, 0.08),
+      inset 3px 3px 0.5px -3.5px rgba(255, 255, 255, 0.09),
+      inset -3px -3px 0.5px -3.5px rgba(255, 255, 255, 0.85),
+      inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.6),
+      inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.6),
+      inset 0 0 6px 6px rgba(255, 255, 255, 0.12),
+      inset 0 0 2px 2px rgba(255, 255, 255, 0.06),
+      0 0 12px rgba(0, 0, 0, 0.15);
+  }
+  /* Raised above the pane. Underneath it the text is refracted along with the
+     background and becomes unreadable, which this codebase has done once
+     already. */
+  .wg-option-body {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+    /* Options size to their content: forcing equal heights on uneven text
+       reads as a formatting bug. */
+    padding: 15px 17px;
+  }
+  .wg-option-label {
+    font-size: 15.5px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--color-text);
+  }
+  /* A small glass token, so the two answers are told apart at a glance and
+     have something to name in a keyboard shortcut. */
+  .wg-option-key {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    margin-top: 1px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.55),
+      inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.45);
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: var(--ink-sub);
+  }
+
+  /* Selected. Brighten the pane and ring it: border colour alone was the weak
+     tell the old version relied on. */
+  .wg-option.is-picked .wg-option-pane { background: rgba(255, 255, 255, 0.13); }
+  .wg-option.is-picked .wg-option-bevel { box-shadow: 0 0 0 2px var(--brand-accent), 0 0 18px rgba(232, 23, 10, 0.28); }
+  .wg-option.is-picked .wg-option-key { color: var(--color-text); }
+
+  .wg-option--hatch .wg-option-label { color: var(--ink-sub); font-weight: 500; }
+  .wg-option--hatch.is-open .wg-option-bevel { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.3); }
+
+  /*
+   * The writing surface: recessed, not raised.
+   *
+   * Same material as the options and the opposite affordance. A pane reads as
+   * something to click; an inset reads as somewhere to type.
+   */
+  .wg-write {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    box-shadow:
+      inset 0 2px 6px rgba(0, 0, 0, 0.6),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  }
+  .wg-write-label {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint, rgba(255, 255, 255, 0.38));
+  }
+  .wg-write-box {
+    display: block;
+    width: 100%;
+    /* One line that grows. A large empty textarea reads as homework and gets
+       skipped, which is how you end up with the word "both". */
+    min-height: 1.6em;
+    max-height: 180px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.55;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+  }
+  .wg-write-box::placeholder { color: rgba(255, 255, 255, 0.26); }
+  .wg-write-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .wg-write-cancel {
+    border: 0;
+    background: transparent;
+    color: var(--ink-faint, rgba(255, 255, 255, 0.4));
+    font-family: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    padding: 6px 4px;
+  }
+  .wg-write-cancel:hover { color: var(--color-text); }
+  .wg-write-send {
+    min-height: 34px;
+    padding: 7px 16px;
+    border: 0;
+    border-radius: 9px;
+    background: var(--brand-accent);
+    color: oklch(13% 0.008 250);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .wg-write-send:disabled { opacity: 0.4; cursor: default; }
+  .wg-write-cancel:focus-visible,
+  .wg-write-send:focus-visible,
+  .wg-write-box:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+  }
+
+  /* Present for its <defs>, never painted. */
+  .glass-filter {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
   /* ── Working Genius quiz ── */
   .wg-quiz-option {
     position: relative;
@@ -1906,9 +2135,23 @@ import App from "../components/App";
     .persistent-buddy,
     .cube,
     .wg-quiz-option,
-    .wg-quiz-option::after {
+    .wg-quiz-option::after,
+    /* Every new animated class on the assessment. The .wg-quiz-option entries
+       above are the precedent; these are its replacements. */
+    .wg-option,
+    .wg-option-pane,
+    .wg-option-bevel,
+    .wg-write,
+    .wg-write-box {
       transition: none !important;
       animation: none !important;
+    }
+    /* The lift on hover is a transform, so switching transitions off leaves it
+       still jumping. Park it. */
+    .wg-option:not(:disabled):hover,
+    .wg-option:not(:disabled):active {
+      transform: none !important;
+      filter: none !important;
     }
     /* The cube's rotation is a JS-driven transform, so it needs parking
        explicitly rather than just having its animation switched off. */

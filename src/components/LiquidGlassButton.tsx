@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes } from "react";
+import GlassFilter from "./GlassFilter";
 
 /**
  * The liquid glass button.
@@ -37,47 +38,11 @@ export default function LiquidGlassButton({ children, className, ...rest }: Prop
       <span className="glass-button-pane" aria-hidden="true" />
       <span className="glass-button-bevel" aria-hidden="true" />
       <span className="glass-button-label">{children}</span>
-      <GlassFilter />
+      {/* Shared, and named explicitly. This used to be defined inline below,
+          with a note that a second copy on the page would be the thing to fix.
+          The assessment now puts several glass surfaces on one screen, so it
+          moved into its own component and each family names its own id. */}
+      <GlassFilter id="sprint-glass" />
     </button>
-  );
-}
-
-/**
- * The filter itself. Rendered inside the button rather than once at the root
- * because there is exactly one of these on the page; if a second ever appears,
- * the duplicate id is the thing to fix, and having it here makes that obvious
- * rather than leaving an orphan <svg> in a layout nobody reads.
- *
- * backdrop-filter: url() is a real capability, not a fallback that quietly
- * does nothing: verified rendering in Chrome 151. Where it is unsupported the
- * pane simply stays transparent and the bevel still draws the button, so
- * nothing becomes unreadable or unclickable.
- */
-function GlassFilter() {
-  return (
-    <svg className="glass-button-filter" aria-hidden="true" focusable="false">
-      <defs>
-        <filter
-          id="sprint-glass"
-          x="0%"
-          y="0%"
-          width="100%"
-          height="100%"
-          colorInterpolationFilters="sRGB"
-        >
-          <feTurbulence type="fractalNoise" baseFrequency="0.05 0.05" numOctaves={1} seed={1} result="noise" />
-          <feGaussianBlur in="noise" stdDeviation="2" result="softNoise" />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="softNoise"
-            scale="18"
-            xChannelSelector="R"
-            yChannelSelector="B"
-            result="displaced"
-          />
-          <feGaussianBlur in="displaced" stdDeviation="1.5" />
-        </filter>
-      </defs>
-    </svg>
   );
 }

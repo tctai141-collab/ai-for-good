@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
+  INSTRUMENT_PREAMBLE,
   WORKING_GENIUS_ITEMS,
   WORKING_GENIUS_TYPES,
   bandCopy,
@@ -9,14 +10,17 @@ import {
   nextRetakeDate,
   retakeOpen,
   typeById,
+  type WorkingGeniusAnswer,
   type WorkingGeniusBand,
   type WorkingGeniusId,
   type WorkingGeniusResult,
 } from "../lib/workingGenius";
+import { MAX_WG_TEXT_CHARS } from "../lib/limits";
 import type { Checkin, UserData } from "../lib/persistence";
 import { advisorErrorMessage } from "../lib/advisor-errors";
 import TextShimmer from "./TextShimmer";
 import InteractiveHoverButton from "./InteractiveHoverButton";
+import GlassFilter from "./GlassFilter";
 
 function formatMarkdown(text: string): string {
   let out = text
@@ -1661,7 +1665,11 @@ function Reflections({
 
   const [wgStarted, setWgStarted] = useState(false);
   const [wgIndex, setWgIndex] = useState(0);
-  const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusId>>({});
+  const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusAnswer>>({});
+  /* The open box for the current item, kept out of `wgAnswers` until it is
+     committed so that typing does not re-render every option on every key. */
+  const [wgText, setWgText] = useState("");
+  const [wgHatch, setWgHatch] = useState(false);
   const [wgSaving, setWgSaving] = useState(false);
   const [wgError, setWgError] = useState<string | null>(null);
   /** Set when the server refuses because the window is shut. Not retryable. */
@@ -1669,7 +1677,7 @@ function Reflections({
 
   const wgItem = WORKING_GENIUS_ITEMS[wgIndex];
 
-  const submitWorkingGenius = async (answers: Record<string, WorkingGeniusId>) => {
+  const submitWorkingGenius = async (answers: Record<string, WorkingGeniusAnswer>) => {
     if (!userEmail) return;
     setWgSaving(true);
     setWgError(null);
@@ -1699,10 +1707,27 @@ function Reflections({
     }
   };
 
-  const answerWorkingGenius = (choice: WorkingGeniusId) => {
+  /**
+   * Commits an answer and moves on.
+   *
+   * Whatever is in the open box goes with it, whether they picked an option or
+   * took the "neither" hatch. Text alongside a real choice is context; text
+   * with "neither" is the answer. The server decides which type either one
+   * describes, once, at submission.
+   */
+  const answerWorkingGenius = (choice: WorkingGeniusId | "neither") => {
     if (!wgItem || wgSaving) return;
-    const next = { ...wgAnswers, [wgItem.id]: choice };
+    const typed = wgText.trim();
+    /* "Neither" with nothing written is not an answer, it is a skipped
+       question. The box is the whole point of that option. */
+    if (choice === "neither" && !typed) return;
+
+    const answer: WorkingGeniusAnswer = { choice, ...(typed ? { text: typed } : {}) };
+    const next = { ...wgAnswers, [wgItem.id]: answer };
     setWgAnswers(next);
+    setWgText("");
+    setWgHatch(false);
+
     if (wgIndex + 1 >= WORKING_GENIUS_ITEMS.length) {
       void submitWorkingGenius(next);
     } else {
@@ -1710,8 +1735,20 @@ function Reflections({
     }
   };
 
+  /* Going back restores what they wrote, so Back is a revision rather than a
+     way to lose a sentence you spent a minute on. */
+  const backWorkingGenius = () => {
+    const previous = WORKING_GENIUS_ITEMS[wgIndex - 1];
+    const saved = previous ? wgAnswers[previous.id] : undefined;
+    setWgText(saved?.text ?? "");
+    setWgHatch(saved?.choice === "neither");
+    setWgIndex(wgIndex - 1);
+  };
+
   const startWorkingGenius = () => {
     setWgAnswers({});
+    setWgText("");
+    setWgHatch(false);
     setWgIndex(0);
     setWgError(null);
     setWgStarted(true);
@@ -1879,7 +1916,7 @@ function Reflections({
               {wgIndex > 0 && (
                 <button
                   type="button"
-                  onClick={() => setWgIndex(wgIndex - 1)}
+                  onClick={backWorkingGenius}
                   style={{ background: "none", border: "none", color: C.faint, fontSize: 12.5, cursor: "pointer", padding: 0 }}
                 >
                   ← Back
@@ -1889,18 +1926,26 @@ function Reflections({
             <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
               <div style={{ width: `${(wgIndex / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.accent, transition: "width 200ms ease" }} />
             </div>
-            <div
-              style={{
-                padding: "16px 18px",
-                borderRadius: 14,
-                border: `1px solid ${C.line}`,
-                background: "rgba(255,255,255,0.03)",
-                boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.02)",
-              }}
-            >
-              <p style={{ margin: 0, fontSize: 18, fontWeight: 600, color: C.ink }}>{wgItem.prompt}</p>
+
+            {wgIndex === 0 && (
+              <p className="wg-preamble">{INSTRUMENT_PREAMBLE}</p>
+            )}
+
+            {/*
+              * The question is not a card.
+              *
+              * It used to be: same padding, same radius, same border and the
+              * same weight as the options, two pixels apart in size. Nothing
+              * told the eye which one was being asked and which were the things
+              * to click, thirty times in a row. It is display type on the
+              * ground now, and the answers are the only surfaces on screen.
+              */}
+            <div className="wg-ask">
+              <span className="wg-kicker">Which one pulls you?</span>
+              <p className="wg-prompt">{wgItem.prompt}</p>
             </div>
-            <div style={{ display: "grid", gap: 12 }}>
+
+            <div className="wg-options">
               {/*
                 * The option's type is deliberately not labelled here. The old
                 * quiz printed "WONDER" above each choice, which told the
@@ -1908,34 +1953,101 @@ function Reflections({
                 * instrument into a self-portrait. The types appear in the
                 * result, where knowing them costs nothing.
                 */}
-              {wgItem.options.map((option) => {
-                const picked = wgAnswers[wgItem.id] === option.id;
+              {wgItem.options.map((option, i) => {
+                const picked = wgAnswers[wgItem.id]?.choice === option.id;
+                const key = i === 0 ? "A" : "B";
                 return (
                   <button
                     key={option.id}
                     type="button"
                     disabled={wgSaving}
                     onClick={() => answerWorkingGenius(option.id)}
-                    className="wg-quiz-option"
-                    style={{
-                      textAlign: "left",
-                      padding: "16px 18px",
-                      borderRadius: 14,
-                      border: `1px solid ${picked ? C.accent : C.line}`,
-                      background: picked ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.25)",
-                      color: C.ink,
-                      fontSize: 16,
-                      fontWeight: 600,
-                      cursor: wgSaving ? "progress" : "pointer",
-                      opacity: wgSaving ? 0.6 : 1,
-                      transition: "transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease",
-                    }}
+                    className={`wg-option${picked ? " is-picked" : ""}`}
+                    aria-keyshortcuts={key}
                   >
-                    {option.label}
+                    <span className="wg-option-pane" aria-hidden="true" />
+                    <span className="wg-option-bevel" aria-hidden="true" />
+                    <span className="wg-option-body">
+                      <span className="wg-option-key" aria-hidden="true">{key}</span>
+                      <span className="wg-option-label">{option.label}</span>
+                    </span>
                   </button>
                 );
               })}
+
+              {/*
+                * The escape hatch, and deliberately the third option rather
+                * than a box on every item. If every question demands typing,
+                * completion craters and what comes back is the word "both",
+                * which is less informative than a forced choice.
+                */}
+              <button
+                type="button"
+                disabled={wgSaving}
+                onClick={() => setWgHatch(true)}
+                className={`wg-option wg-option--hatch${wgHatch ? " is-open" : ""}`}
+                aria-expanded={wgHatch}
+              >
+                <span className="wg-option-pane" aria-hidden="true" />
+                <span className="wg-option-bevel" aria-hidden="true" />
+                <span className="wg-option-body">
+                  <span className="wg-option-key" aria-hidden="true">C</span>
+                  <span className="wg-option-label">Neither, or it depends. Here is what I actually do:</span>
+                </span>
+              </button>
             </div>
+
+            {/*
+              * Recessed rather than raised: an inset reads as somewhere to type,
+              * a pane reads as something to click. Same material, opposite
+              * affordance.
+              *
+              * One line that grows. A large empty textarea reads as homework
+              * and gets skipped.
+              */}
+            <div className={`wg-write${wgHatch ? " is-open" : ""}`}>
+              <label className="wg-write-label" htmlFor="wg-text">
+                {wgHatch ? "What actually happens?" : "Want to add context? (optional)"}
+              </label>
+              <textarea
+                id="wg-text"
+                className="wg-write-box"
+                rows={1}
+                value={wgText}
+                maxLength={MAX_WG_TEXT_CHARS}
+                onChange={(e) => {
+                  setWgText(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
+                }}
+                placeholder="e.g. I usually wait to see if someone else steps up, then take over if nobody does."
+              />
+              {wgHatch && (
+                <div className="wg-write-actions">
+                  <button
+                    type="button"
+                    className="wg-write-cancel"
+                    onClick={() => { setWgHatch(false); setWgText(""); }}
+                  >
+                    Back to the two options
+                  </button>
+                  <button
+                    type="button"
+                    className="wg-write-send"
+                    disabled={wgSaving || !wgText.trim()}
+                    onClick={() => answerWorkingGenius("neither")}
+                  >
+                    {wgIndex + 1 >= WORKING_GENIUS_ITEMS.length ? "Finish" : "Next"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* One instance for the quiz, with its own id. Filter ids are
+                global to the document; two families sharing one is how a pane
+                silently loses its refraction when the other unmounts. */}
+            <GlassFilter id="wg-glass" />
+
             {wgSaving && (
               <p style={{ margin: 0, fontSize: 13, color: C.faint }}>Scoring…</p>
             )}
