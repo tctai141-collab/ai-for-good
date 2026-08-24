@@ -45,6 +45,7 @@ import App from "../components/App";
      * palette is supposed to avoid.
      */
     --brand-accent: #e8170a;
+    --color-cube-face: oklch(8% 0.008 250);
 
     /* ── Surfaces (OKLCH, tinted toward Aalto Blue at low chroma) ── */
     --surface-bg: oklch(11% 0.008 250);
@@ -173,87 +174,14 @@ import App from "../components/App";
       radial-gradient(circle at 24% 48%, rgba(255, 255, 255, 0.13), transparent 18rem),
       var(--color-bg);
   }
-  /* ---- Sprint Buddy -----------------------------------------------------
-     The mascot: a rounded body with two eyes that follow the cursor.
+  /* The kinetic lattice. Sits under the page's own gradients and the sign-in
+     card, and can never intercept a click on the form.
 
-     Rebuilt from a supplied component that used a WebGL shader for the fill
-     and framer-motion for the movement. The fill is three drifting radial
-     gradients and the movement is two keyframes and a transition, so there is
-     no dependency, no canvas and nothing for the CSP to allow. */
-  .buddy {
-    display: grid;
-    place-items: center;
-    animation: buddy-float 2.8s ease-in-out infinite;
-    transform-origin: top center;
-  }
-  .buddy-svg {
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-  }
-
-  .buddy-fill {
-    width: 100%;
-    height: 100%;
-    /* Three blobs of colour on slow, unequal drifts. Unequal on purpose: match
-       the periods and the whole thing pulses like a heartbeat instead of
-       moving like weather. */
-    background:
-      radial-gradient(60% 55% at 28% 26%, rgba(232, 23, 10, 0.95), transparent 70%),
-      radial-gradient(55% 50% at 76% 38%, rgba(247, 225, 89, 0.55), transparent 68%),
-      radial-gradient(70% 60% at 50% 88%, rgba(232, 23, 10, 0.55), transparent 72%),
-      linear-gradient(165deg, oklch(28% 0.06 25), oklch(13% 0.02 25));
-    background-size: 180% 180%, 170% 170%, 190% 190%, 100% 100%;
-    animation: buddy-drift 17s ease-in-out infinite alternate;
-  }
-
-  .buddy-eyes {
-    /* The overshoot-and-settle of a spring, without the library that had one. */
-    transition: transform .45s cubic-bezier(.22, 1.4, .36, 1);
-  }
-  .buddy-eye {
-    fill: oklch(12% 0.01 25);
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: buddy-blink 5.2s infinite ease-in-out;
-  }
-  /* A hair out of step, so the blink reads as a face and not as a machine. */
-  .buddy-eye--right { animation-delay: .06s; }
-
-  /* One eye only: that is what makes it a wink rather than a blink.
-     Its own keyframe, not buddy-blink at a shorter duration: buddy-blink is
-     shut for 4% of its cycle, which is 208ms over 5.2s and a single frame over
-     half a second. Reusing it made the wink literally invisible. */
-  .buddy--wink .buddy-eye--right { animation: buddy-wink .52s 1 ease-in-out; }
-  .buddy--wink .buddy-eye:not(.buddy-eye--right) { animation: none; }
-
-  @keyframes buddy-float {
-    0%, 100% { transform: translateY(0) scaleY(1); }
-    50% { transform: translateY(-8px) scaleY(1.03); }
-  }
-  @keyframes buddy-drift {
-    0% { background-position: 0% 0%, 100% 0%, 50% 100%, 0 0; }
-    50% { background-position: 100% 40%, 0% 70%, 20% 0%, 0 0; }
-    100% { background-position: 30% 100%, 60% 20%, 100% 60%, 0 0; }
-  }
-  @keyframes buddy-blink {
-    0%, 92%, 100% { transform: scaleY(1); }
-    96% { transform: scaleY(.08); }
-  }
-  @keyframes buddy-wink {
-    0%, 100% { transform: scaleY(1); }
-    25%, 62% { transform: scaleY(.08); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .buddy, .buddy-fill, .buddy-eye { animation: none; }
-    .buddy-eyes { transition: none; }
-  }
-
-  /* The animated mesh. Sits under the page's own gradients and the sign-in
-     card, and can never intercept a click on the form. */
-  .constellation-field {
-    position: absolute;
+     Fixed rather than absolute: the canvas is sized to the viewport, so
+     anchoring it to the scrolling box would leave it misplaced the moment the
+     login screen is taller than the window. */
+  .kinetic-grid {
+    position: fixed;
     inset: 0;
     z-index: -1;
     display: block;
@@ -307,6 +235,12 @@ import App from "../components/App";
     perspective: 900px;
     pointer-events: none;
   }
+  /* Registered, so they interpolate. An unregistered custom property is a
+     string to the animation engine and would snap between keyframes. */
+  @property --flow-a { syntax: "<length>"; inherits: true; initial-value: 0px; }
+  @property --flow-b { syntax: "<length>"; inherits: true; initial-value: 0px; }
+  @property --flow-c { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
   .headline-line {
     /* positioned, so each letter's offsetLeft is measured against this line
        rather than against some ancestor further up */
@@ -315,6 +249,30 @@ import App from "../components/App";
     align-items: baseline;
     transform-style: preserve-3d;
     white-space: pre;
+    /* The drift lives on the line and is inherited, so all twelve letters read
+       the same value and the blobs cross them as one. */
+    animation:
+      flow-a 13s ease-in-out infinite alternate,
+      flow-b 19s ease-in-out infinite alternate,
+      flow-c 23s ease-in-out infinite alternate;
+  }
+  /* Distances are fractions of the line, written as calc against --lw rather
+     than as percentages. The properties are registered as <length>, so a
+     percentage keyframe is an invalid value and is dropped silently: the
+     first version of this animated nothing and held at 0px. Percentages would
+     also have resolved per letter against that letter's own box, which is the
+     opposite of the one continuous sheet --x exists to build. */
+  @keyframes flow-a {
+    from { --flow-a: calc(var(--lw, 100vw) * -0.12); }
+    to { --flow-a: calc(var(--lw, 100vw) * 0.88); }
+  }
+  @keyframes flow-b {
+    from { --flow-b: calc(var(--lw, 100vw) * 0.92); }
+    to { --flow-b: calc(var(--lw, 100vw) * 0.04); }
+  }
+  @keyframes flow-c {
+    from { --flow-c: calc(var(--lw, 100vw) * 0.34); }
+    to { --flow-c: calc(var(--lw, 100vw) * -0.18); }
   }
   .headline-letter {
     display: inline-block;
@@ -329,19 +287,42 @@ import App from "../components/App";
     font-size: clamp(2.2rem, 13.2vw, 13rem);
     line-height: 1;
     letter-spacing: -0.035em;
-    /* Each letter carries the glass itself rather than inheriting a fill
-       clipped to the parent's text: split into spans, the parent has no text
-       of its own to clip to. The gradient is vertical and every letter is the
-       same height, so per-letter and across-the-line look identical. */
+    /* Each letter carries its own fill rather than inheriting one clipped to
+       the parent's text: split into spans, the parent has no text of its own
+       to clip to.
+
+       Three blobs of light drifting at different rates over the vertical
+       glass gradient. Unequal rates on purpose: match them and the whole line
+       pulses in time instead of flowing.
+
+       --lw and --x are set from JS and are what make this one sheet rather
+       than twelve. Every letter's background is sized to the full line and
+       shifted back by that letter's offset, so the slices line up and a blob
+       crosses the phrase continuously instead of restarting at each glyph. */
     color: transparent;
-    background: linear-gradient(
-      172deg,
-      rgba(255, 255, 255, 0.95) 0%,
-      rgba(255, 255, 255, 0.62) 26%,
-      rgba(255, 255, 255, 0.28) 52%,
-      rgba(253, 99, 96, 0.34) 78%,
-      rgba(232, 23, 10, 0.5) 100%
-    );
+    background-image:
+      radial-gradient(closest-side, rgba(255, 255, 255, 1), transparent 100%),
+      radial-gradient(closest-side, rgba(214, 216, 222, 0.85), transparent 100%),
+      radial-gradient(closest-side, rgba(255, 255, 255, 0.6), transparent 100%),
+      linear-gradient(
+        172deg,
+        rgba(255, 255, 255, 0.92) 0%,
+        rgba(226, 228, 234, 0.7) 30%,
+        rgba(154, 158, 168, 0.5) 58%,
+        rgba(92, 96, 105, 0.42) 82%,
+        rgba(58, 61, 68, 0.4) 100%
+      );
+    background-repeat: no-repeat;
+    background-size:
+      calc(var(--lw, 100%) * 0.42) 190%,
+      calc(var(--lw, 100%) * 0.34) 220%,
+      calc(var(--lw, 100%) * 0.5) 170%,
+      var(--lw, 100%) 100%;
+    background-position:
+      calc(var(--flow-a) - var(--x, 0px)) 18%,
+      calc(var(--flow-b) - var(--x, 0px)) 82%,
+      calc(var(--flow-c) - var(--x, 0px)) 46%,
+      calc(0px - var(--x, 0px)) center;
     -webkit-background-clip: text;
     background-clip: text;
     /* The rim, drawn under the fill so it reads as the edge of the glass. It
@@ -349,10 +330,12 @@ import App from "../components/App";
        ground once the fill has faded out. */
     -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.34);
     paint-order: stroke fill;
+    /* Monochrome throughout, per Tai. The brand red lives on the sign-in
+       button and the mascot; on the headline it fought both. */
     filter:
-      drop-shadow(0 1px 0 rgba(255, 255, 255, 0.18))
-      drop-shadow(0 0 26px rgba(232, 23, 10, 0.18))
-      drop-shadow(0 18px 34px rgba(0, 0, 0, 0.55));
+      drop-shadow(0 1px 0 rgba(255, 255, 255, 0.2))
+      drop-shadow(0 0 30px rgba(255, 255, 255, 0.12))
+      drop-shadow(0 18px 34px rgba(0, 0, 0, 0.6));
     /* Settles rather than snaps when the cursor leaves. Short enough to still
        feel attached to the pointer while it is moving. */
     transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -360,8 +343,15 @@ import App from "../components/App";
   }
   @media (prefers-reduced-motion: reduce) {
     /* The bend is not attached at all in this case; this covers the
-       transition on anything already inline-styled. */
+       transition on anything already inline-styled, and holds the liquid
+       still on a frame that still has all three blobs on the line. */
     .headline-letter { transition: none; }
+    .headline-line {
+      animation: none;
+      --flow-a: calc(var(--lw, 100vw) * 0.22);
+      --flow-b: calc(var(--lw, 100vw) * 0.62);
+      --flow-c: calc(var(--lw, 100vw) * 0.08);
+    }
   }
 
   .login-panel {
@@ -443,7 +433,7 @@ import App from "../components/App";
     opacity: 0.72;
     transform: scale(1);
   }
-  .persistent-buddy--docked .buddy {
+  .persistent-buddy--docked .cube {
     cursor: pointer;
   }
   .buddy-tip {
@@ -903,6 +893,101 @@ import App from "../components/App";
     50% {
       opacity: 0.7;
     }
+  }
+
+  /* ── Cube Styles (shared hero + compact) ── */
+  .cube {
+    position: relative;
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  .cube--hero {
+    width: var(--size);
+    height: var(--size);
+  }
+  .cube--compact {
+    width: var(--size);
+    height: var(--size);
+  }
+
+  .face {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    width: var(--size);
+    height: var(--size);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.01) 34%, rgba(0, 0, 0, 0.98) 68%),
+      var(--color-cube-face);
+    border: 1px solid var(--color-border-visible);
+    box-shadow:
+      inset 0 0 4rem rgba(255, 255, 255, 0.04),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 0 1.8rem rgba(255, 255, 255, 0.14);
+    backface-visibility: hidden;
+  }
+  .front {
+    transform: translateZ(var(--half));
+  }
+  .back {
+    transform: rotateY(180deg) translateZ(var(--half));
+  }
+  .right {
+    transform: rotateY(90deg) translateZ(var(--half));
+  }
+  .left {
+    transform: rotateY(-90deg) translateZ(var(--half));
+  }
+  .top {
+    transform: rotateX(90deg) translateZ(var(--half));
+  }
+  .bottom {
+    transform: rotateX(-90deg) translateZ(var(--half));
+  }
+
+  .eyes {
+    display: flex;
+    gap: calc(var(--size) * 0.17);
+    transform: translateY(calc(var(--size) * -0.03));
+  }
+  .eye {
+    position: relative;
+    width: calc(var(--size) * 0.12);
+    height: calc(var(--size) * 0.25);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.56);
+    border-radius: 2px;
+    background: #000;
+    box-shadow:
+      0 0 1.3rem rgba(255, 255, 255, 0.12),
+      inset 0 0 1rem rgba(255, 255, 255, 0.04);
+  }
+  .pupil {
+    width: calc(var(--size) * 0.045);
+    height: calc(var(--size) * 0.1);
+    background: rgba(255, 255, 255, 0.94);
+    border-radius: 1px;
+    box-shadow: 0 0 1rem rgba(255, 255, 255, 0.76);
+    transition: transform var(--duration-instant) ease-out;
+  }
+
+  /* compact cube adjustments */
+  .cube--compact .face {
+    border-width: 0.5px;
+    box-shadow:
+      inset 0 0 1rem rgba(255, 255, 255, 0.02),
+      0 0 0.6rem rgba(255, 255, 255, 0.08);
+  }
+  .cube--compact .eye {
+    width: calc(var(--size) * 0.14);
+    height: calc(var(--size) * 0.28);
+  }
+  .cube--compact .pupil {
+    width: calc(var(--size) * 0.055);
+    height: calc(var(--size) * 0.12);
   }
 
   /* ── Working Genius quiz ── */
@@ -1475,10 +1560,17 @@ import App from "../components/App";
     .app-view,
     .tip-popover,
     .persistent-buddy,
+    .cube,
     .wg-quiz-option,
     .wg-quiz-option::after {
       transition: none !important;
       animation: none !important;
+    }
+    /* The cube's rotation is a JS-driven transform, so it needs parking
+       explicitly rather than just having its animation switched off. */
+    .cube--hero .cube,
+    .cube--compact .cube {
+      transform: rotateX(0) rotateY(0) !important;
     }
   }
 

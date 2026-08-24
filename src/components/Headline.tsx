@@ -20,6 +20,14 @@ import { useEffect, useRef } from "react";
  * `bold 160px system-ui` into a canvas, so the headline would have stopped
  * being set in the Sprint's serif.
  *
+ * The liquid fill has the same shape of story. A second supplied component
+ * ran a WebGL metaballs shader and masked it to the text with an SVG <text>
+ * in a data URI. Measured, that mask cannot see a webfont: asked for Source
+ * Serif 4 it renders in a generic serif, 4.1% narrower with different
+ * letterforms, so the headline would have quietly changed typeface. It also
+ * pulled an image off shaders.paper.design, which this app's CSP blocks. The
+ * flow is CSS gradients clipped to the real glyphs instead.
+ *
  * This replaces an orbiting ring that carried the same words. Tai asked for it
  * to stop flying and hold still, which also retired the seats, the phase-
  * locked fades and the backface culling that went with it.
@@ -106,6 +114,40 @@ export default function Headline() {
       document.removeEventListener("pointerleave", onLeave);
       if (queued) cancelAnimationFrame(queued);
     };
+  }, []);
+
+  /*
+   * The liquid fill is one sheet flowing across the whole line, but the line is
+   * twelve separate spans and each one clips its own background to its own
+   * glyph. Left alone every letter would show the same slice of the gradient
+   * and the flow would restart at each letter.
+   *
+   * These two custom properties are what join them up: --lw sizes every
+   * letter's background to the full line, and --x shifts it back by that
+   * letter's offset, so all twelve slices line up into a single continuous
+   * sheet. The CSS animates a drift on top of that.
+   *
+   * A ResizeObserver rather than a resize listener: it also catches the serif
+   * arriving, which changes every offset and no window event reports.
+   */
+  useEffect(() => {
+    const root = wrap.current;
+    const line = root?.querySelector<HTMLElement>(".headline-line");
+    if (!root || !line) return;
+
+    const letters = [...root.querySelectorAll<HTMLElement>(".headline-letter")];
+
+    const sync = () => {
+      line.style.setProperty("--lw", `${line.offsetWidth}px`);
+      for (const letter of letters) {
+        letter.style.setProperty("--x", `${letter.offsetLeft}px`);
+      }
+    };
+
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(line);
+    return () => observer.disconnect();
   }, []);
 
   return (

@@ -83,6 +83,90 @@ describe("the bend", () => {
   });
 });
 
+describe("the liquid fill", () => {
+  test("it brought no shader dependency with it", () => {
+    /*
+     * The supplied component ran a WebGL metaballs shader from
+     * @paper-design/shaders-react and masked it to the text with an SVG <text>
+     * in a data URI. Two things ruled that out, both checked rather than
+     * assumed: the mask cannot see a webfont, so asked for Source Serif 4 it
+     * renders a generic serif 4.1% narrower with different letterforms and the
+     * headline quietly changes typeface; and it loads an image from
+     * shaders.paper.design, which this app's CSP blocks.
+     */
+    expect(headline).not.toContain("@paper-design");
+    expect(css).not.toContain("shaders.paper.design");
+    const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
+    expect(Object.keys(pkg.dependencies ?? {})).not.toContain("@paper-design/shaders-react");
+  });
+
+  test("the flow is one sheet across the line, not twelve restarts", () => {
+    /*
+     * Each letter clips its own background to its own glyph, so without these
+     * two properties every letter shows the same slice and the flow restarts
+     * at each glyph. --lw sizes each letter's background to the whole line and
+     * --x shifts it back by that letter's offset, so the slices line up.
+     */
+    expect(headline).toContain('setProperty("--lw"');
+    expect(headline).toContain('setProperty("--x"');
+    expect(css).toContain("var(--lw, 100%)");
+    expect(css).toContain("var(--x, 0px)");
+  });
+
+  test("the drift keyframes are lengths, because the properties are registered as lengths", () => {
+    /*
+     * This shipped broken once. The properties are @property ... <length>, and
+     * the first keyframes were written in percentages. A percentage is an
+     * invalid value for a <length> property, so every keyframe was dropped
+     * silently and --flow-a held at its 0px initial value: the blobs never
+     * moved, and nothing errored.
+     *
+     * Percentages would have been wrong even if they had been accepted, since
+     * background-position percentages resolve against each letter's own box,
+     * which is the opposite of the single sheet above.
+     */
+    for (const name of ["--flow-a", "--flow-b", "--flow-c"]) {
+      expect(css).toContain(`@property ${name} { syntax: "<length>"`);
+    }
+    const keyframes = css.slice(css.indexOf("@keyframes flow-a"), css.indexOf("@keyframes flow-c") + 200);
+    expect(keyframes).toContain("calc(var(--lw, 100vw)");
+    expect(keyframes).not.toMatch(/--flow-[abc]:\s*-?[\d.]+%/);
+  });
+
+  test("the headline is monochrome", () => {
+    /*
+     * Tai: black and white, no red. The brand red stays on the sign-in button
+     * and the mascot; on the headline it fought both of them.
+     *
+     * The first version of this test sliced from ".headline-letter {" to
+     * "@keyframes flow-a", but the keyframes are written above the letter rule,
+     * so start came after end and the slice was empty. An empty string contains
+     * nothing, so it passed with the red put back. Hence the length guard: a
+     * test that cannot fail is worse than no test.
+     */
+    const start = css.indexOf(".headline-letter {");
+    const end = css.indexOf("@media (prefers-reduced-motion: reduce)", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const block = css.slice(start, end);
+    expect(block.length).toBeGreaterThan(500);
+    expect(block).toContain("background-image:");
+
+    for (const red of ["232, 23, 10", "253, 99, 96", "247, 225, 89", "--brand-accent", "--color-energy"]) {
+      expect(block).not.toContain(red);
+    }
+  });
+
+  test("reduced motion holds a frame with the blobs still on the line", () => {
+    // animation: none on its own would leave the flow at its initial 0px,
+    // which parks two of the three blobs off the end of the phrase.
+    const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce) {", css.indexOf(".headline-letter {")));
+    expect(reduced).toContain(".headline-line {");
+    expect(reduced).toContain("--flow-a: calc(var(--lw, 100vw) * 0.22)");
+  });
+});
+
 describe("the layout", () => {
   test("the line is a positioned flex row, which is what offsetLeft is measured against", () => {
     expect(css).toMatch(/\.headline-line \{[^}]*position: relative/s);
