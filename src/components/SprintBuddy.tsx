@@ -450,23 +450,17 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
    * The scale is attention needed, not happiness, matching what the model emits
    * from the full check-in: higher means more worth a conversation.
    */
-  const quickCheckin = (mood: number, label: string, note: string) => {
-    const entry: Checkin = {
-      id: crypto.randomUUID(),
-      refDecisionId: null,
-      // Lowercase, matching what the full check-in writes. The themes query
-      // filters this exact token out of "On your mind"; "Check-in" sailed
-      // straight past it and would have become the founder's top theme inside
-      // a week of tapping.
-      theme: "checkin",
-      prompt: note.trim() ? `${label}. ${note.trim()}` : label,
-      mood,
-      createdAt: new Date().toISOString(),
-    };
-    setCheckins((prev) => [entry, ...prev]);
-    setLocallyCheckedIn(true);
-    if (userEmail) saveCheckin(userEmail, entry).catch(() => {});
-  };
+  /*
+   * The one-tap check-in is gone. Five mood chips beside the real check-in
+   * meant a founder could log a day in one click, and every one of them did:
+   * the cheap path is always the one taken, so the full check-in — the
+   * questions the programme actually needs answered — never got opened.
+   * Removing the cheap path is the only way the expensive one gets used.
+   *
+   * Nothing is migrated. Entries it already wrote are ordinary check-ins with
+   * a short prompt and a mood, indistinguishable from a full one answered
+   * briefly, and they stay in the founder's record.
+   */
 
   // An optimistic in-session bump so a theme appears as soon as it is talked
   // about; the server recomputes it properly on the next load. The increment
@@ -530,7 +524,6 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         checkinDone={checkinDoneToday}
         deadlines={deadlines}
         onStartCheckin={startCheckin}
-        onQuickCheckin={quickCheckin}
         onNew={newChat}
         onThread={(id) => { setView("chat"); setActive({ id }); }}
         onDeleteThread={removeThread}
@@ -546,7 +539,6 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
           <MobileActions
             checkinDone={checkinDoneToday}
             onStartCheckin={startCheckin}
-            onQuickCheckin={quickCheckin}
             deadlines={deadlines}
             onOpenSidebar={() => setSidebarOpen(true)}
           />
@@ -648,7 +640,6 @@ type SidebarProps = {
   open: boolean;
   onToggle: () => void;
   checkinDone: boolean;
-  onQuickCheckin: (mood: number, label: string, note: string) => void;
   deadlines: DeadlinesState;
   onStartCheckin: () => void;
   onNew: () => void;
@@ -662,7 +653,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onQuickCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -740,15 +731,14 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
              * was always the actual signal; the bullet on the left was
              * decorative and became a second red dot saying nothing.
              */
-            <button onClick={onStartCheckin} className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid var(--line-strong)", borderRadius: 12, padding: "12px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", color: C.ink, marginBottom: 14 }}>
+            <button onClick={onStartCheckin} className="btn-glass" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "12px 16px", fontWeight: 700, fontSize: 14, marginBottom: 14 }}>
               <span style={{ flex: 1, textAlign: "left" }}>Today's check-in</span>
               <span style={{ width: 8, height: 8, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
             </button>
           )}
 
-          {!checkinDone && <QuickCheckin onQuickCheckin={onQuickCheckin} />}
 
-          <button onClick={onNew} className="newbtn" style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: C.white, color: C.black, border: "none", borderRadius: 12, padding: "14px 16px", fontWeight: 800, fontSize: 14.5, cursor: "pointer", letterSpacing: "0.01em" }}>
+          <button onClick={onNew} className="newbtn btn-metal" style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "14px 18px", fontWeight: 800, fontSize: 14.5, letterSpacing: "0.01em" }}>
             <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 900, marginRight: 2 }}>+</span> New conversation
           </button>
 
@@ -1431,66 +1421,6 @@ const WG_BAND_META: Record<WorkingGeniusBand, { title: string; blurb: string; ac
  * founder with ninety seconds should be able to register something real; a
  * founder with fifteen minutes should be using the full check-in instead.
  */
-const QUICK_MOODS: Array<{ label: string; mood: number; color: string }> = [
-  { label: "Flying", mood: 10, color: "#7CB893" },
-  { label: "Good", mood: 25, color: "#7CB893" },
-  { label: "Fine", mood: 40, color: C.sub },
-  { label: "Stretched", mood: 65, color: C.yellow },
-  { label: "Struggling", mood: 85, color: C.red },
-];
-
-function QuickCheckin({
-  onQuickCheckin,
-  compact,
-}: {
-  onQuickCheckin: (mood: number, label: string, note: string) => void;
-  compact?: boolean;
-}) {
-  const [picked, setPicked] = useState<(typeof QUICK_MOODS)[number] | null>(null);
-  const [note, setNote] = useState("");
-
-  if (picked) {
-    return (
-      <form
-        className={compact ? "quick-note quick-note-compact" : "quick-note"}
-        onSubmit={(e) => {
-          e.preventDefault();
-          onQuickCheckin(picked.mood, picked.label, note);
-        }}
-      >
-        <input
-          autoFocus
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={200}
-          placeholder={`${picked.label}. Add a line? Optional.`}
-          aria-label="One line about today, optional"
-        />
-        <button type="submit">Save</button>
-      </form>
-    );
-  }
-
-  return (
-    <div className={compact ? "quick-row quick-row-compact" : "quick-row"}>
-      {!compact && <span className="quick-label">Or in one tap</span>}
-      <div className="quick-buttons">
-        {QUICK_MOODS.map((m) => (
-          <button
-            key={m.label}
-            type="button"
-            onClick={() => setPicked(m)}
-            style={{ color: m.color }}
-            title={`${m.label}, then add a line if you want to`}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /**
  * The two daily actions, on a phone.
  *
@@ -1503,13 +1433,11 @@ function QuickCheckin({
 function MobileActions({
   checkinDone,
   onStartCheckin,
-  onQuickCheckin,
   deadlines,
   onOpenSidebar,
 }: {
   checkinDone: boolean;
   onStartCheckin: () => void;
-  onQuickCheckin: (mood: number, label: string, note: string) => void;
   deadlines: DeadlinesState;
   onOpenSidebar: () => void;
 }) {
@@ -1551,7 +1479,6 @@ function MobileActions({
         )}
       </div>
 
-      {!checkinDone && <QuickCheckin onQuickCheckin={onQuickCheckin} compact />}
     </div>
   );
 }
@@ -1637,6 +1564,21 @@ function Reflections({
   const nextOpenDecision = decisions.find((d) => d.status === "open") || null;
   const latestCheckin = checkins[0] || null;
   const latestCheckinParts = latestCheckin ? splitCheckinPrompt(latestCheckin.prompt) : null;
+  /* The oldest dated check-in. Was computed inside the printable record; the
+     counts it belongs with now sit at the top of the page. */
+  const startedOn = useMemo(() => {
+    const dated = checkins.filter((c) => c.createdAt).map((c) => asDate(c.createdAt!));
+    const first = dated.length ? dated[dated.length - 1]! : null;
+    return first ? first.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  }, [checkins]);
+
+  /* Open first. The page used to carry a separate "open loop to close next"
+     row naming the first one; putting them at the top of the list says the
+     same thing without a second copy of the decision. */
+  const orderedDecisions = useMemo(
+    () => [...decisions].sort((a, b) => Number(a.status === "closed") - Number(b.status === "closed")),
+    [decisions],
+  );
   const topTheme = useMemo(() => {
     const m: Record<string, number> = {};
     threads.forEach((t) => { m[t.theme] = (m[t.theme] || 0) + 1; });
@@ -1775,55 +1717,58 @@ function Reflections({
 
   return (
     <div className="rise" style={{ maxWidth: 720, margin: "0 auto", padding: "60px 28px 90px" }}>
-      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(3rem, 6vw, 4.5rem)", lineHeight: 0.94, letterSpacing: "-0.04em", margin: "0 0 28px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>Your week.</h1>
+      <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", margin: "0 0 28px" }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(3rem, 6vw, 4.5rem)", lineHeight: 0.94, letterSpacing: "-0.04em", margin: 0, color: C.ink, fontVariationSettings: '"opsz" 60' }}>Your week.</h1>
+        {/* Was down beside "Your record" at the foot of the page, which is a
+            long way to scroll for the page's only export. */}
+        {(checkins.length > 0 || threads.length > 0) && (
+          <button type="button" className="record-print btn-glass" onClick={() => window.print()}>
+            Print or save as PDF
+          </button>
+        )}
+      </header>
 
-      <p style={{ margin: "0 0 48px", fontFamily: "var(--font-serif)", fontSize: 22, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 30' }}>
+      <p style={{ margin: "0 0 30px", fontFamily: "var(--font-serif)", fontSize: 22, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 30' }}>
         You came here <Stat>{visits}</Stat> times. Most of it circled <Stat c={themeColor(topTheme)}>{topTheme}</Stat>. <Stat c={C.yellow}>{openCount}</Stat> {openCount === 1 ? "decision is" : "decisions are"} still open.
       </p>
 
-      <div style={{ margin: "0 0 34px", display: "grid", gap: 12, padding: "18px 20px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(0,0,0,0.18)" }}>
-        <p style={{ ...kicker }}>Pattern this week</p>
-        <PatternLine
-          label="You keep returning to"
-          value={themes
-            .filter((t) => t.arc.reduce((sum, n) => sum + n, 0) > 0)
-            .slice(0, 3)
-            .map((t) => t.name)
-            .join(" / ") || "Nothing yet — this fills in as you talk."}
-        />
-        <PatternLine
-          label="Latest check-in signal"
-          value={latestCheckin?.mood != null
-            ? `${signalLabel(latestCheckin.mood)} · ${latestCheckin.mood}/100${latestCheckinParts?.signal ? ` — ${latestCheckinParts.signal}` : ""}`
-            : latestCheckinParts?.summary || "No check-in signal yet"}
-          color={latestCheckin?.mood != null ? signalColor(latestCheckin.mood) : C.sub}
-        />
-        <PatternLine
-          label="Open loop to close next"
-          value={nextOpenDecision ? `${nextOpenDecision.summary} (${nextOpenDecision.door})` : "No open decision logged"}
-        />
+      {/* The counts, hoisted out of the printable record at the foot of the
+          page. They were the summary, and the summary was the last thing on
+          screen. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 14, margin: "0 0 12px", paddingTop: 22, borderTop: `1px solid ${C.line}` }}>
+        <RecordStat n={checkins.length} label={checkins.length === 1 ? "check-in" : "check-ins"} />
+        <RecordStat n={threads.length} label={threads.length === 1 ? "conversation" : "conversations"} />
+        <RecordStat n={decisions.length} label={decisions.length === 1 ? "decision" : "decisions"} />
+        <RecordStat n={decisions.filter((d) => d.status === "closed").length} label="closed" />
       </div>
+      {startedOn && (
+        <p style={{ margin: "0 0 44px", fontSize: 13, color: C.faint }}>Started {startedOn}.</p>
+      )}
 
-      <div style={{ margin: "0 0 20px", padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
-        <p style={{ ...kicker, marginBottom: 12 }}>The sprint so far</p>
+      {/* One card, not two. "The sprint so far" and "Check-in memory" sat
+          stacked, and between them they printed the mood score three times —
+          once in the chart, once as a signal line, once in a "Pattern this
+          week" table above. It is one thing: how the weeks have felt. */}
+      <div style={{ margin: "0 0 44px", padding: "20px 22px", border: `1px solid ${C.line}`, borderRadius: 14, background: "rgba(255,255,255,0.035)" }}>
+        <p style={{ ...kicker, marginBottom: 14 }}>How it has felt</p>
         <Arc checkins={checkins} />
-      </div>
-
-      <div style={{ margin: "0 0 34px", padding: "16px 18px", border: `1px solid ${C.line}`, borderRadius: 8, background: "rgba(255,255,255,0.035)" }}>
-        <p style={{ ...kicker, marginBottom: 8 }}>Check-in memory</p>
-        <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>
-          {latestCheckin
-            ? latestCheckinParts?.summary
-            : "No completed check-ins yet. The next one will start building the founder profile."}
-        </p>
-        {latestCheckin?.mood != null && (
-          <p style={{ margin: "10px 0 0", color: signalColor(latestCheckin.mood), fontSize: 13, fontWeight: 700 }}>
-            {signalLabel(latestCheckin.mood)} · {latestCheckin.mood}/100{latestCheckinParts?.signal ? ` — ${latestCheckinParts.signal}` : ""}
+        {latestCheckin && (
+          <blockquote style={{ margin: "18px 0 0", paddingTop: 18, borderTop: `1px solid ${C.line}` }}>
+            <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>
+              {latestCheckinParts?.summary}
+            </p>
+            {latestCheckin.mood != null && (
+              <p style={{ margin: "10px 0 0", color: signalColor(latestCheckin.mood), fontSize: 13, fontWeight: 700 }}>
+                {signalLabel(latestCheckin.mood)} · {latestCheckin.mood}/100{latestCheckinParts?.signal ? ` — ${latestCheckinParts.signal}` : ""}
+              </p>
+            )}
+          </blockquote>
+        )}
+        {!latestCheckin && (
+          <p style={{ margin: "14px 0 0", fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 15, color: C.faint }}>
+            No completed check-ins yet. The next one starts this off.
           </p>
         )}
-        <p style={{ margin: "8px 0 0", color: C.faint, fontSize: 12.5 }}>
-          {checkins.length} {checkins.length === 1 ? "check-in" : "check-ins"} saved.
-        </p>
       </div>
 
       <p style={{ ...kicker, margin: "0 0 14px" }}>On your mind</p>
@@ -1842,7 +1787,7 @@ function Reflections({
         <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint, fontVariationSettings: '"opsz" 18' }}>No decisions tracked yet. They'll appear here when you weigh one in chat.</p>
       ) : (
         <ol style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
-          {decisions.map((d) => <DecisionRow key={d.id} d={d} onClose={closeDecision} />)}
+          {orderedDecisions.map((d) => <DecisionRow key={d.id} d={d} onClose={closeDecision} />)}
         </ol>
       )}
 
@@ -2153,21 +2098,23 @@ function SprintRecord({
   const nothingYet = !checkins.length && !threads.length;
 
   return (
+    /*
+     * Print only.
+     *
+     * On screen this repeated the page above it almost line for line: the same
+     * four counts, the same theme list, the same closed decisions. It was the
+     * last thing a founder scrolled to and it told them nothing they had not
+     * just read.
+     *
+     * It still exists because it is the thing that prints — the @media print
+     * rule below hides everything except .sprint-record — and a printed sheet
+     * does need the whole record on one page. So it stays complete, and stays
+     * off the screen. The button that triggers it moved up to the page header.
+     */
     <section className="sprint-record" style={{ marginTop: 44, paddingTop: 26, borderTop: `2px solid ${C.line}` }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
-        <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", color: C.ink }}>
-          Your record
-        </h2>
-        {!nothingYet && (
-          <button
-            type="button"
-            className="record-print btn-glass"
-            onClick={() => window.print()}
-          >
-            Print or save as PDF
-          </button>
-        )}
-      </div>
+      <h2 style={{ margin: "0 0 6px", fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", color: C.ink }}>
+        Your record
+      </h2>
       <p style={{ margin: "0 0 18px", fontSize: 13.5, color: C.faint, lineHeight: 1.6 }}>
         Yours to keep. Counted from what you did, not written about you.
       </p>
@@ -2551,7 +2498,8 @@ function Arc({ checkins }: { checkins: Checkin[] }) {
       </svg>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 18px", marginTop: 10, fontSize: 12.5, color: C.faint }}>
-        <span><Stat c={C.ink}>{points.length}</Stat> check-ins</span>
+        {/* The count sits in the strip at the top of the page; repeating it
+            here was the third place on screen saying "6 check-ins". */}
         <span>{fmt(first.at)} to {fmt(last.at)}</span>
         <span style={{ color: endColor }}>Now {signalLabel(last.mood).toLowerCase()}</span>
         {Math.abs(shift) >= 10 && (
@@ -2677,7 +2625,11 @@ function ThemeRow({ t }: { t: ThemeArc }) {
   const c = themeColor(t.name);
   const now = t.arc[t.arc.length - 1] ?? 0;
   const prev = t.arc[t.arc.length - 2] ?? 0;
-  const dir = now > prev ? "rising" : now < prev ? "easing" : "steady";
+  /* Direction only when there is one. Every theme printed "is steady." before,
+     which put the same three italic words down the middle of the column and
+     said nothing; most arcs are flat most weeks. */
+  const dir = now > prev ? "rising" : now < prev ? "easing" : null;
+  const total = t.arc.reduce((sum, n) => sum + n, 0);
   const max = Math.max(1, ...t.arc);
   const points = t.arc
     .map((v, i) => `${(i / Math.max(1, t.arc.length - 1)) * 60},${12 - (v / max) * 10}`)
@@ -2685,7 +2637,10 @@ function ThemeRow({ t }: { t: ThemeArc }) {
   return (
     <li style={{ display: "grid", gridTemplateColumns: "9rem 1fr auto", alignItems: "baseline", gap: 18, padding: "14px 0", borderBottom: `1px solid ${C.line}`, fontSize: 15 }}>
       <strong style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, letterSpacing: "-0.005em", color: C.ink, fontVariationSettings: '"opsz" 14' }}>{t.name}</strong>
-      <span style={{ fontStyle: "italic", color: C.sub, fontFamily: "var(--font-serif)", fontVariationSettings: '"opsz" 20' }}>is {dir}.</span>
+      <span style={{ color: C.sub, fontSize: 13.5 }}>
+        {total} {total === 1 ? "mention" : "mentions"}
+        {dir && <span style={{ color: c }}> · {dir}</span>}
+      </span>
       <svg width={72} height={18} viewBox="0 0 60 14" preserveAspectRatio="none" aria-hidden="true" style={{ display: "block" }}>
         <polyline points={points} fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -3159,7 +3114,6 @@ const CSS = `
   outline-offset: 2px;
 }
 .row:hover { background: rgba(255,255,255,.04)!important; }
-.newbtn:hover { opacity: .9; }
 /* ---- Composer placeholder --------------------------------------------------
    The idle line, blurring in a letter at a time. A native placeholder cannot
    be animated, so this is an overlay sitting exactly where the text will be:
@@ -3268,12 +3222,21 @@ const CSS = `
   min-height: 34px;
 }
 
+/* Off the screen, on the page.
+
+   The record repeated the reflections page above it almost line for line — the
+   same four counts, the same theme list, the same closed decisions — and was
+   the last thing a founder scrolled to. It stays complete, because a printed
+   sheet does want the whole thing on one page, and it stays hidden here. */
+.sprint-record { display: none; }
+
 @media print {
   /* Only the record prints. Everything else on this page is navigation or
      something the founder can see any time they are signed in. */
   body * { visibility: hidden !important; }
   .sprint-record, .sprint-record * { visibility: visible !important; }
   .sprint-record {
+    display: block !important;
     position: absolute;
     inset: 0 auto auto 0;
     width: 100%;
@@ -3286,81 +3249,6 @@ const CSS = `
   .record-print { display: none !important; }
 }
 
-/* ---- Quick check-in ------------------------------------------------------- */
-.quick-row { margin: -6px 0 14px; }
-.quick-label {
-  display: block;
-  font: 600 10.5px/1 var(--font-family);
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--faint, #6B7280);
-  padding: 0 4px 7px;
-}
-/* Three then two, rather than letting five wrap to four and a stranded one.
-   An even split reads as a designed row; 4+1 reads as a bug. */
-.quick-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.quick-buttons button {
-  min-height: 34px;
-  padding: 0 9px;
-  border-radius: 9px;
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  font: 600 12px/1 var(--font-family);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.quick-buttons button:hover { background: rgba(255,255,255,.06); }
-.quick-buttons button:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
-
-.quick-note { display: flex; gap: 6px; margin: -6px 0 14px; }
-.quick-note input {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 38px;
-  padding: 0 10px;
-  border-radius: 9px;
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  color: inherit;
-  font: 400 13px/1 var(--font-family);
-}
-.quick-note input:focus { outline: none; border-color: var(--brand-accent); }
-/* The confirm on this strip, so it wears the primary material. It used to be
-   flat white: a solid accent on a routine save read as destructive once the
-   accent went red, and flat white then read as nothing at all. */
-.quick-note button {
-  flex: 0 0 auto;
-  min-height: 38px;
-  padding: 0 16px;
-  font: 700 12.5px/1 var(--font-family);
-}
-/* The strip is the touch surface, so its controls get the 44px the rest of the
-   app already treats as the floor. The row scrolls rather than shrinking the
-   labels into illegibility. */
-/* min-width: 0 because a flex item defaults to min-width: auto and refuses to
-   shrink below its content, which let the button row grow past the strip and
-   clipped the last mood with nothing able to scroll to it. */
-.quick-row-compact, .quick-note-compact { margin: 0; min-width: 0; }
-.quick-row-compact .quick-buttons {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-bottom: 1px;
-}
-.quick-row-compact .quick-buttons::-webkit-scrollbar { display: none; }
-/* Tighter horizontally than the sidebar copy so all five fit a 390px phone
-   without scrolling. Narrower phones still scroll, which is why the row is
-   scrollable at all, but a ten-pixel scroll nobody discovers is the worst of
-   both. Height stays at the 44px touch floor. */
-.quick-row-compact .quick-buttons button {
-  min-height: 44px;
-  flex: 0 0 auto;
-  padding: 0 7px;
-  font-size: 11.5px;
-}
-.quick-note-compact input { min-height: 44px; }
-.quick-note-compact button { min-height: 44px; }
 
 /* ---- Mobile actions -------------------------------------------------------
    Hidden entirely on anything wide enough to show the sidebar, which is where
