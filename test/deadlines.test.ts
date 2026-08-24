@@ -249,16 +249,17 @@ describe("deleting a deadline", () => {
     const id = made.body.id as string;
     await post(h, "/api/deadlines", { action: "toggle", id, done: true }, alice.cookie);
 
+    /* Named bindings, as everywhere else in this codebase: bun:sqlite's types
+       do not accept a bare positional argument. */
     const db = h.db();
-    expect(
-      (db.query("SELECT COUNT(*) AS n FROM deadline_completions WHERE deadline_id = ?").get(id) as { n: number }).n,
-    ).toBe(1);
+    const completions = () =>
+      (db
+        .query("SELECT COUNT(*) AS n FROM deadline_completions WHERE deadline_id = $id")
+        .get({ $id: id }) as { n: number }).n;
 
+    expect(completions()).toBe(1);
     await post(h, "/api/deadlines", { action: "delete", id }, organizer.cookie);
-
-    expect(
-      (db.query("SELECT COUNT(*) AS n FROM deadline_completions WHERE deadline_id = ?").get(id) as { n: number }).n,
-    ).toBe(0);
+    expect(completions()).toBe(0);
   });
 
   test("deleting something that is not there says so", async () => {
