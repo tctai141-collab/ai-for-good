@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { IP_FAILURE_LIMIT } from "./limits";
 import {
   createSessionRow,
   deleteSessionRow,
@@ -287,11 +288,10 @@ export function clientIp(request: Request): string | null {
  * addresses, ten tries each, one common password. That is 240 guesses from a
  * single machine without ever tripping a limit. This caps the machine.
  *
- * Deliberately looser than the per-email limit. A shared office NAT can put
- * the whole cohort behind one address, and locking out a room of founders
- * because one of them fumbled a password is a worse failure than the attack.
+ * The limit itself lives in limits.ts. It is exported for the test that
+ * asserts the boundary, and importing it from here would pull the database
+ * open in the test runner's own process.
  */
-const IP_FAILURE_LIMIT = 30;
 const ipFailures = new Map<string, { count: number; firstAt: number }>();
 const MAX_TRACKED_IPS = 5_000;
 

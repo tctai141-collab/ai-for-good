@@ -1,5 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { createFounder, createOrganizer, post, startServer, type Harness, type Session } from "./helpers/harness";
+/* From limits.ts, not auth.ts: auth.ts opens the database on import, and a
+   second connection in the test runner's own process breaks whichever suite
+   runs next. */
+import { IP_FAILURE_LIMIT } from "../src/lib/limits";
 
 /**
  * The properties that make a hand-rolled session scheme safe.
@@ -102,6 +107,21 @@ describe("signing in again", () => {
   });
 });
 
+describe("what this file may import", () => {
+  test("limits.ts stays free of imports, so a test can read it safely", () => {
+    /*
+     * This is the whole reason IP_FAILURE_LIMIT lives there. auth.ts opens the
+     * database at module load; importing it here opened a second connection in
+     * the test runner's own process, against a path no test had set, and CI
+     * failed with "unable to open database file" in an unrelated suite three
+     * files later. The first import added to limits.ts brings that back.
+     */
+    const src = readFileSync("src/lib/limits.ts", "utf-8");
+    expect(src).not.toMatch(/^\s*import[\s{]/m);
+    expect(src).toContain("export const IP_FAILURE_LIMIT");
+  });
+});
+
 describe("brute force", () => {
   test("one address grinding many accounts is stopped", async () => {
     /*
@@ -121,14 +141,26 @@ describe("brute force", () => {
         body: JSON.stringify({ email, password: "Password123" }),
       });
 
-    let sawLimit = false;
-    for (let i = 0; i < 40 && !sawLimit; i++) {
+    /*
+     * Exactly the boundary, rather than up to forty tries stopping at the
+     * first 429. Every attempt costs a full Argon2id verify — the endpoint
+     * spends one even for an address that does not exist, so a miss cannot be
+     * told from a hit by timing — so the old loop's cost depended on a number
+     * it never knew. It ran right on the 5s default timeout and failed under a
+     * loaded machine while passing on its own.
+     */
+    for (let i = 0; i < IP_FAILURE_LIMIT; i++) {
       // A different address each time, so no per-email counter ever fills.
       const res = await attempt(`victim${i}@example.test`);
-      if (res.status === 429) sawLimit = true;
+      expect(res.status).toBe(401);
     }
-    expect(sawLimit).toBe(true);
-  });
+    expect((await attempt("victim-last@example.test")).status).toBe(429);
+    /*
+     * The timeout is explicit for the same reason: this test is inherently
+     * IP_FAILURE_LIMIT + 1 sequential password verifies, and the work is the
+     * point. Argon2id is meant to be slow.
+     */
+  }, 30_000);
 
   test("a different address is unaffected by that lockout", async () => {
     // The limit must bite the attacker, not the cohort behind another NAT.
