@@ -1544,19 +1544,15 @@ import App from "../components/App";
     padding: 6px 4px;
   }
   .wg-write-cancel:hover { color: var(--color-text); }
+  /* Size only. The material is .btn-metal, which this carries alongside; it
+     was a solid accent fill, and a red confirm on a routine Next read as a
+     warning. */
   .wg-write-send {
     min-height: 34px;
-    padding: 7px 16px;
-    border: 0;
-    border-radius: 9px;
-    background: var(--brand-accent);
-    color: oklch(13% 0.008 250);
-    font-family: inherit;
+    padding: 7px 18px;
     font-size: 13px;
     font-weight: 800;
-    cursor: pointer;
   }
-  .wg-write-send:disabled { opacity: 0.4; cursor: default; }
   .wg-write-cancel:focus-visible,
   .wg-write-send:focus-visible,
   .wg-write-box:focus-visible {
