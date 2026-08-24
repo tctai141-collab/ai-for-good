@@ -174,10 +174,14 @@ import App from "../components/App";
       radial-gradient(circle at 24% 48%, rgba(255, 255, 255, 0.13), transparent 18rem),
       var(--color-bg);
   }
-  /* The animated mesh. Sits under the page's own gradients and the sign-in
-     card, and can never intercept a click on the form. */
-  .constellation-field {
-    position: absolute;
+  /* The kinetic lattice. Sits under the page's own gradients and the sign-in
+     card, and can never intercept a click on the form.
+
+     Fixed rather than absolute: the canvas is sized to the viewport, so
+     anchoring it to the scrolling box would leave it misplaced the moment the
+     login screen is taller than the window. */
+  .kinetic-grid {
+    position: fixed;
     inset: 0;
     z-index: -1;
     display: block;
