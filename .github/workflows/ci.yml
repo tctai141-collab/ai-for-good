@@ -25,6 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    env:
+      # The sprint the cohort is actually running, matching .env.example. Only
+      # one test reads it, and that test exists to fail when the working-style
+      # retake windows are left behind by a new cohort. Unset, it skipped
+      # silently in CI, which is the one place the guard needed to run.
+      SPRINT_START_DATE: "2026-09-08"
+
     steps:
       # Pinned by digest: a tag can be moved to point at new code.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

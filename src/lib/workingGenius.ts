@@ -689,8 +689,29 @@ export function bandOf(result: WorkingGeniusResult, id: WorkingGeniusId): Workin
  * for.
  *
  * Dates are Helsinki calendar days, matching everything else the cohort runs on.
+ *
+ * These are F26's dates and a new cohort has to replace them. If they are left
+ * behind, every window sits in the past and each founder gets one take and then
+ * "Last one taken" for the rest of the sprint, silently. There is a test
+ * asserting each window falls inside the sprint SPRINT_START_DATE describes, so
+ * a forgotten update fails the build rather than the cohort.
  */
 export const RETAKE_WINDOWS: readonly string[] = ["2026-10-08", "2026-11-08", "2026-12-01"];
+
+/**
+ * A date this schedule can reason about.
+ *
+ * The windows are compared as strings, which is exact for ISO dates and
+ * nonsense for anything else. Rows written by the six-item quiz this replaced
+ * hold a display date like "Aug 23, 2026", and "2026-10-08" > "Aug 23, 2026" is
+ * false, so every window looked as though it had already passed and the founder
+ * was locked out of retaking for good. Anything that is not a plain ISO date is
+ * treated as no usable take, which is also the right answer on the merits: a
+ * six-item-quiz row is not one of this instrument's four takes.
+ */
+function usableDate(value: string | null): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
 
 /**
  * The next date this founder may retake, or null when they are done.
@@ -701,14 +722,16 @@ export const RETAKE_WINDOWS: readonly string[] = ["2026-10-08", "2026-11-08", "2
  * opened before they existed.
  */
 export function nextRetakeDate(lastTakenOn: string | null): string | null {
-  if (!lastTakenOn) return null;
-  return RETAKE_WINDOWS.find((d) => d > lastTakenOn) ?? null;
+  const last = usableDate(lastTakenOn);
+  if (!last) return null;
+  return RETAKE_WINDOWS.find((d) => d > last) ?? null;
 }
 
 /** True when `today` has reached the founder's next window. */
 export function retakeOpen(lastTakenOn: string | null, today: string): boolean {
-  if (!lastTakenOn) return true;
-  const next = nextRetakeDate(lastTakenOn);
+  const last = usableDate(lastTakenOn);
+  if (!last) return true;
+  const next = nextRetakeDate(last);
   return next !== null && today >= next;
 }
 

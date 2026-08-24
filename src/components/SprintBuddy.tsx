@@ -436,7 +436,11 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
     const entry: Checkin = {
       id: crypto.randomUUID(),
       refDecisionId: null,
-      theme: "Check-in",
+      // Lowercase, matching what the full check-in writes. The themes query
+      // filters this exact token out of "On your mind"; "Check-in" sailed
+      // straight past it and would have become the founder's top theme inside
+      // a week of tapping.
+      theme: "checkin",
       prompt: note.trim() ? `${label}. ${note.trim()}` : label,
       mood,
       createdAt: new Date().toISOString(),

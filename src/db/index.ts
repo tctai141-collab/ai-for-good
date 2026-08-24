@@ -509,6 +509,9 @@ export function deleteUser(email: string): void {
     db.run("DELETE FROM threads WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM visits WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM working_genius WHERE user_email = $email", { $email: email });
+    // Cascades from users anyway, but erasure is the wrong place to rely on a
+    // constraint staying as it is.
+    db.run("DELETE FROM working_genius_takes WHERE user_email = $email", { $email: email });
     // sessions and invites cascade, but being explicit costs nothing and keeps
     // the intent readable next to the rest.
     db.run("DELETE FROM sessions WHERE user_email = $email", { $email: email });

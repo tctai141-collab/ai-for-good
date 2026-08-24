@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { TOTAL_WEEKS } from "../src/lib/sprint-calendar";
 import {
   RETAKE_WINDOWS,
   WORKING_GENIUS_ITEMS,
@@ -65,6 +66,38 @@ describe("the schedule", () => {
      */
     expect(nextRetakeDate("2026-10-20")).toBe("2026-11-08");
     expect(retakeOpen("2026-10-20", "2026-10-21")).toBe(false);
+  });
+
+  test("a row from the six-item quiz does not lock anybody out", () => {
+    /*
+     * The quiz this replaced wrote completed_at with toLocaleDateString, so
+     * those rows hold "Aug 23, 2026". The windows are compared as strings,
+     * which is exact for ISO and nonsense for that, and "2026-10-08" is not
+     * greater than "Aug 23, 2026". Every window therefore looked past and the
+     * founder was locked out of the real instrument permanently, while the card
+     * cheerfully invited them to "Retake it properly".
+     */
+    expect(retakeOpen("Aug 23, 2026", "2026-08-24")).toBe(true);
+    expect(retakeOpen("23/08/2026", "2026-08-24")).toBe(true);
+    expect(retakeOpen("", "2026-08-24")).toBe(true);
+    expect(nextRetakeDate("Aug 23, 2026")).toBeNull();
+  });
+
+  test("the windows belong to the sprint this build is configured for", () => {
+    /*
+     * These dates are F26's. A cohort that inherits the code without changing
+     * them gets one take each and then "Last one taken" for the rest of the
+     * sprint, silently, because every window sits in the past. Failing here is
+     * the cheapest place to find that out.
+     */
+    const start = process.env.SPRINT_START_DATE;
+    if (!start) return;
+    const startMs = Date.parse(start);
+    const endMs = startMs + TOTAL_WEEKS * 7 * 24 * 60 * 60 * 1000;
+    for (const window of RETAKE_WINDOWS) {
+      const at = Date.parse(`${window}T00:00:00Z`);
+      expect([window, at > startMs && at < endMs]).toEqual([window, true]);
+    }
   });
 
   test("the countdown counts days and never goes negative", () => {

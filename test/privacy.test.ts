@@ -126,6 +126,19 @@ describe("privacy boundary — organizer", () => {
     expect(body.redacted).toBe(true);
   });
 
+  test("cannot see how often a founder opened the app", async () => {
+    /*
+     * The visit count was the one read with no owner check, so an organizer
+     * could ask how engaged any founder was. No organizer surface shows that
+     * and none is meant to: the cohort dashboard reports strain deliberately,
+     * not attendance, and a number that reads as "who is slacking" is exactly
+     * the use the privacy model exists to prevent.
+     */
+    const res = await get(h, `/api/persistence?resource=visits&user=${alice.email}`, organizer.cookie);
+    expect(res.status).toBe(403);
+    expect(await res.text()).not.toContain("visits\":");
+  });
+
   test("cannot chat inside a founder's account", async () => {
     const res = await post(h, "/api/chat", {
       messages: [{ role: "user", content: "hi" }],
