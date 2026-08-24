@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import SprintBuddyMascot from "./SprintBuddyMascot";
+import React, { useState, useCallback, useEffect } from "react";
+import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
 import Headline from "./Headline";
 import ConstellationField from "./ConstellationField";
@@ -295,28 +295,12 @@ function PersistentBuddy({ stage }: { stage: "login" | "docked" }) {
     return () => window.clearTimeout(timeout);
   }, [tipVisible, tipIndex]);
 
-  /*
-   * A reaction is a moment, not a state. It used to be left set: the mascot
-   * winked once and then held the wink class forever, which under the new CSS
-   * froze both eyes open and stopped it blinking again for the rest of the
-   * session. Clear it once the animation has had time to run.
-   */
-  useEffect(() => {
-    if (!reaction) return;
-    const timeout = window.setTimeout(() => setReaction(null), 900);
-    return () => window.clearTimeout(timeout);
-  }, [reaction]);
-
-  /* Which reaction is next. A ref rather than reading `reaction`, because
-     that is cleared back to null between clicks and would always read as
-     "not a wink", so the mascot would only ever wink. */
-  const winkNext = useRef(true);
-
   const showTip = useCallback(() => {
     setTipIndex((current) => tipVisible ? (current + 1) % STARTUP_TIPS.length : current);
     setTipVisible(true);
-    setReaction(winkNext.current ? "wink" : "look-up");
-    winkNext.current = !winkNext.current;
+    // The cube fires a reaction when the prop changes, so alternating is what
+    // makes a second click do anything.
+    setReaction((current) => current === "wink" ? "look-up" : "wink");
   }, [tipVisible]);
 
   return (
@@ -327,7 +311,7 @@ function PersistentBuddy({ stage }: { stage: "login" | "docked" }) {
           <p>{STARTUP_TIPS[tipIndex]}</p>
         </div>
       )}
-      <SprintBuddyMascot
+      <SprintBuddyCube
         compact={isDocked}
         size="var(--buddy-size)"
         onTip={isDocked ? showTip : undefined}
