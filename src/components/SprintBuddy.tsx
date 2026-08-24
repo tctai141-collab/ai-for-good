@@ -1151,8 +1151,6 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const checkinInitiated = useRef(false);
 
   const threadId = existing?.id || null;
-  const accent = isCheckin ? C.accent : CHAT_ACCENT;
-  const postureLabel = isCheckin ? "Check-in" : "Thinking";
 
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [msgs, busy, banner]);
 
@@ -1295,11 +1293,12 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {msgs.map((m, i) => m.role === "assistant" ? (
+                /* No header. Every answer used to carry "THINKING · 05:51 PM"
+                   above it, including the one still being written, which named
+                   a posture the app no longer has and stamped a time nobody
+                   asked for. The wait below says what is happening while it
+                   happens; a finished answer needs no label. */
                 <div key={i} style={{ alignSelf: "flex-start", maxWidth: "40rem" }}>
-                  <p style={{ margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: 1.8, textTransform: "uppercase", color: C.sub }}>
-                    <span style={{ width: 7, height: 7, borderRadius: 9, background: accent, flexShrink: 0 }} />
-                    {postureLabel}{ctx.clock ? ` · ${ctx.clock}` : ""}
-                  </p>
                   <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, lineHeight: 1.55, color: C.ink, fontVariationSettings: '"opsz" 22' }} dangerouslySetInnerHTML={{ __html: markdownStyles + formatMarkdown(m.content) }} />
                 </div>
               ) : (

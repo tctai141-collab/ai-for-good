@@ -25,6 +25,27 @@ describe("the wait", () => {
   });
 });
 
+describe("the message header", () => {
+  test("assistant messages carry no posture label or timestamp", () => {
+    /*
+     * Every answer used to be topped with "THINKING · 05:51 PM", including the
+     * one still being written. It named a posture the app no longer has (the
+     * three thread states collapsed to one years of commits ago) and stamped a
+     * time nobody asked for. Tai: take it off completely.
+     *
+     * The wait below the thread says what is happening while it happens; a
+     * finished answer needs no label at all.
+     */
+    expect(chat).not.toContain("postureLabel");
+    expect(chat).not.toMatch(/\{ctx\.clock \? ` · \$\{ctx\.clock\}` : ""\}/);
+  });
+
+  test("nothing is left dangling from it", () => {
+    // `accent` existed only to colour that header's dot.
+    expect(chat).not.toContain("const accent = isCheckin");
+  });
+});
+
 describe("the shimmer", () => {
   test("it brought no dependencies with it", () => {
     /*
