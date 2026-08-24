@@ -1076,17 +1076,52 @@ function drawPrompt(): string {
   return IDLE_PROMPTS[Math.floor(Math.random() * IDLE_PROMPTS.length)]!;
 }
 
-/** A new line on open, and again every hour the tab stays put. */
-const PROMPT_ROTATE_MS = 60 * 60 * 1000;
+/**
+ * How long a prompt sits before the next one blurs in over it.
+ *
+ * There used to be a second, hourly timer here, from before the line
+ * animated: it existed so a tab left open all afternoon was not frozen on one
+ * prompt. The cycle below subsumes it. The only state the hourly timer still
+ * reached was a composer focused and empty, where the line is hidden anyway.
+ */
+const PROMPT_CYCLE_MS = 4200;
+
+/**
+ * The idle prompt, one letter at a time.
+ *
+ * Taken from a supplied AI chat input whose placeholder cycled with a
+ * staggered per-letter blur. The idea is the good part; the rest of that
+ * component was mic, attachment and search toggles this app has no use for,
+ * and motion/react to animate opacity and blur on a span, which CSS has done
+ * for years. Each letter carries its own animation-delay.
+ *
+ * A native placeholder attribute cannot be animated, so this is an overlay,
+ * which means keeping it strictly in step with the real one: it is hidden the
+ * moment the founder types or focuses, and it never takes a pointer event.
+ *
+ * It is also aria-hidden, and the textarea keeps a fixed aria-label. Feeding
+ * the rotating line to the label instead would rename the field every few
+ * seconds, and rename it to things like "Bffr." — a prompt is a nudge, not
+ * what the control is called.
+ */
+function AnimatedPlaceholder({ text, paused }: { text: string; paused: boolean }) {
+  if (paused) return null;
+  return (
+    <span key={text} className="composer-ghost" aria-hidden="true">
+      {[...text].map((ch, i) => (
+        <span key={i} style={{ animationDelay: `${i * 22}ms` }}>
+          {ch === " " ? "\u00A0" : ch}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, markCheckinDone, userEmail, firstRun }: ChatProps) {
   /* The component is mounted client:only, so drawing at first render cannot
      desync from a server-rendered value — there is no server render. */
   const [idlePrompt, setIdlePrompt] = useState(drawPrompt);
-  useEffect(() => {
-    const timer = setInterval(() => setIdlePrompt(drawPrompt()), PROMPT_ROTATE_MS);
-    return () => clearInterval(timer);
-  }, []);
+  const [composerFocused, setComposerFocused] = useState(false);
 
   const existingFromActive = active.id ? threads.find((t) => t.id === active.id) : null;
   /* createdThreadId keeps subsequent sends updating the same thread rather
@@ -1100,6 +1135,14 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
   const [msgs, setMsgs] = useState<Msg[]>(() => existing ? existing.messages : []);
   const [input, setInput] = useState("");
+
+  // Declared down here rather than up with the other composer state, because
+  // it reads `input`, which is initialised on the line above this one.
+  useEffect(() => {
+    if (composerFocused || input.length > 0) return;
+    const timer = setInterval(() => setIdlePrompt(drawPrompt()), PROMPT_CYCLE_MS);
+    return () => clearInterval(timer);
+  }, [composerFocused, input.length]);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ kind: "logged"; text: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -1281,9 +1324,14 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, background: C.bg }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 24px 18px" }}>
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
-            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
-              placeholder={idlePrompt}
-              style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
+            <div style={{ position: "relative", flex: 1, display: "flex" }}>
+              <AnimatedPlaceholder text={idlePrompt} paused={composerFocused || input.length > 0} />
+              <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
+                onFocus={() => setComposerFocused(true)}
+                onBlur={() => setComposerFocused(false)}
+                aria-label="Message Sprint Buddy"
+                style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
+            </div>
             <button
               onClick={() => send()}
               disabled={busy || !input.trim()}
@@ -2842,6 +2890,38 @@ const CSS = `
 .deadline-check:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
+/* ---- Composer placeholder --------------------------------------------------
+   The idle line, blurring in a letter at a time. A native placeholder cannot
+   be animated, so this is an overlay sitting exactly where the text will be:
+   same font, same padding, same line height, or it jumps when typing starts. */
+.composer-ghost {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 10px 2px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.composer-ghost > span {
+  display: inline-block;
+  opacity: 0;
+  animation: ghost-in .45s cubic-bezier(.2, .8, .3, 1) forwards;
+}
+@keyframes ghost-in {
+  from { opacity: 0; filter: blur(9px); transform: translateY(7px); }
+  to { opacity: 1; filter: blur(0); transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No stagger, no blur: the line simply is there. */
+  .composer-ghost > span { animation: none; opacity: 1; }
+}
+
 /* ---- Composer edge ---------------------------------------------------------
    A light travels slowly around the border of the box a founder types into,
    brighter and quicker once it has focus.

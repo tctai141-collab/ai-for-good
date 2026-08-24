@@ -28,12 +28,28 @@ describe("the composer's idle prompt", () => {
     for (const prompt of prompts) expect(prompt.length).toBeLessThan(40);
   });
 
-  test("the placeholder uses the rotating value, not a fixed line", () => {
-    // Scoped to the JSX rather than the whole file: the comment above the list
-    // quotes the fixed line this replaced, and matching that is not a failure.
-    const line = src.split("\n").find((l) => l.includes("placeholder=")) ?? "";
-    expect(line).toContain("placeholder={idlePrompt}");
-    expect(line).not.toContain("What are you turning over?");
+  test("the rotating value is what the founder sees, and never what it is called", () => {
+    /*
+     * The native placeholder attribute is gone: it cannot be animated, so the
+     * line is drawn as an overlay that blurs in a letter at a time. Two things
+     * have to stay true because of that. The overlay must be fed the rotating
+     * value, and the textarea must carry a fixed name of its own.
+     *
+     * The first attempt passed `idlePrompt` to aria-label, on the reasoning
+     * that the input would otherwise be unlabelled. It made things worse: the
+     * field was renamed every few seconds, and renamed to lines like "Bffr.".
+     * The overlay is aria-hidden decoration; the label says what the control
+     * is.
+     */
+    expect(src).toContain("<AnimatedPlaceholder text={idlePrompt}");
+    expect(src).toContain('aria-label="Message Sprint Buddy"');
+    expect(src).not.toContain("aria-label={idlePrompt}");
+  });
+
+  test("the overlay yields the moment there is anything to yield to", () => {
+    // Two of them on screen at once would be the obvious way for this to go
+    // wrong: a ghost line sitting underneath what somebody is typing.
+    expect(src).toContain("paused={composerFocused || input.length > 0}");
   });
 
   test("nothing in the list greets a bad day with a defeat", () => {
@@ -65,8 +81,11 @@ describe("the composer's idle prompt", () => {
     }
   });
 
-  test("a new line is drawn on mount and again every hour", () => {
-    expect(src).toContain("PROMPT_ROTATE_MS = 60 * 60 * 1000");
+  test("a new line is drawn on mount, and again on one timer, not two", () => {
+    expect(src).toContain("PROMPT_CYCLE_MS = 4200");
+    // The hourly rotate this replaced could only ever change a line that was
+    // hidden at the time, so it was one interval running for nothing.
+    expect(src).not.toContain("PROMPT_ROTATE_MS");
     // Drawn in the initialiser, so a reload is a fresh draw rather than a
     // value baked in at module load and shared by every mount.
     expect(src).toContain("useState(drawPrompt)");
