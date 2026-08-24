@@ -21,7 +21,7 @@ import type { ButtonHTMLAttributes } from "react";
  * On `scale`: the original displaces by 70. Measured against this app's own
  * login background rather than the demo's, 70, 24 and 8 are indistinguishable,
  * because the ground is near-black and refracting near-black returns
- * near-black. 18 is kept as a compromise: it reads on the constellation lines
+ * near-black. 18 is kept as a compromise: it reads on the lattice lines
  * and the grid where they pass behind the button, and it does not smear when
  * the mascot's glow reaches this far.
  */

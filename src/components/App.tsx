@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
 import Headline from "./Headline";
-import ConstellationField from "./ConstellationField";
+import KineticGrid from "./KineticGrid";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
 
@@ -184,7 +184,7 @@ export default function App() {
       <>
         <main className="login-screen">
           {/* Behind everything, and inert: decoration, not a control. */}
-          <ConstellationField />
+          <KineticGrid />
           <section className="login-hero" aria-label="Sprint Buddy login">
             <div className="login-mascot-panel" aria-hidden="true">
               <div className="login-halo" />
