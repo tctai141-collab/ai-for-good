@@ -922,7 +922,13 @@ import App from "../components/App";
     z-index: 1;
     margin: 0;
     padding: 0 var(--space-lg);
-    max-width: 24ch;
+    /* The line breaks where the message says it does. Left to the box it broke
+       wherever the width fell, orphaning "It" at the end of the first line. */
+    white-space: pre-line;
+    /* Only a very long name should wrap, and then evenly rather than leaving
+       one word alone on the second line. */
+    max-width: 30ch;
+    text-wrap: balance;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: clamp(1.1rem, 3.4vw, 2.4rem);
     font-weight: 600;

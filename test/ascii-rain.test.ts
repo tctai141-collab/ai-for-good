@@ -285,9 +285,35 @@ describe("the welcome splash", () => {
   const splash = readFileSync("src/components/WelcomeSplash.tsx", "utf-8");
   const typewriter = readFileSync("src/components/Typewriter.tsx", "utf-8");
   const app = readFileSync("src/components/App.tsx", "utf-8");
+  const css = readFileSync("src/pages/index.astro", "utf-8");
 
-  test("it says what Tai asked it to say", () => {
-    expect(splash).toContain('const MESSAGE = "Welcome Sprinters. It begins here!"');
+  test("it greets them by name, with a break it chose", () => {
+    /*
+     * As one string the line wrapped wherever the box's width happened to
+     * fall, which orphaned "It" at the end of the first line and dropped
+     * "begins here!" alone on the second. With a name in it there is no width
+     * that fixes that, because the break moves as the name changes length. So
+     * the newline is written, and pre-line renders it.
+     */
+    expect(splash).toContain("`Welcome, ${clean}.`");
+    expect(splash).toContain('const SECOND_LINE = "It begins here!"');
+    expect(splash).toContain("${greeting(name)}\\n${SECOND_LINE}");
+    expect(css).toMatch(/\.splash-line \{[^}]*white-space: pre-line/s);
+  });
+
+  test("an account with no name still gets a greeting", () => {
+    // A blank line is worse than the cohort's own word.
+    expect(splash).toContain('"Welcome Sprinters."');
+  });
+
+  test("the name comes from the session, not from the app's user state", () => {
+    /*
+     * The splash is raised the moment the server accepts the password, before
+     * `enter` has finished setting `user`. Reading it from there would greet
+     * nobody for the first second.
+     */
+    expect(app).toContain("setSplashName(data.user.name)");
+    expect(app).toContain("<WelcomeSplash name={splashName}");
   });
 
   test("the three seconds are a floor, not a cut", () => {
