@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import SprintBuddyMascot from "./SprintBuddyMascot";
 import LiquidGlassButton from "./LiquidGlassButton";
+import WordRing from "./WordRing";
 import ConstellationField from "./ConstellationField";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
@@ -189,12 +190,13 @@ export default function App() {
               <div className="login-halo" />
               <div className="login-mascot login-mascot-anchor" />
             </div>
+            <WordRing />
             <div className="login-panel" aria-labelledby="login-title">
-              <h1 id="login-title" className="login-title">
-                <span className="login-title-line login-title-line--buddy">
-                  Sprint <span className="login-title-accent">Buddy</span>
-                </span>
-              </h1>
+              {/* The name is the flying ring behind the mascot now. The heading
+                  stays as text so the page keeps an h1 and the panel keeps
+                  something to be labelled by: the ring is aria-hidden, and a
+                  login screen whose only title is decoration has no title. */}
+              <h1 id="login-title" className="sr-only">Sprint Buddy</h1>
 
               <form className="login-form" onSubmit={handleLogin}>
                 <label className="login-field">

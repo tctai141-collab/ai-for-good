@@ -287,7 +287,88 @@ import App from "../components/App";
     filter: blur(24px);
     opacity: 0.86;
   }
+  /* ── The flying headline ──
+     A rigid ring of words that the viewpoint orbits, from a supplied jellyfish
+     hero. The words are not animated one by one: they are pinned at fixed
+     seats facing inward and .ring-stage turns, so the swell into centre and
+     the trapezoidal sweep come free from perspective.
+
+     Fixed, and centred on the same point as .persistent-buddy--login, because
+     the mascot is fixed too: anchoring the ring to its column instead would
+     let the two drift apart at every viewport width. */
+  .ring {
+    position: fixed;
+    top: 50%;
+    left: clamp(9rem, 25vw, 26rem);
+    z-index: 2;
+    width: 0;
+    height: 0;
+    /* Radius scales with the viewport. Too large and BUDDY reaches the login
+       form on the right; this keeps it inside the mascot's own column. */
+    --ring-r: clamp(11rem, 21vw, 24rem);
+    perspective: 1500px;
+    pointer-events: none;
+  }
+  .ring-stage {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    animation: ring-orbit 18s linear infinite;
+    will-change: transform;
+  }
+  .ring-word {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
+    width: 22ch;
+    margin: -0.5em 0 0 -11ch;
+    font-family: var(--font-serif);
+    font-weight: 900;
+    /* Big enough that the mascot crops the middle of the word rather than
+       swallowing it. Measured: at 13vw the word was 1.24x the mascot's width,
+       so only ~85px of it ever cleared the silhouette and it read as a smudge.
+       The reference hero runs about 2.5x, which is what this is. */
+    font-size: clamp(5rem, 19vw, 17rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    text-align: center;
+    white-space: nowrap;
+    /* Bright enough to read as a headline, dim enough that the mascot stays
+         the subject. At 10% on this ground it was invisible. */
+    color: rgba(255, 255, 255, 0.16);
+    opacity: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    animation: ring-fade 18s linear infinite;
+    will-change: opacity;
+  }
+  @keyframes ring-orbit {
+    from { transform: rotateY(0deg); }
+    to { transform: rotateY(-360deg); }
+  }
+  /* Bright while the word faces the reader, out across the back half. The
+     backface is already hidden; this narrows it to one dominant word and
+     softens the emerge and recede at the edges. */
+  @keyframes ring-fade {
+    0%, 10% { opacity: 1; }
+    26% { opacity: 0; }
+    74% { opacity: 0; }
+    90%, 100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* Hold one readable frame rather than a blank one: stop the turn and show
+       the first word, which at rotateY(180deg) is the seat facing the reader. */
+    .ring-stage { animation: none; transform: rotateY(180deg); }
+    .ring-word { animation: none; opacity: 0; }
+    .ring-word:first-child { opacity: 1; }
+  }
+
   .login-panel {
+    position: relative;
+    /* Above the word ring. The ring is fixed and the panel is in flow, so
+       without this the giant type paints over the email field. */
+    z-index: 10;
     width: min(100%, 27rem);
     display: flex;
     flex-direction: column;
