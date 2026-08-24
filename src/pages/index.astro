@@ -215,16 +215,12 @@ import App from "../components/App";
     filter: blur(24px);
     opacity: 0.86;
   }
-  /* ── The morphing wordmark ──
-     Sits above the sign-in fields and melts between the programme's three
-     names. Two overlapping copies, one blurring out as the other blurs in,
-     with a threshold filter over both: that hard alpha edge across two blurs
-     is what reads as liquid rather than as a crossfade. */
-  .morph {
+  /* ── The scrambling wordmark ──
+     Sits above the sign-in fields. Each of the programme's three names
+     arrives as noise and resolves into itself, left to right. */
+  .scramble {
     position: relative;
-    /* Just taller than one line, for descenders. At 2.1em the box left a band
-       of empty space under the wordmark and pushed the fields down. */
-    height: 1.32em;
+    display: block;
     margin-bottom: var(--space-sm);
     font-family: var(--font-serif);
     font-weight: 900;
@@ -242,32 +238,25 @@ import App from "../components/App";
      */
     font-size: clamp(1.5rem, 4.3vw, 2.75rem);
     font-size: clamp(1.5rem, 10.2cqw, 2.9rem);
-    line-height: 1.05;
+    line-height: 1.15;
     letter-spacing: -0.02em;
     color: var(--color-text);
-    /* The blur alongside the threshold softens the stair-stepping the hard
-       alpha cut would otherwise leave on every edge. */
-    filter: url(#morph-threshold) blur(0.5px);
+    white-space: nowrap;
   }
-  .morph-line {
+  /*
+   * Holds the line's width and height from the longest name, and is never
+   * seen. Without it the box is sized by whatever is on screen this frame,
+   * and since the noise alphabet is nothing like the letters it replaces, the
+   * fields below would jog up and down for the whole animation.
+   */
+  .scramble-gauge {
+    display: block;
+    visibility: hidden;
+  }
+  .scramble-live {
     position: absolute;
     inset: 0;
     display: block;
-    width: 100%;
-    white-space: nowrap;
-    will-change: filter, opacity;
-  }
-  /* Present for its <defs>, never painted. */
-  .morph-filter {
-    position: absolute;
-    width: 0;
-    height: 0;
-    pointer-events: none;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    /* The threshold filter is only worth its cost while something is moving
-       through it; held still it just crisps the edges for nothing. */
-    .morph { filter: none; }
   }
 
   .login-panel {
