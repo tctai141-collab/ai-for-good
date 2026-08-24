@@ -174,6 +174,37 @@ describe("no other surface exposes it", () => {
     }
   });
 
+  test("deleting the founder takes the take history too", async () => {
+    /*
+     * The history table cascades from users, so this passed before it was
+     * listed in deleteUser. Asserted anyway: erasure is the wrong place to
+     * depend on a constraint staying the way it is, and a future rebuild of
+     * that table would drop the cascade without anything failing.
+     */
+    const db = h.db();
+    try {
+      const before = db
+        .query("SELECT COUNT(*) AS n FROM working_genius_takes WHERE user_email = $e")
+        .get({ $e: alice.email }) as { n: number };
+      expect(before.n).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+
+    const gone = await post(h, "/api/admin/users", { action: "remove", email: alice.email }, organizer.cookie);
+    expect(gone.ok).toBe(true);
+
+    const db2 = h.db();
+    try {
+      const after = db2
+        .query("SELECT COUNT(*) AS n FROM working_genius_takes WHERE user_email = $e")
+        .get({ $e: alice.email }) as { n: number };
+      expect(after.n).toBe(0);
+    } finally {
+      db2.close();
+    }
+  });
+
   test("deleting the founder takes the profile with them", async () => {
     const gone = await post(
       h,

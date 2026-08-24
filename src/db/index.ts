@@ -509,6 +509,9 @@ export function deleteUser(email: string): void {
     db.run("DELETE FROM threads WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM visits WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM working_genius WHERE user_email = $email", { $email: email });
+    // Cascades from users anyway, but erasure is the wrong place to rely on a
+    // constraint staying as it is.
+    db.run("DELETE FROM working_genius_takes WHERE user_email = $email", { $email: email });
     // sessions and invites cascade, but being explicit costs nothing and keeps
     // the intent readable next to the rest.
     db.run("DELETE FROM sessions WHERE user_email = $email", { $email: email });
@@ -1543,4 +1546,23 @@ export function listWorkingGeniusTakes(userEmail: string): WorkingGeniusTake[] {
        ORDER BY taken_on ASC`,
     )
     .all({ $email: userEmail }) as WorkingGeniusTake[];
+}
+
+/**
+ * One founder's deadline completions, titled so an export reads as something
+ * rather than as a list of ids.
+ */
+export function getDeadlineCompletions(
+  userEmail: string,
+): { deadline: string; dueDate: string; completedAt: string }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT d.title AS deadline, d.due_date AS dueDate, c.completed_at AS completedAt
+       FROM deadline_completions c
+       JOIN deadlines d ON d.id = c.deadline_id
+       WHERE c.user_email = $email
+       ORDER BY c.completed_at ASC`,
+    )
+    .all({ $email: userEmail }) as { deadline: string; dueDate: string; completedAt: string }[];
 }

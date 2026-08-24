@@ -378,7 +378,17 @@ export const GET: APIRoute = async ({ cookies, request }) => {
         });
       }
 
+      /*
+       * Founder-only, like themes and the working-style profile.
+       *
+       * This was the one read with no owner check, so an organizer could ask
+       * how often any founder had opened the app. No organizer surface shows
+       * that and none is meant to: it is an engagement number about a person,
+       * and the cohort dashboard deliberately reports strain rather than
+       * attendance.
+       */
       case "visits":
+        if (!isOwner) return err("forbidden", 403);
         return json({ visits: getVisits(userEmail) });
 
       /*
@@ -413,7 +423,11 @@ export const GET: APIRoute = async ({ cookies, request }) => {
         const counts = new Map<string, number[]>();
         for (const signal of getThemeSignals(userEmail)) {
           const label = (signal.theme || "").trim();
-          if (!label || label === "—" || label === "checkin") continue;
+          // Case-insensitive because the exact-match version quietly let
+          // "Check-in" through, and a bookkeeping tag reading as the founder's
+          // dominant preoccupation is a hard thing to notice from the outside.
+          const tag = label.toLowerCase();
+          if (!label || label === "—" || tag === "checkin" || tag === "check-in") continue;
           const at = new Date(signal.created_at.replace(" ", "T") + "Z");
           const week = weekForDateClamped(at);
           if (week === null) continue;

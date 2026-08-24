@@ -73,13 +73,38 @@ export type WorkingGenius = {
   result?: WorkingGeniusResult;
 };
 
+/**
+ * A failed write, with the server's own words kept.
+ *
+ * The status alone was all that survived, which turned every refusal into
+ * "Could not save that" no matter what the server said. Some refusals are
+ * permanent and explain themselves: a working-style retake submitted before
+ * its window answers 409 and names the date it opens. Throwing that away left
+ * a founder who had just answered thirty questions staring at a Try again that
+ * could never work.
+ */
+export class PersistenceError extends Error {
+  constructor(readonly status: number, readonly serverMessage: string | null) {
+    super(serverMessage ?? `Persistence error ${status}`);
+    this.name = "PersistenceError";
+  }
+}
+
 async function post(body: Record<string, unknown>) {
   const res = await fetch("/api/persistence", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Persistence error ${res.status}`);
+  if (!res.ok) {
+    // Best effort: an error body is not guaranteed, and a parse failure here
+    // must not replace the real status with a JSON error.
+    const detail = await res
+      .json()
+      .then((d) => (typeof (d as { error?: unknown }).error === "string" ? (d as { error: string }).error : null))
+      .catch(() => null);
+    throw new PersistenceError(res.status, detail);
+  }
   return res.json() as Promise<Record<string, unknown>>;
 }
 

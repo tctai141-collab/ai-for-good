@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
-import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
+import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
   WORKING_GENIUS_ITEMS,
   WORKING_GENIUS_TYPES,
@@ -206,9 +206,14 @@ async function callClaude(
 
 /* ---------- Palette: reads from DESIGN.md tokens defined in :root ---------- */
 const C = {
-  blue: "var(--brand-blue)",
+  /* The interactive accent, signal red since 2026-08-24. Was blue, and was
+     called blue here long enough that the rename is worth the diff. */
+  accent: "var(--brand-accent)",
   red: "var(--brand-red)",
   yellow: "var(--brand-yellow)",
+  /* Not a brand colour, but the only other hue the app already uses, and the
+     categorical sets need it now that blue is gone. */
+  green: "#7CB893",
   black: "oklch(8% 0.008 250)",
   white: "var(--ink)",
   ink: "var(--ink)",
@@ -248,10 +253,17 @@ const C = {
  */
 type StateKey = "panic" | "thinking" | "venting";
 const THREAD_STATE: StateKey = "thinking";
-const CHAT_ACCENT = C.blue;
+const CHAT_ACCENT = C.accent;
 
-const THEME_COLOR: Record<string, string> = { Runway: C.red, Hiring: C.blue, Cofounder: C.yellow, Product: C.blue, "Self-doubt": C.red, Fundraise: C.yellow, Growth: C.blue };
-const themeColor = (t: string) => THEME_COLOR[t] || C.blue;
+/*
+ * Spread across what is left after blue. Three themes used to be blue and would
+ * all have become the accent, putting five of seven on one of two reds. Runway
+ * and Self-doubt keep the alarm coral because that is what they are; the rest
+ * take green and yellow. Theme rows are labelled, so this is legibility rather
+ * than meaning.
+ */
+const THEME_COLOR: Record<string, string> = { Runway: C.red, Hiring: C.green, Cofounder: C.yellow, Product: C.accent, "Self-doubt": C.red, Fundraise: C.yellow, Growth: C.green };
+const themeColor = (t: string) => THEME_COLOR[t] || C.accent;
 
 type Thread = {
   id: string;
@@ -436,7 +448,11 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
     const entry: Checkin = {
       id: crypto.randomUUID(),
       refDecisionId: null,
-      theme: "Check-in",
+      // Lowercase, matching what the full check-in writes. The themes query
+      // filters this exact token out of "On your mind"; "Check-in" sailed
+      // straight past it and would have become the founder's top theme inside
+      // a week of tapping.
+      theme: "checkin",
       prompt: note.trim() ? `${label}. ${note.trim()}` : label,
       mood,
       createdAt: new Date().toISOString(),
@@ -668,7 +684,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 4px 28px" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
             <span style={{ ...wordmarkType, fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Sprint</span>
-            <span style={{ display: "inline-block", background: C.blue, padding: "2px 12px 5px", marginLeft: -5, marginTop: 1 }}>
+            <span style={{ display: "inline-block", background: C.accent, padding: "2px 12px 5px", marginLeft: -5, marginTop: 1 }}>
               <span style={{ ...wordmarkType, color: "oklch(13% 0.008 250)", fontSize: 30, letterSpacing: "-0.045em", lineHeight: 0.9 }}>Buddy</span>
             </span>
           </div>
@@ -697,10 +713,20 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               <span aria-hidden="true" style={{ color: "#7CB893", fontSize: 14, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>✓</span>
             </div>
           ) : (
-            <button onClick={onStartCheckin} className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "rgba(70, 165, 255, 0.12)", border: "1px solid rgba(70, 165, 255, 0.35)", borderRadius: 12, padding: "12px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", color: C.blue, marginBottom: 14 }}>
-              <span style={{ width: 7, height: 7, borderRadius: 9, background: C.blue, flexShrink: 0 }} />
+            /*
+             * Prominent, not alarming, and one dot rather than two.
+             *
+             * This was a red-tinted panel with red text. Once the accent became
+             * signal red it read as a warning rather than an invitation, and it
+             * sat a shade away from the overdue deadline directly above it. A
+             * routine daily action should not look like something has gone
+             * wrong. The dot on the right still carries "not done yet", which
+             * was always the actual signal; the bullet on the left was
+             * decorative and became a second red dot saying nothing.
+             */
+            <button onClick={onStartCheckin} className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid var(--line-strong)", borderRadius: 12, padding: "12px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer", color: C.ink, marginBottom: 14 }}>
               <span style={{ flex: 1, textAlign: "left" }}>Today's check-in</span>
-              <span style={{ width: 8, height: 8, borderRadius: 9, background: C.red, flexShrink: 0 }} />
+              <span style={{ width: 8, height: 8, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
             </button>
           )}
 
@@ -879,7 +905,7 @@ function ShareToggle({ shared, seenAt, onChange }: { shared: boolean; seenAt?: s
         <button
           type="button"
           onClick={() => { onChange(true); setConfirming(false); }}
-          style={{ ...shareButtonStyle, borderColor: C.blue, color: C.blue }}
+          style={{ ...shareButtonStyle, borderColor: C.accent, color: C.accent }}
         >
           Share it
         </button>
@@ -902,8 +928,8 @@ function ShareToggle({ shared, seenAt, onChange }: { shared: boolean; seenAt?: s
       style={{
         ...shareButtonStyle,
         whiteSpace: "nowrap",
-        borderColor: shared ? C.blue : "var(--line-strong)",
-        color: shared ? C.blue : C.sub,
+        borderColor: shared ? C.accent : "var(--line-strong)",
+        color: shared ? C.accent : C.sub,
       }}
     >
       {shared ? "Shared with your coach" : "Private"}
@@ -1081,7 +1107,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const checkinInitiated = useRef(false);
 
   const threadId = existing?.id || null;
-  const accent = isCheckin ? C.blue : CHAT_ACCENT;
+  const accent = isCheckin ? C.accent : CHAT_ACCENT;
   const postureLabel = isCheckin ? "Check-in" : "Thinking";
 
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [msgs, busy, banner]);
@@ -1237,7 +1263,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
               ))}
               {busy && (
                 <div style={{ alignSelf: "flex-start", padding: "6px 4px" }} aria-label="Buddy is thinking">
-                  <span className="pulse-dot" style={{ display: "inline-block", width: 9, height: 9, borderRadius: 9, background: C.blue }} />
+                  <span className="pulse-dot" style={{ display: "inline-block", width: 9, height: 9, borderRadius: 9, background: C.accent }} />
                 </div>
               )}
               {banner && (
@@ -1281,10 +1307,20 @@ type TimeCtx = { clock: string; line: string; dotColor: string; greeting: string
  * so that the browser and the API score against one implementation. Only the
  * palette stays here, because it is presentation and the rest is not.
  */
+/*
+ * Six types, and after the recolour only five hues to tell them apart with.
+ *
+ * Blue used to carry discernment. With the accent now red, discernment and
+ * invention both landed on a red and sat next to each other in the wheel. They
+ * are separated as far as the remaining palette allows: the deep signal red
+ * against the softer coral. It is the weakest pair here and it is worth a
+ * proper sixth hue if this wheel matters, but nothing is encoded by colour
+ * alone. Every band and every gear carries its name.
+ */
 const WG_COLOR: Record<WorkingGeniusId, { tint: string; accent: string }> = {
   wonder: { tint: "rgba(247, 225, 89, 0.16)", accent: C.yellow },
-  invention: { tint: "rgba(253, 99, 96, 0.16)", accent: C.red },
-  discernment: { tint: "rgba(70, 165, 255, 0.16)", accent: C.blue },
+  invention: { tint: "rgba(232, 23, 10, 0.16)", accent: C.accent },
+  discernment: { tint: "rgba(253, 99, 96, 0.16)", accent: C.red },
   galvanizing: { tint: "rgba(255, 255, 255, 0.10)", accent: C.white },
   enablement: { tint: "rgba(124, 184, 147, 0.16)", accent: "#7CB893" },
   tenacity: { tint: "rgba(255, 255, 255, 0.08)", accent: C.ink },
@@ -1406,32 +1442,42 @@ function MobileActions({
   const next = nextUp(deadlines);
   const overdue = next?.item.group === "overdue";
 
+  /*
+   * Two rows, not one.
+   *
+   * Measured at 390px with everything on a single line: the deadline collapsed
+   * to 26 pixels, because it is the only flexible item and the five mood
+   * buttons take what they need first. The one thing a founder opens their
+   * phone to see was the one thing squeezed out.
+   */
   return (
     <div className="mobile-actions">
-      {checkinDone ? (
-        <span className="mobile-actions-done">
-          <span aria-hidden="true">✓</span> Checked in
-        </span>
-      ) : (
-        <button type="button" onClick={onStartCheckin} className="mobile-actions-checkin">
-          Today&rsquo;s check-in
-        </button>
-      )}
+      <div className="mobile-actions-row">
+        {checkinDone ? (
+          <span className="mobile-actions-done">
+            <span aria-hidden="true">✓</span> Checked in
+          </span>
+        ) : (
+          <button type="button" onClick={onStartCheckin} className="mobile-actions-checkin">
+            Today&rsquo;s check-in
+          </button>
+        )}
+
+        {next && (
+          <button
+            type="button"
+            onClick={onOpenSidebar}
+            className="mobile-actions-next"
+            style={overdue ? { color: C.red, borderColor: "rgba(253, 99, 96, 0.4)" } : undefined}
+          >
+            <span className="mobile-actions-title">{next.item.title}</span>
+            <span className="mobile-actions-when">{next.label}</span>
+            {next.more > 0 && <span className="mobile-actions-more">+{next.more}</span>}
+          </button>
+        )}
+      </div>
 
       {!checkinDone && <QuickCheckin onQuickCheckin={onQuickCheckin} compact />}
-
-      {next && (
-        <button
-          type="button"
-          onClick={onOpenSidebar}
-          className="mobile-actions-next"
-          style={overdue ? { color: C.red, borderColor: "rgba(253, 99, 96, 0.4)" } : undefined}
-        >
-          <span className="mobile-actions-title">{next.item.title}</span>
-          <span className="mobile-actions-when">{next.label}</span>
-          {next.more > 0 && <span className="mobile-actions-more">+{next.more}</span>}
-        </button>
-      )}
     </div>
   );
 }
@@ -1545,6 +1591,8 @@ function Reflections({
   const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusId>>({});
   const [wgSaving, setWgSaving] = useState(false);
   const [wgError, setWgError] = useState<string | null>(null);
+  /** Set when the server refuses because the window is shut. Not retryable. */
+  const [wgClosed, setWgClosed] = useState<string | null>(null);
 
   const wgItem = WORKING_GENIUS_ITEMS[wgIndex];
 
@@ -1557,10 +1605,22 @@ function Reflections({
       setWgResult(result);
       setWgLegacy(false);
       setWgStarted(false);
-    } catch {
-      // The answers stay in state, so Try again resubmits rather than
-      // restarting thirty items.
-      setWgError("Could not save that. Your answers are still here.");
+    } catch (error) {
+      /*
+       * A 409 is the retake window, and it is permanent until a date. Saying
+       * "Could not save that" next to a Try again that can never work is the
+       * worst possible answer to somebody who has just spent six minutes on
+       * thirty questions, so the server's own sentence is shown and the retry
+       * is withdrawn.
+       */
+      if (error instanceof PersistenceError && error.status === 409) {
+        setWgClosed(error.serverMessage ?? "This one is not open yet.");
+        setWgStarted(false);
+      } else {
+        // The answers stay in state, so Try again resubmits rather than
+        // restarting thirty items.
+        setWgError("Could not save that. Your answers are still here.");
+      }
     } finally {
       setWgSaving(false);
     }
@@ -1693,8 +1753,8 @@ function Reflections({
                 type="button"
                 onClick={startWorkingGenius}
                 style={{
-                  background: "none", border: `1px solid ${C.blue}`, borderRadius: 999,
-                  padding: "7px 15px", color: C.blue, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                  background: "none", border: `1px solid ${C.accent}`, borderRadius: 999,
+                  padding: "7px 15px", color: C.accent, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
                 }}
               >
                 Retake it now
@@ -1719,6 +1779,12 @@ function Reflections({
             </span>
           )}
         </div>
+
+        {wgClosed && (
+          <p style={{ margin: "14px 0 0", fontSize: 13.5, color: C.yellow, lineHeight: 1.6 }}>
+            {wgClosed} Your answers were not saved.
+          </p>
+        )}
 
         {(!wgStarted || wgResult) && <WgPrivateNote />}
 
@@ -1748,7 +1814,7 @@ function Reflections({
               )}
             </div>
             <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-              <div style={{ width: `${(wgIndex / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.blue, transition: "width 200ms ease" }} />
+              <div style={{ width: `${(wgIndex / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.accent, transition: "width 200ms ease" }} />
             </div>
             <div
               style={{
@@ -1782,8 +1848,8 @@ function Reflections({
                       textAlign: "left",
                       padding: "16px 18px",
                       borderRadius: 14,
-                      border: `1px solid ${picked ? C.blue : C.line}`,
-                      background: picked ? "rgba(70, 165, 255, 0.10)" : "rgba(0,0,0,0.25)",
+                      border: `1px solid ${picked ? C.accent : C.line}`,
+                      background: picked ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.25)",
                       color: C.ink,
                       fontSize: 16,
                       fontWeight: 600,
@@ -1806,7 +1872,7 @@ function Reflections({
                 <button
                   type="button"
                   onClick={() => void submitWorkingGenius(wgAnswers)}
-                  style={{ background: "none", border: "none", color: C.blue, cursor: "pointer", padding: 0, fontSize: 13, textDecoration: "underline" }}
+                  style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", padding: 0, fontSize: 13, textDecoration: "underline" }}
                 >
                   Try again
                 </button>
@@ -1837,7 +1903,7 @@ function Reflections({
                   padding: "12px 22px",
                   borderRadius: 999,
                   border: "none",
-                  background: C.blue,
+                  background: C.accent,
                   color: "#04121f",
                   fontWeight: 700,
                   fontSize: 14.5,
@@ -2259,11 +2325,11 @@ function Arc({ checkins }: { checkins: Checkin[] }) {
         {[40, 70].map((band) => (
           <line key={band} x1={PAD} x2={W - PAD} y1={y(band)} y2={y(band)} stroke={C.line} strokeWidth="1" strokeDasharray="2 4" />
         ))}
-        <path d={area} fill={C.blue} opacity="0.08" />
-        <path d={line} fill="none" stroke={C.blue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={area} fill={C.accent} opacity="0.08" />
+        <path d={line} fill="none" stroke={C.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
           <circle key={i} cx={x(i)} cy={y(p.mood)} r={i === points.length - 1 ? 4.5 : 2.5}
-            fill={i === points.length - 1 ? endColor : C.blue}
+            fill={i === points.length - 1 ? endColor : C.accent}
             stroke={C.bg} strokeWidth="2">
             <title>{`${fmt(p.at)} · ${signalLabel(p.mood)} (${p.mood}/100)`}</title>
           </circle>
@@ -2349,7 +2415,7 @@ function ProgrammeRail() {
           <div key={w.week} style={{ padding: "0 4px" }}>
             <p style={{
               margin: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.2,
-              textTransform: "uppercase", color: w.week === now ? C.blue : C.faint,
+              textTransform: "uppercase", color: w.week === now ? C.accent : C.faint,
             }}>
               {w.week === now ? "This week" : `Week ${w.week}`}
             </p>
@@ -2414,7 +2480,7 @@ function ThemeRow({ t }: { t: ThemeArc }) {
 }
 
 function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision) => void }) {
-  const statusColor = d.status === "closed" ? C.blue : C.yellow;
+  const statusColor = d.status === "closed" ? C.accent : C.yellow;
   return (
     <li style={{ display: "grid", gridTemplateColumns: "5rem 1fr auto", gap: 20, alignItems: "start", padding: "16px 0", borderBottom: `1px solid ${C.line}`, fontSize: 15, lineHeight: 1.5 }}>
       <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.6, textTransform: "uppercase", color: statusColor, paddingTop: 3 }}>{d.status === "closed" ? "Closed" : "Open"}</span>
@@ -2461,7 +2527,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
         <p style={kicker}>The cohort, this week</p>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", margin: "10px 0 16px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>No founders yet.</h1>
         <p style={{ margin: "0 0 26px", fontFamily: "var(--font-serif)", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 28' }}>
-          Add the cohort in <a href="/admin" style={{ color: C.blue }}>Cohort admin</a> and send each founder their setup link. Their signals appear here once they start checking in.
+          Add the cohort in <a href="/admin" style={{ color: C.accent }}>Cohort admin</a> and send each founder their setup link. Their signals appear here once they start checking in.
         </p>
       </div>
     );
@@ -2547,7 +2613,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
  */
 function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
   const arrow = ({ tenser: "↗", calmer: "↘", steady: "→", quiet: "•" } as const)[team.trend] || "→";
-  const arrowColor = ({ tenser: C.red, calmer: C.blue, steady: C.sub, quiet: C.faint } as const)[team.trend] || C.sub;
+  const arrowColor = ({ tenser: C.red, calmer: C.accent, steady: C.sub, quiet: C.faint } as const)[team.trend] || C.sub;
 
   return (
     <div className="rise" style={{ maxWidth: 640, margin: "0 auto", padding: "26px 28px 90px" }}>
@@ -2614,7 +2680,7 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
       </div>
 
       <p style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, marginTop: 36, paddingTop: 18, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 8, fontVariationSettings: '"opsz" 18' }}>
-        <span style={{ width: 6, height: 6, borderRadius: 9, background: C.blue, flexShrink: 0 }} />
+        <span style={{ width: 6, height: 6, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
         Shared by the founder. Themes and trends only, never raw transcripts.
       </p>
     </div>
@@ -2704,7 +2770,7 @@ function useTimeContext(): TimeCtx {
 
   const i = roll % lines.length;
   const line = lines[i] ?? dayLines[0]!;
-  const dotColor = (h >= 23 || h < 5) ? C.red : (h < 11) ? C.yellow : C.blue;
+  const dotColor = (h >= 23 || h < 5) ? C.red : (h < 11) ? C.yellow : C.accent;
 
   const greetings = [
     "Let's go.", "Where to?", "What's the move?", "Talk to me.", "What are we building?",
@@ -2740,7 +2806,7 @@ const CSS = `
 .threadrow:hover .thread-delete,
 .threadrow:focus-within .thread-delete { opacity: 1; }
 .thread-delete:hover { color: var(--brand-red)!important; background: rgba(255,255,255,0.07)!important; }
-.thread-delete:focus-visible { opacity: 1; outline: 2px solid var(--brand-blue); outline-offset: 1px; }
+.thread-delete:focus-visible { opacity: 1; outline: 2px solid var(--brand-accent); outline-offset: 1px; }
 @media (hover: none) { .thread-delete { opacity: 0.5; } }
 
 /* Deadline checkboxes.
@@ -2763,8 +2829,8 @@ const CSS = `
   place-items: center;
   transition: background 120ms ease, border-color 120ms ease;
 }
-.deadline-check:hover:not(:disabled) { border-color: var(--brand-blue); }
-.deadline-check:checked { background: var(--brand-blue); border-color: var(--brand-blue); }
+.deadline-check:hover:not(:disabled) { border-color: var(--brand-accent); }
+.deadline-check:checked { background: var(--brand-accent); border-color: var(--brand-accent); }
 .deadline-check:checked::after {
   content: "";
   width: 3.5px;
@@ -2773,10 +2839,10 @@ const CSS = `
   border-width: 0 2px 2px 0;
   transform: translateY(-1px) rotate(45deg);
 }
-.deadline-check:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.deadline-check:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .row:hover { background: rgba(255,255,255,.04)!important; }
 .newbtn:hover { opacity: .9; }
-.composer-box:focus-within { border-color: var(--brand-blue)!important; }
+.composer-box:focus-within { border-color: var(--brand-accent)!important; }
 
 /* ---- The record, and printing it ------------------------------------------
    Printing is the export. A founder who wants to keep this should not need an
@@ -2793,7 +2859,7 @@ const CSS = `
   cursor: pointer;
 }
 .record-print:hover { background: rgba(255,255,255,.06); }
-.record-print:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.record-print:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 @media print {
   /* Only the record prints. Everything else on this page is navigation or
@@ -2837,7 +2903,7 @@ const CSS = `
   white-space: nowrap;
 }
 .quick-buttons button:hover { background: rgba(255,255,255,.06); }
-.quick-buttons button:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.quick-buttons button:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 .quick-note { display: flex; gap: 6px; margin: -6px 0 14px; }
 .quick-note input {
@@ -2851,21 +2917,47 @@ const CSS = `
   color: inherit;
   font: 400 13px/1 var(--font-family);
 }
-.quick-note input:focus { outline: none; border-color: var(--brand-blue); }
+.quick-note input:focus { outline: none; border-color: var(--brand-accent); }
 .quick-note button {
   flex: 0 0 auto;
   min-height: 38px;
   padding: 0 14px;
   border-radius: 9px;
   border: none;
-  background: var(--brand-blue);
+  /* White, like every other confirm here. A solid accent on a routine save
+     read as destructive once the accent went red. */
+  background: var(--ink);
   color: oklch(13% 0.008 250);
   font: 700 12.5px/1 var(--font-family);
   cursor: pointer;
 }
-.quick-row-compact, .quick-note-compact { margin: 0; flex: 0 0 auto; }
-.quick-row-compact .quick-buttons { display: flex; flex-wrap: nowrap; }
-.quick-note-compact input { min-width: 9rem; }
+/* The strip is the touch surface, so its controls get the 44px the rest of the
+   app already treats as the floor. The row scrolls rather than shrinking the
+   labels into illegibility. */
+/* min-width: 0 because a flex item defaults to min-width: auto and refuses to
+   shrink below its content, which let the button row grow past the strip and
+   clipped the last mood with nothing able to scroll to it. */
+.quick-row-compact, .quick-note-compact { margin: 0; min-width: 0; }
+.quick-row-compact .quick-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.quick-row-compact .quick-buttons::-webkit-scrollbar { display: none; }
+/* Tighter horizontally than the sidebar copy so all five fit a 390px phone
+   without scrolling. Narrower phones still scroll, which is why the row is
+   scrollable at all, but a ten-pixel scroll nobody discovers is the worst of
+   both. Height stays at the 44px touch floor. */
+.quick-row-compact .quick-buttons button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0 7px;
+  font-size: 11.5px;
+}
+.quick-note-compact input { min-height: 44px; }
+.quick-note-compact button { min-height: 44px; }
 
 /* ---- Mobile actions -------------------------------------------------------
    Hidden entirely on anything wide enough to show the sidebar, which is where
@@ -2874,25 +2966,28 @@ const CSS = `
 @media (max-width: 700px) {
   .mobile-actions {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
     flex-shrink: 0;
     padding: 10px 12px 10px 60px;
     border-bottom: 1px solid var(--line-strong);
     background: var(--card, rgba(255,255,255,0.03));
-    overflow-x: auto;
-    scrollbar-width: none;
   }
-  .mobile-actions::-webkit-scrollbar { display: none; }
+  .mobile-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
 }
 .mobile-actions-checkin {
   flex: 0 0 auto;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(70, 165, 255, 0.4);
-  background: rgba(70, 165, 255, 0.14);
-  color: var(--brand-blue);
+  border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,0.05);
+  color: var(--ink);
   font: 700 13.5px/1 var(--font-family);
   cursor: pointer;
   white-space: nowrap;
@@ -2902,7 +2997,7 @@ const CSS = `
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   font: 600 13px/1 var(--font-family);
   color: #7CB893;
@@ -2911,7 +3006,7 @@ const CSS = `
 .mobile-actions-next {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 40px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2928,7 +3023,7 @@ const CSS = `
 .mobile-actions-when { flex: 0 0 auto; font-weight: 700; font-size: 12px; opacity: .85; }
 .mobile-actions-more { flex: 0 0 auto; font-size: 11.5px; opacity: .6; }
 .mobile-actions-checkin:focus-visible,
-.mobile-actions-next:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.mobile-actions-next:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .send-button {
   /* 44px is the smallest reliable touch target on iOS and Android, and this
      is the control founders hit most. It was 36px. */

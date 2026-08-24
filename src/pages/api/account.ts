@@ -3,9 +3,13 @@ import {
   countOrganizers,
   deleteUser,
   getCheckins,
+  getDeadlineCompletions,
   getDecisions,
   getThreads,
   getUserRow,
+  getVisits,
+  getWorkingGenius,
+  listWorkingGeniusTakes,
   recordAdminAction,
 } from "../../db/index";
 import { endSession, getSessionUser } from "../../lib/auth";
@@ -55,6 +59,21 @@ export const GET: APIRoute = async ({ cookies }) => {
       conversations: getThreads(session.email),
       decisions: getDecisions(session.email),
       checkins: getCheckins(session.email),
+      /*
+       * The working-style profile belongs in here and was missing.
+       *
+       * Assembling this by hand is right, because it stops a new column
+       * exporting itself, but the same property means a whole new table stays
+       * invisible until somebody remembers it. This one is the most personal
+       * thing the product holds after the conversations, and every take is
+       * included rather than only the latest, because the takes are the point.
+       */
+      workingStyle: {
+        latest: getWorkingGenius(session.email),
+        everyTake: listWorkingGeniusTakes(session.email),
+      },
+      deadlinesCompleted: getDeadlineCompletions(session.email),
+      timesOpened: getVisits(session.email),
       note:
         "Conversations you deleted are not here. Encrypted backups may still " +
         "contain them for up to 30 days before rotating out.",

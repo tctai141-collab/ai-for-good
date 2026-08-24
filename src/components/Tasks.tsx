@@ -43,7 +43,7 @@ const C = {
   faint: "var(--ink-faint)",
   line: "var(--line)",
   red: "var(--brand-red)",
-  blue: "var(--brand-blue)",
+  accent: "var(--brand-accent)",
 };
 
 /** Matches the sidebar's other section headings exactly. */

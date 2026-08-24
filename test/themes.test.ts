@@ -129,3 +129,41 @@ describe("themes are real, not invented", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("bookkeeping tags stay out of On your mind", () => {
+  /*
+   * Check-in rows carry a theme so they can be counted, and that theme feeds
+   * the same query as real ones. The filter matched the literal "checkin",
+   * which the full check-in writes, and missed "Check-in", which the one-tap
+   * version wrote. Left alone it would have become the founder's dominant
+   * preoccupation inside a week of tapping, which is a hard thing to spot from
+   * the outside because it looks like a real theme.
+   */
+  test("neither spelling of the check-in tag appears as a theme", async () => {
+    for (const [id, theme] of [["c-lower", "checkin"], ["c-upper", "Check-in"]] as const) {
+      const res = await post(h, "/api/persistence", {
+        action: "save-checkin",
+        userEmail: alice.email,
+        checkin: { id, theme, prompt: "Stretched.", mood: 60 },
+      }, alice.cookie);
+      expect(res.status).toBe(200);
+    }
+
+    // And one real theme, so the assertion cannot pass on an empty list.
+    const real = await post(h, "/api/persistence", {
+      action: "save-checkin",
+      userEmail: alice.email,
+      checkin: { id: "c-real", theme: "Runway", prompt: "Cash is tight.", mood: 70 },
+    }, alice.cookie);
+    expect(real.status).toBe(200);
+
+    const res = await get(h, `/api/persistence?resource=themes&user=${alice.email}`, alice.cookie);
+    expect(res.status).toBe(200);
+    const { themes } = (await res.json()) as { themes: Array<{ name: string }> };
+    const names = themes.map((t) => t.name);
+
+    expect(names).toContain("Runway");
+    expect(names).not.toContain("checkin");
+    expect(names).not.toContain("Check-in");
+  });
+});

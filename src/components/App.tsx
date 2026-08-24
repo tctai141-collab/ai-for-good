@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
+import ConstellationField from "./ConstellationField";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
 
@@ -170,7 +171,7 @@ export default function App() {
     return (
       <main className="login-screen" aria-busy="true">
         <div className="login-panel" style={{ display: "grid", placeItems: "center", minHeight: "60vh", margin: "auto" }}>
-          <div className="pulse-dot" style={{ width: 12, height: 12, borderRadius: 12, background: "var(--brand-blue)" }} />
+          <div className="pulse-dot" style={{ width: 12, height: 12, borderRadius: 12, background: "var(--brand-accent)" }} />
         </div>
       </main>
     );
@@ -180,6 +181,8 @@ export default function App() {
     return (
       <>
         <main className="login-screen">
+          {/* Behind everything, and inert: decoration, not a control. */}
+          <ConstellationField />
           <section className="login-hero" aria-label="Sprint Buddy login">
             <div className="login-mascot-panel" aria-hidden="true">
               <div className="login-halo" />
