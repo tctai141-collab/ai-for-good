@@ -13,9 +13,28 @@ import { runAsciiRain } from "../lib/asciiRain";
  * grid then samples that, so the falling characters are dense where the
  * wordmark is and sparse around it, and the message is legible in the rain
  * before the typing has even started.
+ *
+ * The greeting uses the name on the account. Every account has one: it is set
+ * when the organizer adds the person, and the session returns it alongside the
+ * email and the role.
  */
 
-const MESSAGE = "Welcome Sprinters. It begins here!";
+/*
+ * Two lines, and the break is written rather than left to the box.
+ *
+ * As one string it wrapped wherever the width happened to fall, which orphaned
+ * "It" at the end of the first line and dropped "begins here!" on its own.
+ * With a name in it the break moves about as the name changes length, so there
+ * is no width that fixes it. The newline is rendered by white-space: pre-line.
+ */
+const SECOND_LINE = "It begins here!";
+
+function greeting(name: string): string {
+  const clean = name.trim();
+  /* No name on the account is not worth a blank line: the cohort's own word
+     stands in, which is what this said before it was personal. */
+  return clean.length > 0 ? `Welcome, ${clean}.` : "Welcome Sprinters.";
+}
 
 /** How long the splash is held. A floor, not a cut: see `onDone` below. */
 export const SPLASH_MS = 3000;
@@ -55,7 +74,7 @@ function paintSource(ctx: CanvasRenderingContext2D, width: number, height: numbe
   ctx.restore();
 }
 
-export default function WelcomeSplash({ onDone }: { onDone: () => void }) {
+export default function WelcomeSplash({ name, onDone }: { name: string; onDone: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -98,7 +117,7 @@ export default function WelcomeSplash({ onDone }: { onDone: () => void }) {
       <p className="splash-line">
         {/* The message is in the DOM as text for a screen reader; the rain
             behind it is decoration and is hidden. */}
-        <Typewriter text={MESSAGE} speed={48} startDelay={220} />
+        <Typewriter text={`${greeting(name)}\n${SECOND_LINE}`} speed={48} startDelay={220} />
       </p>
     </div>
   );

@@ -88,6 +88,10 @@ export default function App() {
    */
   const [splashing, setSplashing] = useState(false);
   const [held, setHeld] = useState(false);
+  /* Held separately from `user`, because the splash is raised the moment the
+     server accepts the password and `enter` has not finished setting `user`
+     yet. Without it the welcome would greet nobody for its first second. */
+  const [splashName, setSplashName] = useState("");
 
   /*
    * The first-run walkthrough.
@@ -196,6 +200,7 @@ export default function App() {
 
       setPassword("");
       setHeld(false);
+      setSplashName(data.user.name);
       setSplashing(true);
       if (!hasOnboarded(data.user.email)) setOnboarding(true);
       await enter(data.user);
@@ -209,7 +214,7 @@ export default function App() {
   if (splashing) {
     return (
       <>
-        <WelcomeSplash onDone={() => setHeld(true)} />
+        <WelcomeSplash name={splashName} onDone={() => setHeld(true)} />
         {/* The cube keeps its place through the transition rather than
             disappearing and coming back once the app is behind. */}
         <PersistentBuddy stage={buddyStage} />
