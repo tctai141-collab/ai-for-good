@@ -65,6 +65,30 @@ describe("the melt", () => {
     expect(code).not.toMatch(/blur\(\$\{[^}]*\}px\)/);
   });
 
+  test("it is sized against the panel, not the viewport", () => {
+    /*
+     * Measured: at the first size the longest of the three names filled 72% of
+     * the panel, which is what made it read as small beside the fields instead
+     * of as their heading. Sizing in cqw against .login-panel puts it at ~93%
+     * and holds that proportion at every viewport, rather than drifting as vw
+     * and the panel's max-width diverge.
+     *
+     * The vw declaration stays as the fallback: a browser without container
+     * queries treats the cqw one as invalid and keeps it.
+     */
+    expect(css).toMatch(/\.login-panel \{[^}]*container-type: inline-size/s);
+    expect(css).toContain("font-size: clamp(1.5rem, 10.2cqw, 2.9rem)");
+    expect(css).toContain("font-size: clamp(1.5rem, 4.3vw, 2.75rem)");
+    /* Comments stripped before comparing order: the explanation above the rule
+       names 10.2cqw, so indexOf found the prose rather than the declaration
+       and reported the fallback as coming second. */
+    const morph = css
+      .slice(css.indexOf("  .morph {"), css.indexOf("  .morph-line {"))
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(morph).toContain("4.3vw");
+    expect(morph.indexOf("4.3vw")).toBeLessThan(morph.indexOf("10.2cqw"));
+  });
+
   test("the fraction is clamped off both ends", () => {
     // At exactly 0 the supplied version computes 8/0 - 8 = Infinity and writes
     // blur(Infinitypx), which is invalid, so the browser drops the declaration
