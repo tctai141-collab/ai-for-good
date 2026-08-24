@@ -1547,3 +1547,22 @@ export function listWorkingGeniusTakes(userEmail: string): WorkingGeniusTake[] {
     )
     .all({ $email: userEmail }) as WorkingGeniusTake[];
 }
+
+/**
+ * One founder's deadline completions, titled so an export reads as something
+ * rather than as a list of ids.
+ */
+export function getDeadlineCompletions(
+  userEmail: string,
+): { deadline: string; dueDate: string; completedAt: string }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT d.title AS deadline, d.due_date AS dueDate, c.completed_at AS completedAt
+       FROM deadline_completions c
+       JOIN deadlines d ON d.id = c.deadline_id
+       WHERE c.user_email = $email
+       ORDER BY c.completed_at ASC`,
+    )
+    .all({ $email: userEmail }) as { deadline: string; dueDate: string; completedAt: string }[];
+}

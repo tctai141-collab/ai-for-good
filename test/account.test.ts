@@ -52,6 +52,25 @@ describe("export", () => {
     expect(body).not.toContain("bob@example.test");
   });
 
+  test("carries the working-style profile and every take of it", async () => {
+    /*
+     * Assembling the export by hand stops a new column exporting itself, and
+     * has the matching weakness: a whole new table stays invisible until
+     * somebody remembers it. The working-style profile is the most personal
+     * thing here after the conversations and was missing from the export
+     * entirely, along with the take history added the day before.
+     */
+    const res = await get(h, "/api/account", alice.cookie);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body).toHaveProperty("workingStyle");
+    expect(body).toHaveProperty("deadlinesCompleted");
+    expect(body).toHaveProperty("timesOpened");
+    const style = body.workingStyle as { latest: unknown; everyTake: unknown[] };
+    expect(Array.isArray(style.everyTake)).toBe(true);
+  });
+
   test("never contains credentials", async () => {
     // An export lands in a downloads folder or an inbox. It must not be a
     // copy of the things that authenticate the person.
@@ -83,18 +102,40 @@ describe("erasure", () => {
 
     const db = h.db();
     try {
-      for (const [table, column] of [
-        ["users", "email"],
-        ["threads", "user_email"],
-        ["decisions", "user_email"],
-        ["checkins", "user_email"],
-        ["visits", "user_email"],
-        ["working_genius", "user_email"],
-        ["sessions", "user_email"],
-        ["invites", "user_email"],
-        ["deadline_completions", "user_email"],
-        ["deadline_reminders", "user_email"],
-      ] as const) {
+      /*
+       * Discovered from the schema rather than listed by hand.
+       *
+       * The hand-written list was missing working_genius_takes within a day of
+       * that table existing, and would have gone on missing the next one. Any
+       * table with a user_email column is in scope automatically now, so a new
+       * one fails this test until somebody has decided about it.
+       */
+      const RETAINED_ON_PURPOSE = new Set([
+        // Who did what, kept for accountability and disclosed in PRIVACY.md.
+        "admin_audit",
+        // What was sent to whom. Deliberately has no foreign key to users: a
+        // delivery record that rewrites itself when somebody leaves is not a
+        // record. Also disclosed.
+        "broadcast_recipients",
+      ]);
+
+      const userTables = (db
+        .query("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all() as { name: string }[])
+        .map((t) => t.name)
+        .filter((name) => !name.startsWith("sqlite_"))
+        .filter((name) => !RETAINED_ON_PURPOSE.has(name))
+        .filter((name) =>
+          (db.query(`PRAGMA table_info(${name})`).all() as { name: string }[])
+            .some((c) => c.name === "user_email"),
+        );
+
+      // The discovery itself has to be working, or this passes on an empty list.
+      expect(userTables).toContain("working_genius_takes");
+      expect(userTables.length).toBeGreaterThan(6);
+
+      for (const table of [...userTables, "users"]) {
+        const column = table === "users" ? "email" : "user_email";
         const row = db
           .query(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = $e`)
           .get({ $e: bob.email }) as { n: number };

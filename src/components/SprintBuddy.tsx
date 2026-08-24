@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
-import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread } from "../lib/persistence";
+import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
   WORKING_GENIUS_ITEMS,
   WORKING_GENIUS_TYPES,
@@ -1410,32 +1410,42 @@ function MobileActions({
   const next = nextUp(deadlines);
   const overdue = next?.item.group === "overdue";
 
+  /*
+   * Two rows, not one.
+   *
+   * Measured at 390px with everything on a single line: the deadline collapsed
+   * to 26 pixels, because it is the only flexible item and the five mood
+   * buttons take what they need first. The one thing a founder opens their
+   * phone to see was the one thing squeezed out.
+   */
   return (
     <div className="mobile-actions">
-      {checkinDone ? (
-        <span className="mobile-actions-done">
-          <span aria-hidden="true">✓</span> Checked in
-        </span>
-      ) : (
-        <button type="button" onClick={onStartCheckin} className="mobile-actions-checkin">
-          Today&rsquo;s check-in
-        </button>
-      )}
+      <div className="mobile-actions-row">
+        {checkinDone ? (
+          <span className="mobile-actions-done">
+            <span aria-hidden="true">✓</span> Checked in
+          </span>
+        ) : (
+          <button type="button" onClick={onStartCheckin} className="mobile-actions-checkin">
+            Today&rsquo;s check-in
+          </button>
+        )}
+
+        {next && (
+          <button
+            type="button"
+            onClick={onOpenSidebar}
+            className="mobile-actions-next"
+            style={overdue ? { color: C.red, borderColor: "rgba(253, 99, 96, 0.4)" } : undefined}
+          >
+            <span className="mobile-actions-title">{next.item.title}</span>
+            <span className="mobile-actions-when">{next.label}</span>
+            {next.more > 0 && <span className="mobile-actions-more">+{next.more}</span>}
+          </button>
+        )}
+      </div>
 
       {!checkinDone && <QuickCheckin onQuickCheckin={onQuickCheckin} compact />}
-
-      {next && (
-        <button
-          type="button"
-          onClick={onOpenSidebar}
-          className="mobile-actions-next"
-          style={overdue ? { color: C.red, borderColor: "rgba(253, 99, 96, 0.4)" } : undefined}
-        >
-          <span className="mobile-actions-title">{next.item.title}</span>
-          <span className="mobile-actions-when">{next.label}</span>
-          {next.more > 0 && <span className="mobile-actions-more">+{next.more}</span>}
-        </button>
-      )}
     </div>
   );
 }
@@ -1549,6 +1559,8 @@ function Reflections({
   const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusId>>({});
   const [wgSaving, setWgSaving] = useState(false);
   const [wgError, setWgError] = useState<string | null>(null);
+  /** Set when the server refuses because the window is shut. Not retryable. */
+  const [wgClosed, setWgClosed] = useState<string | null>(null);
 
   const wgItem = WORKING_GENIUS_ITEMS[wgIndex];
 
@@ -1561,10 +1573,22 @@ function Reflections({
       setWgResult(result);
       setWgLegacy(false);
       setWgStarted(false);
-    } catch {
-      // The answers stay in state, so Try again resubmits rather than
-      // restarting thirty items.
-      setWgError("Could not save that. Your answers are still here.");
+    } catch (error) {
+      /*
+       * A 409 is the retake window, and it is permanent until a date. Saying
+       * "Could not save that" next to a Try again that can never work is the
+       * worst possible answer to somebody who has just spent six minutes on
+       * thirty questions, so the server's own sentence is shown and the retry
+       * is withdrawn.
+       */
+      if (error instanceof PersistenceError && error.status === 409) {
+        setWgClosed(error.serverMessage ?? "This one is not open yet.");
+        setWgStarted(false);
+      } else {
+        // The answers stay in state, so Try again resubmits rather than
+        // restarting thirty items.
+        setWgError("Could not save that. Your answers are still here.");
+      }
     } finally {
       setWgSaving(false);
     }
@@ -1723,6 +1747,12 @@ function Reflections({
             </span>
           )}
         </div>
+
+        {wgClosed && (
+          <p style={{ margin: "14px 0 0", fontSize: 13.5, color: C.yellow, lineHeight: 1.6 }}>
+            {wgClosed} Your answers were not saved.
+          </p>
+        )}
 
         {(!wgStarted || wgResult) && <WgPrivateNote />}
 
@@ -2867,9 +2897,33 @@ const CSS = `
   font: 700 12.5px/1 var(--font-family);
   cursor: pointer;
 }
-.quick-row-compact, .quick-note-compact { margin: 0; flex: 0 0 auto; }
-.quick-row-compact .quick-buttons { display: flex; flex-wrap: nowrap; }
-.quick-note-compact input { min-width: 9rem; }
+/* The strip is the touch surface, so its controls get the 44px the rest of the
+   app already treats as the floor. The row scrolls rather than shrinking the
+   labels into illegibility. */
+/* min-width: 0 because a flex item defaults to min-width: auto and refuses to
+   shrink below its content, which let the button row grow past the strip and
+   clipped the last mood with nothing able to scroll to it. */
+.quick-row-compact, .quick-note-compact { margin: 0; min-width: 0; }
+.quick-row-compact .quick-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.quick-row-compact .quick-buttons::-webkit-scrollbar { display: none; }
+/* Tighter horizontally than the sidebar copy so all five fit a 390px phone
+   without scrolling. Narrower phones still scroll, which is why the row is
+   scrollable at all, but a ten-pixel scroll nobody discovers is the worst of
+   both. Height stays at the 44px touch floor. */
+.quick-row-compact .quick-buttons button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0 7px;
+  font-size: 11.5px;
+}
+.quick-note-compact input { min-height: 44px; }
+.quick-note-compact button { min-height: 44px; }
 
 /* ---- Mobile actions -------------------------------------------------------
    Hidden entirely on anything wide enough to show the sidebar, which is where
@@ -2878,20 +2932,23 @@ const CSS = `
 @media (max-width: 700px) {
   .mobile-actions {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
     flex-shrink: 0;
     padding: 10px 12px 10px 60px;
     border-bottom: 1px solid var(--line-strong);
     background: var(--card, rgba(255,255,255,0.03));
-    overflow-x: auto;
-    scrollbar-width: none;
   }
-  .mobile-actions::-webkit-scrollbar { display: none; }
+  .mobile-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
 }
 .mobile-actions-checkin {
   flex: 0 0 auto;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   border-radius: 999px;
   border: 1px solid rgba(70, 165, 255, 0.4);
@@ -2906,7 +2963,7 @@ const CSS = `
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   font: 600 13px/1 var(--font-family);
   color: #7CB893;
@@ -2915,7 +2972,7 @@ const CSS = `
 .mobile-actions-next {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 40px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 8px;
