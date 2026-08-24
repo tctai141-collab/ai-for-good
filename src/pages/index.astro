@@ -161,6 +161,10 @@ import App from "../components/App";
 
   /* ── Login ── */
   .login-screen {
+    position: relative;
+    /* A stacking context of its own, so the canvas can sit at z-index -1
+       behind the card without escaping to behind the page background. */
+    isolation: isolate;
     min-height: 100vh;
     display: flex;
     align-items: stretch;
@@ -170,6 +174,16 @@ import App from "../components/App";
       radial-gradient(circle at 24% 48%, rgba(255, 255, 255, 0.13), transparent 18rem),
       var(--color-bg);
   }
+  /* The animated mesh. Sits under the page's own gradients and the sign-in
+     card, and can never intercept a click on the form. */
+  .constellation-field {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    display: block;
+    pointer-events: none;
+  }
+
   .login-hero {
     width: min(100%, 90rem);
     margin: auto;

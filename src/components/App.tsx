@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import SprintBuddyCube from "./SprintBuddyCube";
+import ConstellationField from "./ConstellationField";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
 
@@ -180,6 +181,8 @@ export default function App() {
     return (
       <>
         <main className="login-screen">
+          {/* Behind everything, and inert: decoration, not a control. */}
+          <ConstellationField />
           <section className="login-hero" aria-label="Sprint Buddy login">
             <div className="login-mascot-panel" aria-hidden="true">
               <div className="login-halo" />
