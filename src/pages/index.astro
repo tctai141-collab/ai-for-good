@@ -1052,6 +1052,59 @@ import App from "../components/App";
     .typewriter-cursor { animation: none; opacity: 1; }
   }
 
+  /* ── Shimmering text ──
+     A highlight travelling through the glyphs, used on the wait while Sprint
+     Buddy is answering. Two background layers clipped to the text: a flat base
+     colour, and a moving window of brighter colour over it. */
+  .shimmer {
+    --shimmer-base: rgba(255, 255, 255, 0.34);
+    --shimmer-high: rgba(255, 255, 255, 0.96);
+    --shimmer-spread: 40px;
+    --shimmer-duration: 1.6s;
+    display: inline-block;
+    background-image:
+      linear-gradient(
+        90deg,
+        transparent calc(50% - var(--shimmer-spread)),
+        var(--shimmer-high),
+        transparent calc(50% + var(--shimmer-spread))
+      ),
+      linear-gradient(var(--shimmer-base), var(--shimmer-base));
+    background-repeat: no-repeat, padding-box;
+    /* The moving layer is far wider than the text so the highlight has
+       somewhere to travel from and to. */
+    background-size: 250% 100%, auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer var(--shimmer-duration) linear infinite;
+  }
+  /* Sized and coloured for the chat's own type scale rather than inheriting a
+     headline's weight. */
+  .composer-wait {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    --shimmer-base: rgba(255, 255, 255, 0.28);
+    --shimmer-high: rgba(255, 255, 255, 0.92);
+  }
+  @keyframes shimmer {
+    /* Both layers have to be listed: a keyframe that names one position for a
+       two-layer background drops the second layer for the duration. */
+    from { background-position: 100% center, 0 0; }
+    to { background-position: 0% center, 0 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* No travelling highlight, and the text painted flat rather than left
+       transparent with nothing moving through it. */
+    .shimmer {
+      animation: none;
+      background-image: none;
+      color: var(--shimmer-base);
+    }
+  }
+
   /* ── Working Genius quiz ── */
   .wg-quiz-option {
     position: relative;
