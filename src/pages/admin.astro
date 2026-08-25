@@ -6,6 +6,7 @@
 // decide what to render.
 
 import QuickActions from "../components/QuickActions";
+import KeyboardFor from "../components/KeyboardFor";
 ---
 
 <html lang="en">
@@ -1011,6 +1012,10 @@ import QuickActions from "../components/QuickActions";
                 <textarea id="bc-body" rows="12"
                           placeholder={"Hi {{first_name}},\n\n..."}></textarea>
               </label>
+              <!-- There is no chat on this page — the coach view has a cohort
+                   dashboard, not a composer — so the keyboard goes where an
+                   organizer actually writes prose. -->
+              <KeyboardFor client:load targetId="bc-body" storageKey="sprintbuddy.osk.broadcast" />
             </form>
             <p class="note" style="margin-top:0">
               Insert:
