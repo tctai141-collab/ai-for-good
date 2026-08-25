@@ -9,7 +9,6 @@ import {
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import { cap, readJsonBody } from "../../lib/limits";
-import { F26_DATE_CONFLICTS, F26_SCHEDULE } from "../../lib/f26-schedule";
 import { validDate, validTime } from "../../lib/programme-dates";
 
 /**
@@ -55,46 +54,6 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     const read = await readJsonBody<Record<string, unknown>>(request);
     if (!read.ok) return read.response;
     const body = read.value;
-
-    /*
-     * The F26 schedule in one press, rather than forty-one forms or a shell.
-     *
-     * Two actions on purpose: "preview" counts and writes nothing, "import"
-     * writes. Loading a schedule over whatever is already there is not
-     * something to discover afterwards, so the button shows what would change
-     * and what the source got wrong about its own dates before it does it.
-     *
-     * Idempotent — ids come from date and title — which is also the sharp
-     * edge: re-importing puts back anything since edited here. The count of
-     * what would change is how somebody sees that coming.
-     */
-    if (body.action === "preview-f26" || body.action === "import-f26") {
-      const existing = new Map(listProgrammeEvents().map((event) => [event.id, event]));
-      let added = 0;
-      let changed = 0;
-      let same = 0;
-      for (const row of F26_SCHEDULE) {
-        const before = existing.get(row.id);
-        if (!before) added++;
-        else if (JSON.stringify(before) !== JSON.stringify(row)) changed++;
-        else same++;
-      }
-
-      if (body.action === "import-f26") {
-        for (const row of F26_SCHEDULE) upsertProgrammeEvent(row, session.email);
-        recordAdminAction(session.email, "programme:import-f26", null, `${F26_SCHEDULE.length} entries`);
-      }
-
-      return json({
-        ok: true,
-        total: F26_SCHEDULE.length,
-        added,
-        changed,
-        same,
-        conflicts: F26_DATE_CONFLICTS,
-        written: body.action === "import-f26",
-      });
-    }
 
     if (body.action === "delete") {
       const id = typeof body.id === "string" ? body.id : "";
