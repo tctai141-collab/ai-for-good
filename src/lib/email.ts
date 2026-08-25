@@ -254,3 +254,45 @@ You are receiving this because you are registered on the Aalto Founder Sprint.
 ${contact ? `Questions: just reply, it reaches ${contact}.` : "Questions: reply to this email."}`,
   });
 }
+
+/**
+ * Tells an organizer or mentor that a founder has asked them something.
+ *
+ * The wish itself is in the email because an email saying only "you have a
+ * message, log in to read it" is a notification that wastes the reader's time
+ * and gets ignored. Replying happens in the app, so the founder's own address
+ * is not exposed to a reply-all and the answer is recorded where the founder
+ * will look for it.
+ */
+export function sendWishEmail(
+  to: string, fromName: string, body: string, link: string,
+): Promise<void> {
+  return send({
+    to,
+    subject: `${fromName} asked something`,
+    text: `${fromName} sent this through Sprint Buddy:
+
+${body}
+
+Reply here: ${link}
+
+---
+You are receiving this because you are an organizer or mentor on the Aalto
+Founder Sprint and this was addressed to you.`,
+  });
+}
+
+/** Tells a founder their wish was answered. */
+export function sendWishReplyEmail(
+  to: string, answeredBy: string, body: string, link: string,
+): Promise<void> {
+  return send({
+    to,
+    subject: `${answeredBy} answered you`,
+    text: `${answeredBy} replied to what you asked:
+
+${body}
+
+See it in context: ${link}`,
+  });
+}

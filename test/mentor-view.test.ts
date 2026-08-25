@@ -131,8 +131,19 @@ describe("an organizer has everything a mentor has", () => {
      * lost the one screen that says who to talk to.
      */
     expect(admin).toContain('if (role !== "mentor") return;');
-    // Loaded for everybody; only the organizer-only panels are skipped.
-    expect(admin).toMatch(/load\(\)\.then\(\(\) => \{\s*loadMentor\(\);\s*loadShared\(\);\s*if \(myRole === "mentor"\) return;/);
+    /*
+     * Loaded for everybody; only the organizer-only panels are skipped.
+     *
+     * Asserted as a set rather than as an exact sequence. Pinning the literal
+     * order meant that adding a screen a mentor is meant to see — the wishes
+     * addressed to them — failed here while being exactly right, which teaches
+     * whoever hits it to move their line below the return to make the test
+     * pass and quietly lose the feature for mentors.
+     */
+    const boot = admin.slice(admin.indexOf("load().then("), admin.indexOf('if (myRole === "mentor") return;'));
+    for (const shared of ["loadMentor();", "loadShared();", "loadWishes();"]) {
+      expect(boot).toContain(shared);
+    }
   });
 
   test("the role is recorded on both paths", () => {

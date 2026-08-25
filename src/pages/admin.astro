@@ -737,7 +737,45 @@ import KeyboardFor from "../components/KeyboardFor";
       }
       .dp-today:hover { border-color: rgba(255, 255, 255, 0.24); }
 
-      /* ── Programme events ── */
+      /* ── Wishes ── */
+  .tab-badge {
+    display: inline-block; margin-left: 6px; padding: 0 6px;
+    border-radius: 999px; background: var(--brand-accent); color: #fff;
+    font-size: 0.6875rem; font-weight: 700; line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .wish {
+    padding: 14px 0; border-top: 1px solid var(--line);
+  }
+  .wish.is-answered { opacity: 0.62; }
+  .wish.is-answered:hover { opacity: 1; }
+  .wish-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .wish-from { font-weight: 700; font-size: 0.9375rem; }
+  .wish-to, .wish-when { font-size: 0.8125rem; color: var(--ink-sub); }
+  .wish-status {
+    margin-left: auto; padding: 1px 8px; border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    font-size: 0.6875rem; font-weight: 600; color: var(--ink-sub);
+  }
+  .wish.is-answered .wish-status { border-color: rgba(124,184,147,0.5); color: #7CB893; }
+  .wish-body {
+    margin: 0; max-width: 68ch;
+    font-size: 0.9375rem; line-height: 1.55; white-space: pre-wrap;
+  }
+  .wish-reply {
+    margin-top: 10px; padding-left: 14px;
+    border-left: 2px solid var(--brand-accent);
+  }
+  .wish-replyhead { margin: 0 0 2px; font-size: 0.75rem; font-weight: 700; }
+  .wish-replybox { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; }
+  .wish-replybox textarea { flex: 1 1 auto; min-height: 40px; }
+  .wish-replybox button { flex: 0 0 auto; }
+  @media (max-width: 620px) {
+    .wish-replybox { flex-direction: column; }
+    .wish-replybox button { width: 100%; }
+  }
+
+  /* ── Programme events ── */
   .ev-month {
     margin: 22px 0 8px;
     font-size: 0.75rem; font-weight: 700;
@@ -811,6 +849,7 @@ import KeyboardFor from "../components/KeyboardFor";
                labels. No tab carries a background of its own. -->
           <span class="tab-cursor" id="tab-cursor" aria-hidden="true"></span>
           <button type="button" class="tab" data-tab="mentor">This week</button>
+          <button type="button" class="tab" data-tab="wishes">Wishes<span id="wish-badge" class="tab-badge" hidden></span></button>
           <button type="button" class="tab" data-tab="people">People</button>
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
           <button type="button" class="tab" data-tab="programme">Programme</button>
@@ -1069,6 +1108,24 @@ import KeyboardFor from "../components/KeyboardFor";
 
           <div id="programme-list"></div>
         </section>
+        </div>
+
+        <div class="tabpanel" id="tab-wishes" hidden>
+          <section class="panel">
+            <h2>What the cohort has asked for</h2>
+            <p class="note" style="margin-top:0">
+              Founders can send a wish to the organisers or to the mentors: a session
+              on a topic, an introduction, something about how the programme runs.
+              Whoever it was addressed to gets an email at the time.
+            </p>
+            <p class="note" style="margin-top:0">
+              Replying here emails the founder and shows the answer beside their
+              original question in the app. Answering is what marks it answered, so
+              there is no separate box to remember to tick.
+            </p>
+            <p class="message" id="wish-message" hidden></p>
+            <div id="wish-list"></div>
+          </section>
         </div>
 
         <div class="tabpanel" id="tab-shared" hidden>
@@ -2011,7 +2068,7 @@ import KeyboardFor from "../components/KeyboardFor";
         /* Hide what a mentor cannot do rather than let them press it and read
            a 403. The server refuses either way; this is so the page is not
            mostly things that do not work. */
-        const allowed = new Set(["mentor", "shared"]);
+        const allowed = new Set(["mentor", "shared", "wishes"]);
         for (const tab of document.querySelectorAll(".tab")) {
           if (!allowed.has(tab.dataset.tab)) tab.hidden = true;
         }
@@ -2239,6 +2296,103 @@ import KeyboardFor from "../components/KeyboardFor";
           !prMilestones.value.trim() && !prSessions.value.trim();
         say(prMessage, blank ? "Week " + prWeek.value + " cleared." : "Week " + prWeek.value + " saved.", false);
         loadProgramme();
+      });
+
+      // ---- Wishes ---------------------------------------------------------
+
+      const wishList = document.getElementById("wish-list");
+      const wishMessage = document.getElementById("wish-message");
+      const wishBadge = document.getElementById("wish-badge");
+
+      const WISH_AUDIENCE = { organizers: "The organisers", mentors: "The mentors" };
+
+      let wishes = [];
+
+      function wishWhen(value) {
+        const date = new Date(String(value).replace(" ", "T") + "Z");
+        if (isNaN(date.getTime())) return "";
+        return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+      }
+
+      function renderWishes() {
+        // The count is of unanswered ones only — a badge showing everything ever
+        // asked is a number that only goes up and stops meaning anything.
+        const open = wishes.filter(function (w) { return w.status !== "answered"; }).length;
+        if (wishBadge) {
+          wishBadge.hidden = open === 0;
+          wishBadge.textContent = String(open);
+        }
+
+        if (!wishes.length) {
+          wishList.innerHTML = '<p class="note">Nothing asked yet.</p>';
+          return;
+        }
+
+        wishList.innerHTML = wishes.map(function (wish) {
+          const answered = wish.status === "answered";
+          const replies = (wish.replies || []).map(function (reply) {
+            return '<div class="wish-reply">' +
+              '<p class="wish-replyhead">' + esc(reply.authorName) + ' &middot; ' + esc(wishWhen(reply.createdAt)) + '</p>' +
+              '<p class="wish-body">' + esc(reply.body) + '</p>' +
+            '</div>';
+          }).join("");
+
+          return '<article class="wish' + (answered ? " is-answered" : "") + '">' +
+            '<div class="wish-head">' +
+              '<span class="wish-from">' + esc(wish.fromName) + '</span>' +
+              '<span class="wish-to">to ' + esc(WISH_AUDIENCE[wish.audience] || wish.audience) + '</span>' +
+              '<span class="wish-when">' + esc(wishWhen(wish.createdAt)) + '</span>' +
+              '<span class="wish-status">' + (answered ? "Answered" : "Waiting") + '</span>' +
+            '</div>' +
+            '<p class="wish-body">' + esc(wish.body) + '</p>' +
+            replies +
+            '<div class="wish-replybox">' +
+              '<textarea rows="2" maxlength="2000" data-reply-for="' + esc(wish.id) + '" placeholder="Reply to ' + esc(wish.fromName) + '"></textarea>' +
+              '<button type="button" data-send-reply="' + esc(wish.id) + '">Reply</button>' +
+            '</div>' +
+          '</article>';
+        }).join("");
+      }
+
+      async function loadWishes() {
+        let res;
+        try {
+          res = await fetch("/api/wishes");
+        } catch {
+          return say(wishMessage, "Could not reach the server.", true);
+        }
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        wishes = data.wishes || [];
+        renderWishes();
+      }
+
+      wishList.addEventListener("click", async function (event) {
+        const id = event.target.getAttribute && event.target.getAttribute("data-send-reply");
+        if (!id) return;
+        const box = wishList.querySelector('textarea[data-reply-for="' + id + '"]');
+        const body = box ? box.value.trim() : "";
+        if (!body) return say(wishMessage, "An empty reply says nothing.", true);
+
+        event.target.disabled = true;
+        let res;
+        try {
+          res = await fetch("/api/wishes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "reply", id: id, body: body }),
+          });
+        } catch {
+          event.target.disabled = false;
+          return say(wishMessage, "Could not reach the server.", true);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          event.target.disabled = false;
+          return say(wishMessage, data.error || "Could not send that.", true);
+        }
+        say(wishMessage, "Replied. They get an email.", false);
+        loadWishes();
       });
 
       // ---- Programme events ----------------------------------------------
@@ -3367,6 +3521,7 @@ import KeyboardFor from "../components/KeyboardFor";
       load().then(() => {
         loadMentor();
         loadShared();
+        loadWishes();
         if (myRole === "mentor") return;
         loadDeadlines();
         loadProgramme();

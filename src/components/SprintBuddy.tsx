@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import ProgrammeTimeline, { isoDay, type ProgrammeEvent } from "./ProgrammeTimeline";
+import Wishes from "./Wishes";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
@@ -385,7 +386,7 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections" | "programme";
+type View = "chat" | "reflections" | "programme" | "wishes";
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
@@ -572,6 +573,7 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         decisions={decisions}
         onReflections={() => setView("reflections")}
         onProgramme={() => setView("programme")}
+        onWishes={() => setView("wishes")}
         onSignOut={onSignOut}
         signOutLabel={signOutLabel}
         onPickTeam={(team) => {
@@ -665,10 +667,13 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         {view === "programme" && (
           <Scroll><ProgrammeTimeline /></Scroll>
         )}
+        {view === "wishes" && persona === "founder" && (
+          <Scroll><Wishes /></Scroll>
+        )}
         {persona === "founder" && view === "reflections" && (
           <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} /></Scroll>
         )}
-        {persona === "coach" && view !== "programme" && (
+        {persona === "coach" && view !== "programme" && view !== "wishes" && (
           <Scroll>
             {coachTeam
               ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} />
@@ -702,12 +707,13 @@ type SidebarProps = {
   decisions: Decision[];
   onReflections: () => void;
   onProgramme: () => void;
+  onWishes: () => void;
   onSignOut?: () => void;
   signOutLabel: string;
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -827,6 +833,9 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
                 opened far more often than a founder's own archive. */}
             <button onClick={onProgramme} className="navitem" style={{ ...navItem, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>▤</Glyph> <span>Programme</span>
+            </button>
+            <button onClick={onWishes} className="navitem" style={{ ...navItem, background: view === "wishes" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+              <Glyph>✦</Glyph> <span>Ask for something</span>
             </button>
             <button onClick={onReflections} className="navitem" style={{ ...navItem, background: view === "reflections" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: view === "reflections" ? 600 : 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>◷</Glyph> <span>Reflections</span>
