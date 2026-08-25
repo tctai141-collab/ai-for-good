@@ -83,9 +83,25 @@ export function fromIsoDay(value: string): Date {
  */
 export function sprintWeekOf(day: string, startDate: string | null, totalWeeks: number): number | null {
   if (!startDate) return null;
-  const start = fromIsoDay(startDate).getTime();
-  const week = Math.floor((fromIsoDay(day).getTime() - start) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  const week = Math.floor((utcMidnight(day) - utcMidnight(startDate)) / (7 * 24 * 60 * 60 * 1000)) + 1;
   return week < 1 || week > totalWeeks ? null : week;
+}
+
+/**
+ * A date as a UTC instant, for arithmetic only.
+ *
+ * The subtraction has to be DST-free. Local midnights are 23 or 25 hours apart
+ * across a clock change, and one hour short of a whole number of weeks floors
+ * to the week before: a spring cohort spanning the March change put every
+ * session after it one week early, all the way to the end of the programme.
+ * Autumn hides the bug — an extra hour never crosses a boundary — so the F26
+ * dates would have looked right and a spring cohort would not have.
+ *
+ * Display still uses fromIsoDay: a weekday name wants the local calendar day.
+ */
+function utcMidnight(value: string): number {
+  const [y, m, d] = value.split("-").map(Number);
+  return Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];

@@ -209,3 +209,21 @@ describe("nothing runs off the bottom of a short screen", () => {
     expect((app.match(/env\(safe-area-inset-bottom, 0px\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 });
+
+describe("the rail is exactly as wide as it says", () => {
+  test("width is pinned on every axis the flex algorithm reads", () => {
+    /*
+     * Regression, found by measuring rather than looking. The aside carried
+     * width alone and computed to 64px around a 48px rail on a phone — sixteen
+     * pixels of conversation given away with nothing drawn in them. A flex
+     * item's used width comes from flex-basis and its automatic minimum, not
+     * from width, so width alone is a suggestion.
+     */
+    const aside = app.slice(app.indexOf("Pinned on every axis"), app.indexOf("onMouseEnter={() =>"));
+    for (const prop of ["width:", "minWidth:", "maxWidth:", "flexBasis:"]) {
+      expect(aside).toContain(`${prop} open ? 304 : railWidth`);
+    }
+    expect(aside).toContain("flexShrink: 0");
+    expect(aside).toContain("flexGrow: 0");
+  });
+});

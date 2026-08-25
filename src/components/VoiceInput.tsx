@@ -227,7 +227,16 @@ export default function VoiceInput({
         type="button"
         className={`vi-button${listening ? " is-live" : ""}`}
         onClick={toggle}
-        disabled={disabled}
+        /*
+         * Never disabled while it is listening.
+         *
+         * The host passes disabled={busy}, which is true for as long as the
+         * model is answering — ten seconds and more. Dictate, press Send, and
+         * the button went dead with the microphone still open: no way to stop
+         * it, and the browser's recording indicator lit the whole time. A
+         * control that starts something must not lose the ability to stop it.
+         */
+        disabled={disabled && !listening}
         aria-pressed={listening}
         aria-label={listening ? "Stop dictating" : "Dictate a message"}
         title={listening ? "Stop dictating" : "Dictate a message"}

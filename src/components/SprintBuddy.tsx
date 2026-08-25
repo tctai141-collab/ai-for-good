@@ -902,8 +902,20 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
   return (
     <aside
       style={{
+        /*
+         * Pinned on every axis, not just width.
+         *
+         * A flex item's automatic minimum size is its content, and width alone
+         * left this box measuring 64px around a 48px rail on a phone — sixteen
+         * pixels of conversation given away with nothing drawn in them.
+         * flexBasis and minWidth are what the flex algorithm actually reads.
+         */
         width: open ? 304 : railWidth,
+        minWidth: open ? 304 : railWidth,
+        maxWidth: open ? 304 : railWidth,
+        flexBasis: open ? 304 : railWidth,
         flexShrink: 0,
+        flexGrow: 0,
         position: "relative",
         background: C.sidebar,
         borderRight: `1px solid var(--line-strong)`,
