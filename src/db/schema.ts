@@ -465,6 +465,48 @@ export function initSchema(db: Database) {
     )
   `);
 
+  /*
+   * Dated things in the programme: sessions, milestones, checkpoints, the trip.
+   *
+   * programme_weeks holds a week's *theme* as free text. This holds the things
+   * with a date on them, because "Tuesday 13:00, Kiilto brief, Startup Sauna"
+   * is not a paragraph about week 4 and cannot be sorted, counted or put on a
+   * calendar while it is one.
+   *
+   * Two decisions worth stating.
+   *
+   * The date and the clock time are separate strings, and neither is UTC. A
+   * programme is not a set of instants — it is "Tuesday at one", said in a room
+   * in Helsinki. Store an instant and the founder who opens the app from the
+   * Stockholm trip is told the session starts at noon. The cohort shares one
+   * wall clock; this stores what is on it.
+   *
+   * The sprint week is not stored. It is derived from the date, so moving the
+   * sprint start date moves every event with it rather than leaving fifteen
+   * weeks of rows pointing at the wrong week.
+   */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS programme_events (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'session'
+        CHECK(kind IN ('session', 'milestone', 'checkpoint', 'social', 'trip')),
+      starts_on TEXT NOT NULL,
+      start_time TEXT NOT NULL DEFAULT '',
+      end_time TEXT NOT NULL DEFAULT '',
+      location TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'archived')),
+      /* Deliberately not ON DELETE CASCADE, which is what deadlines does.
+         Removing an organizer from the cohort must not delete the cohort's
+         calendar along with their account. */
+      created_by TEXT REFERENCES users(email) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run("CREATE INDEX IF NOT EXISTS programme_events_date ON programme_events(starts_on)");
+
   // What has already been said to whom, so a reminder is a reminder and not a
   // daily nag. One row per (deadline, founder, kind); the primary key is what
   // makes a second send impossible rather than merely unlikely.

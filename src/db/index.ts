@@ -1261,6 +1261,90 @@ export type ProgrammeWeekRow = {
   sessions: string;
 };
 
+export type ProgrammeEventRow = {
+  id: string;
+  title: string;
+  kind: "session" | "milestone" | "checkpoint" | "social" | "trip";
+  startsOn: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  description: string;
+};
+
+const EVENT_COLUMNS = `
+  id, title, kind,
+  starts_on AS startsOn, start_time AS startTime, end_time AS endTime,
+  location, description
+`;
+
+/**
+ * Every dated thing in the programme, in the order it happens.
+ *
+ * Sorted by date then time, with untimed entries first within a day: an
+ * all-day milestone is a property of the whole day, so it reads above the
+ * sessions rather than being filed under midnight.
+ */
+export function listProgrammeEvents(): ProgrammeEventRow[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT ${EVENT_COLUMNS} FROM programme_events
+       WHERE status = 'active'
+       ORDER BY starts_on ASC, start_time ASC, title ASC`,
+    )
+    .all() as ProgrammeEventRow[];
+}
+
+export function getProgrammeEvent(id: string): ProgrammeEventRow | null {
+  const db = getDb();
+  return db
+    .query(`SELECT ${EVENT_COLUMNS} FROM programme_events WHERE id = $id AND status = 'active'`)
+    .get({ $id: id }) as ProgrammeEventRow | null;
+}
+
+/** Creates or replaces one event. The caller owns id generation and validation. */
+export function upsertProgrammeEvent(row: ProgrammeEventRow, createdBy: string): void {
+  const db = getDb();
+  db.run(
+    `INSERT INTO programme_events
+       (id, title, kind, starts_on, start_time, end_time, location, description, created_by, updated_at)
+     VALUES ($id, $title, $kind, $startsOn, $startTime, $endTime, $location, $description, $createdBy, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       title = $title, kind = $kind, starts_on = $startsOn,
+       start_time = $startTime, end_time = $endTime,
+       location = $location, description = $description,
+       updated_at = datetime('now')`,
+    {
+      $id: row.id,
+      $title: row.title.trim(),
+      $kind: row.kind,
+      $startsOn: row.startsOn,
+      $startTime: row.startTime,
+      $endTime: row.endTime,
+      $location: row.location.trim(),
+      $description: row.description.trim(),
+      $createdBy: createdBy,
+    },
+  );
+}
+
+/**
+ * Archives rather than deletes, so a session removed by accident is
+ * recoverable and the audit trail keeps pointing at something real.
+ */
+export function archiveProgrammeEvent(id: string): boolean {
+  const db = getDb();
+  // db.run() returns void in this driver, so existence is established before
+  // the write rather than inferred from a changes count it does not give.
+  if (!getProgrammeEvent(id)) return false;
+  db.run(
+    "UPDATE programme_events SET status = 'archived', updated_at = datetime('now') WHERE id = $id",
+    { $id: id },
+  );
+  return true;
+}
+
 export function listProgrammeWeeks(): ProgrammeWeekRow[] {
   const db = getDb();
   return db
