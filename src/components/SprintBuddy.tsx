@@ -551,7 +551,9 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
   const activeKey = active.id || (active.fresh ? "fresh" + (active._t || "") : "x");
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.ink, fontFamily: "var(--font-family)", overflow: "hidden", ["--col-pad-left" as string]: sidebarOpen ? "24px" : "60px" } as React.CSSProperties}>
+    <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.ink, fontFamily: "var(--font-family)", overflow: "hidden", /* The rail is real width now, so the column no longer has to dodge a
+           button floating over it. */
+        ["--col-pad-left" as string]: "24px" } as React.CSSProperties}>
       <style>{CSS}</style>
       {/* What .btn-glass refracts through. Mounted at the root rather than
           inside a button: SVG filter ids are global to the document, and one
@@ -594,64 +596,6 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
             deadlines={deadlines}
             onOpenSidebar={() => setSidebarOpen(true)}
           />
-        )}
-        {!sidebarOpen && (
-          <button
-            onClick={toggleSidebar}
-            aria-label={
-              deadlines.overdueCount > 0
-                ? `Expand sidebar — ${deadlines.overdueCount} deadline${deadlines.overdueCount === 1 ? "" : "s"} overdue`
-                : "Expand sidebar"
-            }
-            title="Expand sidebar"
-            className="navitem sidebar-collapse-button"
-            style={{
-              position: "absolute",
-              top: 12,
-              left: 12,
-              zIndex: 30,
-              width: 40,
-              height: 40,
-              background: C.card,
-              border: "1px solid var(--line-strong)",
-              borderRadius: 10,
-              color: C.ink,
-              cursor: "pointer",
-              fontSize: 22,
-              fontWeight: 900,
-              lineHeight: 1,
-              display: "grid",
-              placeItems: "center",
-              padding: 0,
-            }}
-          >
-            ›
-            {deadlines.overdueCount > 0 && (
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  top: -5,
-                  right: -5,
-                  minWidth: 18,
-                  height: 18,
-                  padding: "0 5px",
-                  borderRadius: 9,
-                  background: C.red,
-                  color: "oklch(98% 0 0)",
-                  fontSize: 10.5,
-                  fontWeight: 800,
-                  lineHeight: "18px",
-                  textAlign: "center",
-                  fontVariantNumeric: "tabular-nums",
-                  border: `2px solid ${C.bg}`,
-                  boxSizing: "content-box",
-                }}
-              >
-                {deadlines.overdueCount}
-              </span>
-            )}
-          </button>
         )}
         {persona === "founder" && view === "chat" && (
           <Chat
@@ -730,19 +674,24 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
   }, [pending]);
 
 
-  return (
-    <aside
-      aria-hidden={!open}
-      style={{
-        width: open ? 304 : 0,
-        flexShrink: 0,
-        background: C.sidebar,
-        borderRight: open ? `1px solid var(--line-strong)` : "none",
-        overflow: "hidden",
-        transition: "width 220ms cubic-bezier(0.25, 1, 0.5, 1)",
-      }}
-    >
-      <div style={{ width: 304, height: "100%", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
+  /*
+   * Peeking at a collapsed sidebar.
+   *
+   * Collapsed used to mean width zero plus a floating button over the chat,
+   * which is a sidebar you cannot read without committing to reopening it. It
+   * is a 64px rail of icons now, so the destinations stay visible and
+   * clickable at all times, which is the point of a rail.
+   *
+   * Hovering it opens the full panel *over* the page rather than pushing the
+   * page sideways. Expanding in place would reflow the conversation under the
+   * reader's eyes every time the pointer crossed the left edge, which is worse
+   * than not expanding at all.
+   */
+  const [peek, setPeek] = useState(false);
+  useEffect(() => { if (open) setPeek(false); }, [open]);
+
+  const panel = (
+    <div style={{ width: 304, height: "100%", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 4px 28px" }}>
           {/*
             One wordmark, cut from moving light.
@@ -757,13 +706,16 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           </span>
           <button
             onClick={onToggle}
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar"
-            tabIndex={open ? 0 : -1}
+            /* This same panel is what the collapsed rail shows on hover, where
+               the button pins it open rather than collapsing it. Saying
+               "Collapse" there would be a button that does the opposite of
+               its label. */
+            aria-label={open ? "Collapse sidebar" : "Keep sidebar open"}
+            title={open ? "Collapse sidebar" : "Keep sidebar open"}
             className="navitem sidebar-collapse-button"
             style={{ marginTop: 8, marginRight: -2, background: "transparent", border: `1px solid var(--line)`, color: C.ink, cursor: "pointer", padding: "9px 12px 11px", fontSize: 22, lineHeight: 1, borderRadius: 8, width: "auto", fontWeight: 900, opacity: 0.35 }}
           >
-            ‹
+            {open ? "‹" : "›"}
           </button>
         </div>
 
@@ -771,8 +723,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         <>
           <Tasks state={deadlines} />
 
-          <ProgrammeRail onOpen={onProgramme} />
-
+{/* Directly under the overdue list: these two are what a founder owes
+              today. "What's on" below them is reference, not an obligation. */}
           {checkinDone ? (
             <div className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14, color: C.faint, marginBottom: 14, cursor: "default" }}>
               <span style={{ width: 7, height: 7, borderRadius: 9, background: "#7CB893", flexShrink: 0 }} />
@@ -796,6 +748,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               <span style={{ width: 8, height: 8, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
             </button>
           )}
+
+          <ProgrammeRail onOpen={onProgramme} />
 
 
           <button onClick={onNew} className="newbtn btn-metal" style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "14px 18px", fontWeight: 800, fontSize: 14.5, letterSpacing: "0.01em" }}>
@@ -828,7 +782,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             })}
           </div>
 
-          <div style={{ borderTop: `2px solid var(--line-strong)`, paddingTop: 14, marginTop: 14 }}>
+          <div style={{ borderTop: `2px solid var(--line-strong)`, paddingTop: 8, marginTop: 14 }}>
+            <p style={{ ...navLabel, marginTop: 6 }}>Elsewhere</p>
             {/* Above Reflections because it is the cohort's schedule and gets
                 opened far more often than a founder's own archive. */}
             <button onClick={onProgramme} className="navitem" style={{ ...navItem, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
@@ -883,7 +838,54 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           </div>
         </>
       )}
-      </div>
+    </div>
+  );
+
+  return (
+    <aside
+      style={{
+        width: open ? 304 : 64,
+        flexShrink: 0,
+        position: "relative",
+        background: C.sidebar,
+        borderRight: `1px solid var(--line-strong)`,
+        transition: "width 220ms cubic-bezier(0.25, 1, 0.5, 1)",
+      }}
+      onMouseEnter={() => { if (!open) setPeek(true); }}
+      onMouseLeave={() => setPeek(false)}
+    >
+      {open ? panel : (
+        <SidebarRail
+          persona={persona}
+          view={view}
+          coachTeam={coachTeam}
+          deadlines={deadlines}
+          checkinDone={checkinDone}
+          onExpand={onToggle}
+          onNew={onNew}
+          onStartCheckin={onStartCheckin}
+          onProgramme={onProgramme}
+          onWishes={onWishes}
+          onReflections={onReflections}
+          onPickTeam={onPickTeam}
+          onSignOut={onSignOut}
+        />
+      )}
+
+      {/* Over the page, not beside it — see the note on peek above. */}
+      {!open && peek && (
+        <div
+          style={{
+            position: "absolute", top: 0, left: 0, height: "100%", width: 304,
+            zIndex: 60, background: C.sidebar,
+            borderRight: `1px solid var(--line-strong)`,
+            boxShadow: "18px 0 46px rgba(0,0,0,0.45)",
+          }}
+        >
+          {panel}
+        </div>
+      )}
+
       {pending && (
         /*
          * A real dialog rather than the row-replacement this used to be.
@@ -941,6 +943,125 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
     </aside>
   );
 }
+
+/**
+ * The collapsed sidebar: a 64px rail of destinations.
+ *
+ * Taken from the supplied component, which is the one good idea in it — a
+ * sidebar that shrinks to icons rather than to nothing. What is not taken:
+ * framer-motion (two CSS transitions do this), next/link and next/image (no
+ * Next here), and the hover-to-expand-in-place, which shoves the page sideways
+ * whenever the pointer crosses the left edge. The peek panel above does that
+ * job without moving anything.
+ *
+ * Every icon carries a title and an aria-label, because an icon on its own is
+ * a rebus. The overdue count rides the rail so the one urgent thing is not the
+ * thing you have to expand the sidebar to discover.
+ */
+function SidebarRail({
+  persona, view, coachTeam, deadlines, checkinDone,
+  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onReflections, onPickTeam, onSignOut,
+}: {
+  persona: Persona;
+  view: View;
+  coachTeam: Team | null;
+  deadlines: DeadlinesState;
+  checkinDone: boolean;
+  onExpand: () => void;
+  onNew: () => void;
+  onStartCheckin: () => void;
+  onProgramme: () => void;
+  onWishes: () => void;
+  onReflections: () => void;
+  onPickTeam: (team: Team | null) => void;
+  onSignOut?: () => void;
+}) {
+  const items: {
+    key: string; glyph: string; label: string; on: boolean; dot?: boolean; run: () => void;
+  }[] = persona === "founder"
+    ? [
+        { key: "chat", glyph: "✉", label: "Conversations", on: view === "chat", run: onNew },
+        { key: "checkin", glyph: "◉", label: checkinDone ? "Today's check-in — done" : "Today's check-in", on: false, dot: !checkinDone, run: onStartCheckin },
+        { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
+        { key: "wishes", glyph: "✦", label: "Ask for something", on: view === "wishes", run: onWishes },
+        { key: "reflections", glyph: "◷", label: "Reflections", on: view === "reflections", run: onReflections },
+      ]
+    : [
+        { key: "cohort", glyph: "▦", label: "Cohort heatmap", on: view !== "programme" && !coachTeam, run: () => onPickTeam(null) },
+        { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
+      ];
+
+  return (
+    <div style={{ width: 64, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0", gap: 4 }}>
+      <button
+        onClick={onExpand}
+        aria-label="Expand sidebar"
+        title="Expand sidebar"
+        className="navitem sidebar-collapse-button"
+        style={{ ...railButton, marginBottom: 10 }}
+      >
+        <span aria-hidden="true" style={{ fontSize: 19, fontWeight: 900, lineHeight: 1 }}>›</span>
+      </button>
+
+      {persona === "founder" && deadlines.overdueCount > 0 && (
+        <button
+          onClick={onExpand}
+          aria-label={`${deadlines.overdueCount} deadline${deadlines.overdueCount === 1 ? "" : "s"} overdue`}
+          title={`${deadlines.overdueCount} overdue`}
+          className="navitem"
+          style={{ ...railButton, color: C.red, marginBottom: 6 }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1 }}>{deadlines.overdueCount}</span>
+        </button>
+      )}
+
+      {items.map((item) => (
+        <button
+          key={item.key}
+          onClick={item.run}
+          aria-label={item.label}
+          title={item.label}
+          aria-current={item.on ? "page" : undefined}
+          className="navitem"
+          style={{ ...railButton, background: item.on ? "rgba(255,255,255,0.11)" : "transparent" }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 19, lineHeight: 1, color: item.on ? C.ink : C.sub }}>{item.glyph}</span>
+          {item.dot && (
+            <span aria-hidden="true" style={{ position: "absolute", top: 7, right: 7, width: 6, height: 6, borderRadius: 9, background: C.accent }} />
+          )}
+        </button>
+      ))}
+
+      {onSignOut && (
+        <button
+          onClick={onSignOut}
+          aria-label="Sign out"
+          title="Sign out"
+          className="navitem"
+          style={{ ...railButton, marginTop: "auto" }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1, color: C.sub }}>⎋</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+const railButton: React.CSSProperties = {
+  position: "relative",
+  width: 40,
+  height: 40,
+  flexShrink: 0,
+  display: "grid",
+  placeItems: "center",
+  padding: 0,
+  border: "none",
+  borderRadius: 10,
+  background: "transparent",
+  color: C.ink,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
 
 const navLabel: React.CSSProperties = { color: C.faint, fontSize: 9.5, letterSpacing: 2, textTransform: "uppercase", fontWeight: 800, margin: "20px 8px 8px" };
 const navItem: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", cursor: "pointer", color: C.ink, textAlign: "left", borderRadius: 10, padding: "12px 12px", background: "transparent", fontWeight: 600, fontSize: 14 };
