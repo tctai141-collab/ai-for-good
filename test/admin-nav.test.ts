@@ -220,8 +220,11 @@ describe("the tab bar", () => {
     const bar = css.slice(css.indexOf(".tabs {"), css.indexOf(".tab:focus-visible"));
     expect(bar.length).toBeGreaterThan(400);
     expect(bar).not.toContain("var(--accent)");
-    // Every colour in it is white, near-black, or a white alpha.
-    for (const colour of bar.match(/#[0-9a-fA-F]{3,8}/g) ?? []) {
+    /* Every colour in it is white, near-black, or a white alpha.
+       Mask stops are skipped: a mask reads only alpha, so the colour in one is
+       not a colour anybody sees. The scroll fade uses #000 for that reason. */
+    const painted = bar.replace(/(-webkit-)?mask-image:[^;]*;/g, "");
+    for (const colour of painted.match(/#[0-9a-fA-F]{3,8}/g) ?? []) {
       expect(["#fff", "#0b0c0f"]).toContain(colour);
     }
     expect(bar).toMatch(/\.tab-cursor \{[^}]*background: #fff/);
