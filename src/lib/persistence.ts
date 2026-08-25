@@ -196,14 +196,24 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
           completed_at: string;
           result_json?: string | null;
         };
-        return {
-          primary: row.primary_type,
-          counts: JSON.parse(row.counts_json),
-          completedAt: row.completed_at,
-          result: row.result_json
-            ? (JSON.parse(row.result_json) as WorkingGeniusResult)
-            : undefined,
-        };
+        /* Guarded for the same reason the takes mapping above it is: a row
+           this client cannot parse is not worth failing over. The difference
+           is what failing costs here. loadUserData is awaited inside a try in
+           App.enter, so a throw does not surface — the founder simply signs in
+           with no threads, no check-ins and no history, and nothing says why.
+           One malformed column, and their whole record looks deleted. */
+        try {
+          return {
+            primary: row.primary_type,
+            counts: JSON.parse(row.counts_json),
+            completedAt: row.completed_at,
+            result: row.result_json
+              ? (JSON.parse(row.result_json) as WorkingGeniusResult)
+              : undefined,
+          };
+        } catch {
+          return undefined;
+        }
       })()
       : undefined,
   };

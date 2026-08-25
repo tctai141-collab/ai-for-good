@@ -268,8 +268,33 @@ const CHAT_ACCENT = C.accent;
  * take green and yellow. Theme rows are labelled, so this is legibility rather
  * than meaning.
  */
-const THEME_COLOR: Record<string, string> = { Runway: C.red, Hiring: C.green, Cofounder: C.yellow, Product: C.accent, "Self-doubt": C.red, Fundraise: C.yellow, Growth: C.green };
-const themeColor = (t: string) => THEME_COLOR[t] || C.accent;
+/*
+ * Theme hues, and why they are not the status ones.
+ *
+ * These used to be drawn from the status palette: Runway and Self-doubt were
+ * C.red, Hiring and Growth C.green, Cofounder and Fundraise C.yellow. Red is
+ * also what "Needs attention" and an overdue deadline are painted in, so the
+ * word Runway in "most of it circled Runway" was the same colour as an alarm,
+ * saying nothing about how the week went. It was survivable while the
+ * interactive accent was red too and everything was red; it is not now that
+ * red means exactly one thing.
+ *
+ * So: a categorical ramp with no member in the red, amber or green families,
+ * assigned in a fixed order. Fixed, because a hue that moves when the set
+ * changes is worse than no hue — colour has to follow the theme, never its
+ * rank. Anything unlisted falls to slate rather than borrowing a neighbour's.
+ */
+const THEME_COLOR: Record<string, string> = {
+  Runway: "#7c8cf8",      // indigo
+  Hiring: "#38bdf8",      // sky
+  Cofounder: "#c084fc",   // violet
+  Product: "#f472b6",     // pink
+  "Self-doubt": "#94a3b8", // slate
+  Fundraise: "#2dd4bf",   // teal
+  Growth: "#a5b4fc",      // periwinkle
+};
+const THEME_FALLBACK = "#8a8f98";
+const themeColor = (t: string) => THEME_COLOR[t] || THEME_FALLBACK;
 
 type Thread = {
   id: string;
