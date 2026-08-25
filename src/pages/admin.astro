@@ -19,20 +19,30 @@ import QuickActions from "../components/QuickActions";
       Astro's scoped styles only reach elements present in the template.
     -->
     <style is:global>
+      /* Same design tokens as the founder side, under this page's own names.
+         The palette is benchmarked on Linear: near-black canvas, rules at
+         6-10% white, indigo accent, one type family. Red is now only ever a
+         status colour, which is what it was always supposed to be. */
       :root {
-        --bg: #0b0c0f;
-        --panel: rgba(20, 22, 27, 0.9);
-        --text: #f4f4f5;
-        --muted: #9ca3af;
-        /* Signal red, matching --brand-accent on the founder side. This page
-           keeps its own tokens under different names, which is why the recolour
-           went straight past it. */
-        --accent: #e8170a;
-        --ok: #6fcf97;
-        --danger: #f4746a;
-        --border: rgba(255, 255, 255, 0.12);
+        --bg: #08090a;
+        --panel: #0f1011;
+        --panel-2: #17181a;
+        --text: #f7f8f8;
+        --sub: #d0d6e0;
+        --muted: #8a8f98;
+        --accent: #5e6ad2;
+        --accent-hover: #6e79d6;
+        --ok: #4cb782;
+        --danger: #eb5757;
+        --warn: #f2c94c;
+        --border: rgba(255, 255, 255, 0.08);
+        --border-strong: rgba(255, 255, 255, 0.14);
         --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-        --serif: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
+        /* One face. Kept as a token because the page reads it in a dozen
+           places; it points at the same family now. */
+        --serif: var(--font);
+        --track-heading: -0.021em;
+        --track-body: -0.011em;
       }
       * { box-sizing: border-box; }
       html, body { margin: 0; min-height: 100%; background: var(--bg); }
@@ -151,7 +161,7 @@ import QuickActions from "../components/QuickActions";
       }
       .pill.active { color: var(--ok); border-color: rgba(111, 207, 151, 0.4); }
       .pill.pending { color: #e2b93b; border-color: rgba(226, 185, 59, 0.4); }
-      .pill.organizer { color: var(--accent); border-color: rgba(232, 23, 10, 0.4); }
+      .pill.organizer { color: var(--accent); border-color: rgba(94, 106, 210, 0.4); }
       .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
       label { display: block; }
       /* The date picker is not a <label>: it wraps a button, and a label

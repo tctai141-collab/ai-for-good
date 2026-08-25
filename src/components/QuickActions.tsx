@@ -239,7 +239,7 @@ const CSS = `
     0 0 12px rgba(0, 0, 0, 0.15);
 }
 .qa-trigger:focus-visible, .qa-item:focus-visible {
-  outline: 2px solid var(--brand-accent, var(--accent, #e8170a));
+  outline: 2px solid var(--brand-accent, var(--accent, #5e6ad2));
   outline-offset: 3px;
 }
 

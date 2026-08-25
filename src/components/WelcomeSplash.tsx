@@ -68,7 +68,9 @@ function paintSource(ctx: CanvasRenderingContext2D, width: number, height: numbe
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#fff";
   const size = Math.min(width * 0.16, height * 0.26);
-  ctx.font = `900 ${size}px "Source Serif 4", ui-serif, Georgia, serif`;
+  /* Inter, like everything else. Drawn to a canvas, so it names the family
+     directly rather than reading a CSS token. */
+  ctx.font = `800 ${size}px Inter, ui-sans-serif, system-ui, sans-serif`;
   ctx.fillText("SPRINT", width / 2, height / 2 - size * 0.55);
   ctx.fillText("BUDDY", width / 2, height / 2 + size * 0.55);
   ctx.restore();

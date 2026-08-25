@@ -879,7 +879,6 @@ const wordmarkType: React.CSSProperties = {
   lineHeight: 0.94,
   letterSpacing: "-0.035em",
   color: C.ink,
-  fontVariationSettings: '"opsz" 36',
 };
 
 /* ---------------- Sharing a single conversation with a coach ----------------
@@ -1274,10 +1273,12 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
   return (
     <>
-      {/* context strip: italic serif line, plus the sharing control */}
-      {/* Right padding keeps the sharing control clear of the docked mascot. */}
-      <div style={{ flexShrink: 0, padding: "14px 132px 14px var(--col-pad-left, 24px)", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 16 }}>
-        <p style={{ margin: 0, flex: 1, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, lineHeight: 1.5, color: C.sub, fontVariationSettings: '"opsz" 22' }}>
+      {/* The context strip: the time-of-day line, plus the sharing control.
+          The right padding clears the docked mascot, and is a variable because
+          on a phone there is no docked mascot to clear and 132px of it was
+          taking a third of the screen. */}
+      <div className="context-strip" style={{ flexShrink: 0, borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 16 }}>
+        <p style={{ margin: 0, flex: 1, fontStyle: "italic", fontSize: 13.5, lineHeight: 1.5, color: C.sub }}>
           {ctx.clock ? `It's ${ctx.clock}. ` : ""}{ctx.line}
         </p>
         {threadId && userEmail && (
@@ -1308,7 +1309,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
                    asked for. The wait below says what is happening while it
                    happens; a finished answer needs no label. */
                 <div key={i} style={{ alignSelf: "flex-start", maxWidth: "40rem" }}>
-                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, lineHeight: 1.55, color: C.ink, fontVariationSettings: '"opsz" 22' }} dangerouslySetInnerHTML={{ __html: markdownStyles + formatMarkdown(m.content) }} />
+                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, lineHeight: 1.55, color: C.ink }} dangerouslySetInnerHTML={{ __html: markdownStyles + formatMarkdown(m.content) }} />
                 </div>
               ) : (
                 <div key={i} style={{ alignSelf: "flex-end", maxWidth: "32rem", background: C.bubble, borderRadius: "14px 14px 4px 14px", padding: "10px 14px", fontSize: 15, lineHeight: 1.55, color: C.ink }}>{m.content}</div>
@@ -1383,7 +1384,7 @@ type TimeCtx = { clock: string; line: string; dotColor: string };
  */
 const WG_COLOR: Record<WorkingGeniusId, { tint: string; accent: string }> = {
   wonder: { tint: "rgba(247, 225, 89, 0.16)", accent: C.yellow },
-  invention: { tint: "rgba(232, 23, 10, 0.16)", accent: C.accent },
+  invention: { tint: "rgba(94, 106, 210, 0.16)", accent: C.accent },
   discernment: { tint: "rgba(253, 99, 96, 0.16)", accent: C.red },
   galvanizing: { tint: "rgba(255, 255, 255, 0.10)", accent: C.white },
   enablement: { tint: "rgba(124, 184, 147, 0.16)", accent: "#7CB893" },
@@ -1718,7 +1719,7 @@ function Reflections({
   return (
     <div className="rise" style={{ maxWidth: 720, margin: "0 auto", padding: "60px 28px 90px" }}>
       <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", margin: "0 0 28px" }}>
-        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(3rem, 6vw, 4.5rem)", lineHeight: 0.94, letterSpacing: "-0.04em", margin: 0, color: C.ink, fontVariationSettings: '"opsz" 60' }}>Your week.</h1>
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.75rem, 3.4vw, 2rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", margin: 0, color: C.ink }}>Your week.</h1>
         {/* Was down beside "Your record" at the foot of the page, which is a
             long way to scroll for the page's only export. */}
         {(checkins.length > 0 || threads.length > 0) && (
@@ -1728,7 +1729,7 @@ function Reflections({
         )}
       </header>
 
-      <p style={{ margin: "0 0 30px", fontFamily: "var(--font-serif)", fontSize: 22, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 30' }}>
+      <p style={{ margin: "0 0 30px", fontSize: 15, lineHeight: 1.6, color: C.sub, letterSpacing: "var(--track-body)" }}>
         You came here <Stat>{visits}</Stat> times. Most of it circled <Stat c={themeColor(topTheme)}>{topTheme}</Stat>. <Stat c={C.yellow}>{openCount}</Stat> {openCount === 1 ? "decision is" : "decisions are"} still open.
       </p>
 
@@ -1754,7 +1755,7 @@ function Reflections({
         <Arc checkins={checkins} />
         {latestCheckin && (
           <blockquote style={{ margin: "18px 0 0", paddingTop: 18, borderTop: `1px solid ${C.line}` }}>
-            <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>
+            <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17, lineHeight: 1.5, color: C.ink }}>
               {latestCheckinParts?.summary}
             </p>
             {latestCheckin.mood != null && (
@@ -1773,7 +1774,7 @@ function Reflections({
 
       <p style={{ ...kicker, margin: "0 0 14px" }}>On your mind</p>
       {themes.length === 0 ? (
-        <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint, fontVariationSettings: '"opsz" 18' }}>
+        <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint }}>
           Nothing tracked yet. Themes appear here once you've talked a few things through.
         </p>
       ) : (
@@ -1784,7 +1785,7 @@ function Reflections({
 
       <p style={{ ...kicker, marginTop: 44, marginBottom: 14 }}>Decisions</p>
       {decisions.length === 0 ? (
-        <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint, fontVariationSettings: '"opsz" 18' }}>No decisions tracked yet. They'll appear here when you weigh one in chat.</p>
+        <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint }}>No decisions tracked yet. They'll appear here when you weigh one in chat.</p>
       ) : (
         <ol style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
           {orderedDecisions.map((d) => <DecisionRow key={d.id} d={d} onClose={closeDecision} />)}
@@ -2054,7 +2055,7 @@ function Reflections({
         result={wgResult}
       />
 
-      <p style={{ marginTop: 44, paddingTop: 22, borderTop: `1px solid ${C.line}`, color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14, lineHeight: 1.5, fontVariationSettings: '"opsz" 18' }}>
+      <p style={{ marginTop: 44, paddingTop: 22, borderTop: `1px solid ${C.line}`, color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14, lineHeight: 1.5 }}>
         Open loops come back as soft check-ins in the chat. That is how they get closed.
       </p>
     </div>
@@ -2616,7 +2617,7 @@ function PatternLine({ label, value, color = C.ink }: { label: string; value: st
   return (
     <div style={{ display: "grid", gridTemplateColumns: "11rem 1fr", gap: 16, alignItems: "baseline", fontSize: 14.5, lineHeight: 1.45 }}>
       <span style={{ color: C.faint, fontSize: 11, fontWeight: 800, letterSpacing: 1.3, textTransform: "uppercase" }}>{label}</span>
-      <span style={{ color, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17, fontVariationSettings: '"opsz" 22' }}>{value}</span>
+      <span style={{ color, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 17 }}>{value}</span>
     </div>
   );
 }
@@ -2636,7 +2637,7 @@ function ThemeRow({ t }: { t: ThemeArc }) {
     .join(" ");
   return (
     <li style={{ display: "grid", gridTemplateColumns: "9rem 1fr auto", alignItems: "baseline", gap: 18, padding: "14px 0", borderBottom: `1px solid ${C.line}`, fontSize: 15 }}>
-      <strong style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, letterSpacing: "-0.005em", color: C.ink, fontVariationSettings: '"opsz" 14' }}>{t.name}</strong>
+      <strong style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, letterSpacing: "-0.005em", color: C.ink }}>{t.name}</strong>
       <span style={{ color: C.sub, fontSize: 13.5 }}>
         {total} {total === 1 ? "mention" : "mentions"}
         {dir && <span style={{ color: c }}> · {dir}</span>}
@@ -2656,7 +2657,7 @@ function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision
       <div>
         <div style={{ color: C.ink }}>{d.summary}</div>
         {d.status === "closed" && d.outcome && (
-          <em style={{ display: "block", marginTop: 4, fontFamily: "var(--font-serif)", fontStyle: "italic", color: C.sub, fontSize: 14.5, fontVariationSettings: '"opsz" 18' }}>{d.outcome}</em>
+          <em style={{ display: "block", marginTop: 4, fontFamily: "var(--font-serif)", fontStyle: "italic", color: C.sub, fontSize: 14.5 }}>{d.outcome}</em>
         )}
         <span style={{ display: "block", marginTop: 5, fontSize: 12, color: C.faint }}>{d.door} · {d.at}</span>
       </div>
@@ -2694,8 +2695,8 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
     return (
       <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
         <p style={kicker}>The cohort, this week</p>
-        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", margin: "10px 0 16px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>No founders yet.</h1>
-        <p style={{ margin: "0 0 26px", fontFamily: "var(--font-serif)", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 28' }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.625rem, 3.2vw, 1.875rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", margin: "10px 0 16px", color: C.ink }}>No founders yet.</h1>
+        <p style={{ margin: "0 0 26px", fontSize: 14.5, lineHeight: 1.6, color: C.sub, letterSpacing: "var(--track-body)" }}>
           Add the cohort in <a href="/admin" style={{ color: C.accent }}>Cohort admin</a> and send each founder their setup link. Their signals appear here once they start checking in.
         </p>
       </div>
@@ -2705,8 +2706,8 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
   return (
     <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
       <p style={kicker}>The cohort, week {week}</p>
-      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", margin: "10px 0 16px", color: C.ink, fontVariationSettings: '"opsz" 60' }}>Where to put your attention.</h1>
-      <p style={{ margin: "0 0 32px", fontFamily: "var(--font-serif)", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 28' }}>
+      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.625rem, 3.2vw, 1.875rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", margin: "10px 0 16px", color: C.ink }}>Where to put your attention.</h1>
+      <p style={{ margin: "0 0 32px", fontSize: 14.5, lineHeight: 1.6, color: C.sub, letterSpacing: "var(--track-body)" }}>
         Who to check on, not who is performing. <Stat c={C.red}>{cohort?.needAttention ?? 0}</Stat> of <Stat>{teams.length}</Stat> showing strain
         {(cohort?.quiet ?? 0) > 0 && <> · <Stat>{cohort?.quiet}</Stat> with no check-in</>}.
       </p>
@@ -2744,7 +2745,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
         <Legend c={TEMP_MONITOR} l="Monitor" />
         <Legend c={TEMP_NEEDS_ATTENTION} l="Needs attention" />
         <Legend c="transparent" l="No check-in" outlined />
-        <span style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, fontVariationSettings: '"opsz" 18' }}>An empty cell is an absence, not a verdict.</span>
+        <span style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5 }}>An empty cell is an absence, not a verdict.</span>
       </div>
 
       {/* Two different problems, so two different prompts. Silence is checked
@@ -2817,7 +2818,7 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
         Back
       </button>
 
-      <h1 style={{ margin: "0 0 4px", fontFamily: "var(--font-display)", fontWeight: 900, fontSize: "clamp(2.4rem, 5vw, 3.4rem)", lineHeight: 0.96, letterSpacing: "-0.04em", color: C.ink, fontVariationSettings: '"opsz" 60' }}>
+      <h1 style={{ margin: "0 0 4px", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.625rem, 3.2vw, 1.875rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", color: C.ink }}>
         {team.name}
       </h1>
       <p style={{ margin: "0 0 32px", color: C.faint, fontSize: 13.5 }}>{team.company}</p>
@@ -2839,10 +2840,10 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
 
       <div style={{ marginTop: 32, maxWidth: 540 }}>
         <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint, marginBottom: 10 }}>Open with</span>
-        <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 19, lineHeight: 1.5, color: C.ink, fontVariationSettings: '"opsz" 22' }}>{team.openWith}</p>
+        <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 19, lineHeight: 1.5, color: C.ink }}>{team.openWith}</p>
       </div>
 
-      <p style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, marginTop: 36, paddingTop: 18, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 8, fontVariationSettings: '"opsz" 18' }}>
+      <p style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5, marginTop: 36, paddingTop: 18, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
         Shared by the founder. Themes and trends only, never raw transcripts.
       </p>
@@ -3205,7 +3206,7 @@ const CSS = `
 /* Focus lifts the underlying border only part of the way to the accent. Taking
    it all the way made a solid red rectangle and the travelling light had
    nothing to travel against. */
-.composer-box:focus-within { border-color: rgba(232, 23, 10, 0.38)!important; }
+.composer-box:focus-within { border-color: rgba(94, 106, 210, 0.38)!important; }
 
 @media (prefers-reduced-motion: reduce) {
   .composer-box::before { animation: none; }
@@ -3253,6 +3254,16 @@ const CSS = `
 /* ---- Mobile actions -------------------------------------------------------
    Hidden entirely on anything wide enough to show the sidebar, which is where
    these two live properly. This is the phone fallback, not a second home. */
+.context-strip {
+  padding: 14px 132px 14px var(--col-pad-left, 24px);
+}
+@media (max-width: 700px) {
+  /* No docked mascot on a phone, so nothing to clear. At 390px the desktop
+     value left the line about 200px to wrap in, which is four lines of a
+     one-line remark. */
+  .context-strip { padding: 12px 14px; }
+}
+
 .mobile-actions { display: none; }
 @media (max-width: 700px) {
   .mobile-actions {
