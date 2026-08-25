@@ -740,6 +740,20 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
 
       {persona === "founder" ? (
         <>
+          {/*
+            Everything above the footer scrolls; the footer does not.
+
+            On a 660px-tall laptop the sidebar's fixed blocks plus a thread list
+            with a 96px floor added up to more than the panel had, and the
+            overflow went out of the bottom — Sign out ended up 96px below the
+            viewport with no way to reach it. A sidebar whose last item is
+            unreachable on a short screen is a sidebar with no sign-out.
+
+            minHeight 0 is what makes it work: a flex child's automatic minimum
+            is its content, so without it this region refuses to shrink and
+            pushes the footer out exactly as before.
+          */}
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", margin: "0 -4px", padding: "0 4px" }}>
           <Tasks state={deadlines} />
 
 {/* Directly under the overdue list: these two are what a founder owes
@@ -776,7 +790,9 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           </button>
 
           <p style={{ ...navLabel, marginTop: 26 }}>Pick up where you left off</p>
-          <div style={{ flex: 1, minHeight: 96, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+          {/* Plain flow now. It used to be the only scroller and carried a
+              96px floor, which is what pushed the footer off a short screen. */}
+          <div style={{ flexShrink: 0 }}>
             {threads.map((t) => {
               const on = view === "chat" && active.id === t.id;
               return (
@@ -801,7 +817,9 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             })}
           </div>
 
-          <div style={{ borderTop: `2px solid var(--line-strong)`, paddingTop: 8, marginTop: 14 }}>
+          </div>
+
+          <div style={{ borderTop: `2px solid var(--line-strong)`, paddingTop: 8, marginTop: 14, flexShrink: 0 }}>
             <p style={{ ...navLabel, marginTop: 6 }}>Elsewhere</p>
             {/* Above Reflections because it is the cohort's schedule and gets
                 opened far more often than a founder's own archive. */}
@@ -823,6 +841,20 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         </>
       ) : (
         <>
+          {/*
+            Everything above the footer scrolls; the footer does not.
+
+            On a 660px-tall laptop the sidebar's fixed blocks plus a thread list
+            with a 96px floor added up to more than the panel had, and the
+            overflow went out of the bottom — Sign out ended up 96px below the
+            viewport with no way to reach it. A sidebar whose last item is
+            unreachable on a short screen is a sidebar with no sign-out.
+
+            minHeight 0 is what makes it work: a flex child's automatic minimum
+            is its content, so without it this region refuses to shrink and
+            pushes the footer out exactly as before.
+          */}
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", margin: "0 -4px", padding: "0 4px" }}>
           {/* Both of these are cohort-wide views, so they sit together above
               the list of individual founders rather than one of them being
               exiled to the footer. */}
@@ -833,7 +865,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             <Glyph>▤</Glyph> <span>Programme</span>
           </button>
           <p style={{ ...navLabel, marginTop: 0 }}>Your cohort</p>
-          <div style={{ flex: 1, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+          <div style={{ flexShrink: 0 }}>
             {teams.length === 0 && (
               <p style={{ margin: "4px 8px", fontSize: 13, color: C.faint, lineHeight: 1.5 }}>
                 No founders yet.
@@ -848,7 +880,9 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               );
             })}
           </div>
-          <div style={{ borderTop: `2px solid var(--line-strong)`, paddingTop: 14, marginTop: 14 }}>
+          </div>
+
+          <div style={{ borderTop: `2px solid var(--line-strong)`, paddingTop: 14, marginTop: 14, flexShrink: 0 }}>
             {onSignOut && (
               <button onClick={onSignOut} className="navitem" style={{ ...navItem, fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
                 <Glyph>⎋</Glyph> <span>{signOutLabel}</span>
@@ -1614,7 +1648,11 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 
       {/* composer */}
       <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, background: C.bg }}>
-        <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 24px 18px" }}>
+        {/* A little more room under the keyboard than under a bare composer.
+            18px was the whole clearance whether or not sixty keys were sitting
+            there, and a keyboard that ends flush with the bottom edge reads as
+            cut off even when every key is on screen. */}
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: keyboardOn ? "12px 24px 26px" : "12px 24px 18px" }}>
           <div className="composer-row">
           <div className="composer-box" style={{ display: "flex", flex: 1, minWidth: 0, gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             {/* minWidth 0, or the textarea's intrinsic width becomes a floor

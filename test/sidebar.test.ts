@@ -154,3 +154,40 @@ describe("the rail on a phone", () => {
     expect(app).toContain("width: open ? 304 : railWidth");
   });
 });
+
+describe("nothing runs off the bottom of a short screen", () => {
+  test("the footer is pinned and the region above it scrolls", () => {
+    /*
+     * Regression, measured rather than eyeballed. On a 660px-tall laptop the
+     * sidebar's fixed blocks plus a thread list with a 96px floor came to more
+     * than the panel had, and the overflow left through the bottom: Sign out
+     * sat 96px below the viewport with no way to reach it. A sidebar whose
+     * last item is unreachable is a sidebar with no sign-out.
+     */
+    expect(app).toContain('flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column"');
+  });
+
+  test("minHeight 0, which is the part that actually does the work", () => {
+    // A flex child's automatic minimum is its content size, so without this
+    // the region refuses to shrink and pushes the footer out exactly as before.
+    const region = app.slice(app.indexOf("Everything above the footer scrolls"), app.indexOf("<Tasks state={deadlines}"));
+    expect(region).toContain("minHeight: 0");
+  });
+
+  test("both footers refuse to shrink", () => {
+    // Founder and coach. Whichever gives way first is the one that vanishes.
+    const footers = app.match(/borderTop: `2px solid var\(--line-strong\)`[^}]*\}/g) ?? [];
+    expect(footers.length).toBe(2);
+    for (const footer of footers) expect(footer).toContain("flexShrink: 0");
+  });
+
+  test("the thread list no longer carries a floor that pushed the footer out", () => {
+    expect(app).not.toContain("minHeight: 96");
+  });
+
+  test("the keyboard gets more clearance than a bare composer", () => {
+    // 18px was the whole gap whether or not sixty keys were sitting there, and
+    // a keyboard flush with the bottom edge reads as cut off.
+    expect(app).toContain('keyboardOn ? "12px 24px 26px" : "12px 24px 18px"');
+  });
+});
