@@ -105,13 +105,71 @@ export default function App() {
    */
   const [onboarding, setOnboarding] = useState(false);
 
+  /*
+   * Previewing the cohort view as an organizer.
+   *
+   * The ask was to stop signing out of one account and into another just to
+   * see how a change to a deadline or the programme week looks to a founder.
+   *
+   * What this is *not* is viewing as a founder. Nothing here impersonates
+   * anybody: the preview runs on the organizer's own account and their own
+   * (usually empty) threads and check-ins, and every request it makes is one
+   * they could already make. The parts they actually want to check — the
+   * deadline list, what is on this week, the composer, the check-in — are
+   * cohort-wide, so their own account shows them faithfully. The parts that
+   * are somebody's private writing are not there, which is the point.
+   *
+   * /api/deadlines has anticipated this since it was written: "Organizers see
+   * the same shape for themselves, which is how they preview what the cohort
+   * sees."
+   *
+   * Not persisted. A preview that survives a reload is a way to forget which
+   * view you are in, and this one deliberately looks like the founder's.
+   */
+  const [previewCohort, setPreviewCohort] = useState(false);
+
+  useEffect(() => {
+    try {
+      setPreviewCohort(new URLSearchParams(window.location.search).get("view") === "cohort");
+    } catch { /* no URL to read */ }
+  }, []);
+
+  /*
+   * The URL is the source of truth for which view is showing.
+   *
+   * pushState rather than state alone, so the browser's back button leaves the
+   * preview — which is what anybody will reach for first — and a reload stays
+   * where they were rather than silently dropping them somewhere else.
+   */
+  const enterPreview = useCallback(() => {
+    setPreviewCohort(true);
+    try { window.history.pushState(null, "", "/?view=cohort"); } catch { /* no history */ }
+  }, []);
+
+  const leavePreview = useCallback(() => {
+    setPreviewCohort(false);
+    try { window.history.pushState(null, "", "/"); } catch { /* no history */ }
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      try {
+        setPreviewCohort(new URLSearchParams(window.location.search).get("view") === "cohort");
+      } catch { /* no URL */ }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   /** Loads a signed-in user's data and drops them into the app. */
   const enter = useCallback(async (signedIn: SessionUser) => {
     try {
       await initUser();
-      if (signedIn.role === "founder") {
-        setUserData(await loadUserData(signedIn.email));
-      }
+      /* Loaded for staff too now, because the cohort preview renders the
+         founder view against their own account and it would otherwise be a
+         founder view with nothing in it. Their own row, by their own session
+         — requireSelf on the server, same as any founder reading their own. */
+      setUserData(await loadUserData(signedIn.email));
     } catch {
       // Their data can be re-fetched; don't block sign-in on it.
     }
@@ -306,10 +364,60 @@ export default function App() {
      they would land in a founder's chat and be handed a personal coaching
      account, which is not what they came for. */
   if (user.role === "organizer" || user.role === "mentor") {
+    if (previewCohort) {
+      return (
+        <>
+          {/*
+            The founder view, run on the staff member's own account.
+
+            The banner is not decoration. This view is meant to be
+            indistinguishable from what a founder sees, which is exactly why
+            somebody has to be told which one they are in — and told whose data
+            it is, because the honest answer is "yours, not theirs", and an
+            organizer who assumed otherwise would draw the wrong conclusion
+            from an empty screen.
+          */}
+          <div className="preview-bar">
+            <span>
+              Cohort view — <strong>your own account</strong>, not a
+              founder&rsquo;s. Deadlines and the programme are what they see;
+              conversations and check-ins are yours.
+            </span>
+            <button type="button" className="preview-exit" onClick={() => leavePreview()}>
+              Back to the dashboard
+            </button>
+          </div>
+          <SprintBuddy persona="founder" userEmail={user.email} initialData={userData ?? undefined} onSignOut={handleSignOut} signOutLabel="Sign out" />
+          <PersistentBuddy stage={buddyStage} />
+        </>
+      );
+    }
+
     return (
       <>
         {walkthrough}
         <SprintBuddy persona="coach" userEmail={user.email} onSignOut={handleSignOut} />
+        <button
+          type="button"
+          onClick={() => enterPreview()}
+          style={{
+            position: "fixed",
+            top: 18,
+            /* Left of the admin link, which is itself clear of the mascot. */
+            right: 248,
+            zIndex: 40,
+            fontSize: 13,
+            padding: "6px 12px",
+            borderRadius: 9,
+            border: "1px solid rgba(255,255,255,0.14)",
+            color: "var(--ink-sub)",
+            background: "rgba(14,15,18,0.85)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Cohort view
+        </button>
         <a
           href="/admin"
           style={{
