@@ -26,6 +26,7 @@ import InteractiveHoverButton from "./InteractiveHoverButton";
 import GlassFilter from "./GlassFilter";
 import GlassToggle, { GLASS_TOGGLE_CSS } from "./GlassToggle";
 import OnScreenKeyboard, { applyKey, OSK_CSS, type KeyOutput } from "./OnScreenKeyboard";
+import VoiceInput, { appendTranscript } from "./VoiceInput";
 
 function formatMarkdown(text: string): string {
   let out = text
@@ -1609,6 +1610,24 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
             </div>
             {/* The switch sits inside the composer, next to Send, because that
                 is where somebody notices they cannot type. */}
+            {/*
+              Dictation lands in the box, and Send is still a person's job.
+
+              The caret ref is moved to the end afterwards for the same reason
+              the on-screen keyboard keeps it in step: the two input methods
+              share one composer and a stale caret makes the next tap insert in
+              the middle of a dictated sentence.
+            */}
+            <VoiceInput
+              disabled={busy}
+              onPhrase={(phrase) => {
+                setInput((prev) => {
+                  const next = appendTranscript(prev, phrase);
+                  caretRef.current = next.length;
+                  return next;
+                });
+              }}
+            />
             <GlassToggle
               id="osk-toggle"
               checked={keyboardOn}
