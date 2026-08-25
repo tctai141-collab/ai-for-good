@@ -1443,8 +1443,15 @@ export function getProgrammeEvent(id: string): ProgrammeEventRow | null {
     .get({ $id: id }) as ProgrammeEventRow | null;
 }
 
-/** Creates or replaces one event. The caller owns id generation and validation. */
-export function upsertProgrammeEvent(row: ProgrammeEventRow, createdBy: string): void {
+/**
+ * Creates or replaces one event. The caller owns id generation and validation.
+ *
+ * createdBy is nullable because not every event has an author: a schedule
+ * loaded by a script was not typed by anybody, and the column has a foreign key
+ * to users, so inventing a name for it fails the constraint rather than
+ * recording something useful.
+ */
+export function upsertProgrammeEvent(row: ProgrammeEventRow, createdBy: string | null): void {
   const db = getDb();
   db.run(
     `INSERT INTO programme_events
