@@ -191,6 +191,50 @@ import Root from "../components/Root";
     outline-offset: 2px;
   }
 
+  /* ── Cohort preview ──
+     Shown to staff who are looking at the founder view. The whole point of
+     that view is that it is indistinguishable from a founder's, which is
+     exactly why the bar has to be hard to miss. */
+  .preview-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    background: var(--brand-accent);
+    color: #f7f8f8;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+  }
+  .preview-bar strong { font-weight: 700; }
+  .preview-exit {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: 600 12.5px/1 inherit;
+    cursor: pointer;
+  }
+  .preview-exit:hover { background: rgba(255, 255, 255, 0.14); }
+  .preview-exit:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+  /* The app is a full-height flex column; the bar is fixed, so it would sit
+     on top of the sidebar without this. */
+  body:has(.preview-bar) > * { padding-top: 0; }
+  .preview-bar ~ div { margin-top: 38px; }
+  @media (max-width: 700px) {
+    .preview-bar { font-size: 12px; padding: 7px 12px; gap: 10px; }
+    .preview-bar ~ div { margin-top: 58px; }
+  }
+
   /* ── Login ── */
   .login-screen {
     position: relative;

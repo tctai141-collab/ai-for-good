@@ -742,6 +742,13 @@ import KeyboardFor from "../components/KeyboardFor";
   <body>
     <main>
       <!-- The only way back used to be editing the URL. -->
+      <!-- Straight into the founder view rather than back to the dashboard,
+           so a change to a deadline or the week can be checked without
+           signing out of one account and into another. -->
+      <a class="back-link" href="/?view=cohort" style="margin-right:18px">
+        <span aria-hidden="true">&#9673;</span>
+        See the cohort view
+      </a>
       <a class="back-link" href="/">
         <span aria-hidden="true">&#8592;</span> Back to Sprint Buddy
       </a>
