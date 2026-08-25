@@ -691,6 +691,24 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
   const [peek, setPeek] = useState(false);
   useEffect(() => { if (open) setPeek(false); }, [open]);
 
+  /*
+   * Narrower on a phone.
+   *
+   * The sidebar is forced closed below 700px, so the rail is the only way to
+   * reach anything — it cannot go back to zero width, which is what collapsed
+   * used to mean before the rail replaced the floating expand button. But 64px
+   * of a 390px screen is a sixth of the display given to a column of icons, so
+   * it tightens to 48 where every pixel of the conversation counts.
+   */
+  const [railWidth, setRailWidth] = useState(64);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 700px)");
+    const apply = () => setRailWidth(media.matches ? 48 : 64);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
+
   const panel = (
     <div style={{ width: 304, height: "100%", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 4px 28px" }}>
@@ -845,7 +863,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
   return (
     <aside
       style={{
-        width: open ? 304 : 64,
+        width: open ? 304 : railWidth,
         flexShrink: 0,
         position: "relative",
         background: C.sidebar,
@@ -857,6 +875,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
     >
       {open ? panel : (
         <SidebarRail
+          width={railWidth}
           persona={persona}
           view={view}
           coachTeam={coachTeam}
@@ -960,9 +979,10 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
  * thing you have to expand the sidebar to discover.
  */
 function SidebarRail({
-  persona, view, coachTeam, deadlines, checkinDone,
+  persona, view, coachTeam, deadlines, checkinDone, width,
   onExpand, onNew, onStartCheckin, onProgramme, onWishes, onReflections, onPickTeam, onSignOut,
 }: {
+  width: number;
   persona: Persona;
   view: View;
   coachTeam: Team | null;
@@ -993,7 +1013,7 @@ function SidebarRail({
       ];
 
   return (
-    <div style={{ width: 64, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0", gap: 4 }}>
+    <div style={{ width, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0", gap: 4 }}>
       <button
         onClick={onExpand}
         aria-label="Expand sidebar"
@@ -1595,8 +1615,13 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       {/* composer */}
       <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, background: C.bg }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 24px 18px" }}>
-          <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
-            <div style={{ position: "relative", flex: 1, display: "flex" }}>
+          <div className="composer-row">
+          <div className="composer-box" style={{ display: "flex", flex: 1, minWidth: 0, gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
+            {/* minWidth 0, or the textarea's intrinsic width becomes a floor
+                this flex child will not go below and the Send button is pushed
+                out through the right-hand edge of the box. Only visible once
+                the column got narrow enough to matter. */}
+            <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
               <AnimatedPlaceholder text={idlePrompt} paused={composerFocused || input.length > 0} />
               <textarea ref={composerRef} value={input} onChange={(e) => { caretRef.current = e.target.selectionStart ?? e.target.value.length; setInput(e.target.value); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
                 onFocus={() => setComposerFocused(true)}
@@ -1606,7 +1631,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
                    step so the next tap inserts where the founder is looking. */
                 onSelect={(e) => { caretRef.current = e.currentTarget.selectionStart ?? 0; }}
                 aria-label="Message Sprint Buddy"
-                style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
+                style={{ flex: 1, minWidth: 0, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
             </div>
             {/* The switch sits inside the composer, next to Send, because that
                 is where somebody notices they cannot type. */}
@@ -1628,12 +1653,6 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
                 });
               }}
             />
-            <GlassToggle
-              id="osk-toggle"
-              checked={keyboardOn}
-              onChange={toggleKeyboard}
-              label="On-screen keyboard"
-            />
             <button
               onClick={() => send()}
               disabled={busy || !input.trim()}
@@ -1643,6 +1662,27 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
             >
               <span aria-hidden="true">↑</span>
             </button>
+          </div>
+
+          {/*
+            Outside the box, not in it.
+
+            The row had a textarea and three controls sharing one rounded
+            rectangle and read as packed. The mic and Send stay — they act on
+            the message being written. This is a mode switch for the whole
+            composer, it belongs beside the box rather than in the same tray as
+            the thing that sends, and out here it can carry a visible label
+            instead of relying on a tooltip.
+          */}
+          <label className="composer-switch" htmlFor="osk-toggle">
+            <GlassToggle
+              id="osk-toggle"
+              checked={keyboardOn}
+              onChange={toggleKeyboard}
+              label="On-screen keyboard"
+            />
+            <span>Keyboard</span>
+          </label>
           </div>
 
           {keyboardOn && (
@@ -3849,6 +3889,36 @@ ${OSK_CSS}
   syntax: "<angle>";
   initial-value: 0deg;
   inherits: false;
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.composer-switch {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  /* Sits on the same baseline as Send rather than floating at the top of a
+     composer that has grown to several lines. */
+  padding-bottom: 11px;
+  color: var(--ink-sub, #8a8f98);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.composer-switch:hover { color: var(--ink); }
+
+@media (max-width: 620px) {
+  /* 46px of switch plus a label plus a gap is most of a phone's composer.
+     It goes under the box instead, where it still is not inside it. */
+  .composer-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .composer-switch { padding-bottom: 0; align-self: flex-start; }
 }
 
 .composer-box { position: relative; }

@@ -15,8 +15,9 @@ const rail = app.slice(app.indexOf("function SidebarRail"), app.indexOf("const r
 
 describe("collapsed is a rail, not a void", () => {
   test("it keeps real width", () => {
-    // It was width 0 plus a button floating over the conversation.
-    expect(app).toContain("width: open ? 304 : 64");
+    // It was width 0 plus a button floating over the conversation. The exact
+    // number now depends on screen size — see the phone case below.
+    expect(app).toContain("width: open ? 304 : railWidth");
     expect(app).not.toContain("width: open ? 304 : 0");
   });
 
@@ -98,5 +99,58 @@ describe("the expanded panel is grouped", () => {
 
   test("the navigation group is labelled rather than orphaned under a rule", () => {
     expect(app).toContain("Elsewhere");
+  });
+});
+
+describe("the composer is not a tray of controls", () => {
+  test("the keyboard switch is outside the box, not in it", () => {
+    /*
+     * The row had a textarea and three controls sharing one rounded rectangle.
+     * The mic and Send act on the message being written and stay; this is a
+     * mode switch for the whole composer and belongs beside the box.
+     */
+    const box = app.slice(app.indexOf('<div className="composer-box"'), app.indexOf('className="composer-switch"'));
+    expect(box).toContain("<VoiceInput");
+    expect(box).toContain('className="send-button"');
+    // The switch appears only after the box has closed.
+    expect(box).not.toContain("<GlassToggle");
+    expect(app).toContain('className="composer-switch"');
+  });
+
+  test("out there it can carry a visible label", () => {
+    // Inside the box it was a bare switch explained only by a tooltip.
+    const sw = app.slice(app.indexOf('className="composer-switch"'), app.indexOf('className="composer-switch"') + 420);
+    expect(sw).toContain("<span>Keyboard</span>");
+    expect(sw).toContain('htmlFor="osk-toggle"');
+  });
+
+  test("it stacks under the box on a phone rather than squeezing it", () => {
+    expect(app).toContain(".composer-row { flex-direction: column;");
+  });
+});
+
+describe("the composer cannot overflow its own box", () => {
+  test("the text column may shrink below the textarea's intrinsic width", () => {
+    /*
+     * Regression, found by measuring rather than looking. A flex child's
+     * min-width is auto, so the textarea's intrinsic width became a floor the
+     * column would not go below and Send was pushed out through the right-hand
+     * edge of the box. Only visible once the column got narrow enough.
+     */
+    expect(app).toContain('position: "relative", flex: 1, minWidth: 0, display: "flex"');
+    expect(app).toContain('style={{ flex: 1, minWidth: 0, background: "transparent"');
+  });
+});
+
+describe("the rail on a phone", () => {
+  test("it narrows rather than disappearing", () => {
+    /*
+     * The sidebar is forced closed below 700px, so the rail is the only way to
+     * reach anything — it cannot go back to the zero width collapsed used to
+     * mean, because the floating expand button it replaced is gone. But 64px
+     * of a 390px screen is a sixth of the display given to icons.
+     */
+    expect(app).toContain("setRailWidth(media.matches ? 48 : 64)");
+    expect(app).toContain("width: open ? 304 : railWidth");
   });
 });
