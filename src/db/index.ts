@@ -1261,6 +1261,146 @@ export type ProgrammeWeekRow = {
   sessions: string;
 };
 
+/** Everybody holding a role, for notifying an audience rather than a person. */
+export function listUsersByRole(role: Role): { email: string; name: string }[] {
+  const db = getDb();
+  return db
+    .query("SELECT email, name FROM users WHERE role = $role ORDER BY name ASC")
+    .all({ $role: role }) as { email: string; name: string }[];
+}
+
+export type WishAudience = "organizers" | "mentors";
+
+export type WishReply = {
+  id: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+};
+
+export type WishRow = {
+  id: string;
+  fromEmail: string;
+  fromName: string;
+  audience: WishAudience;
+  body: string;
+  status: "open" | "answered";
+  createdAt: string;
+  replies: WishReply[];
+};
+
+function attachReplies(rows: Omit<WishRow, "replies">[]): WishRow[] {
+  if (!rows.length) return [];
+  const db = getDb();
+  const byWish = new Map<string, WishReply[]>();
+  /* One query for every reply in the set rather than one per wish: the
+     organizer view lists the whole cohort's wishes at once. */
+  const placeholders = rows.map((_, i) => `$id${i}`).join(", ");
+  const params: Record<string, string> = {};
+  rows.forEach((row, i) => { params[`$id${i}`] = row.id; });
+  const replies = db
+    .query(
+      `SELECT id, wish_id AS wishId, author_name AS authorName, body, created_at AS createdAt
+       FROM wish_replies WHERE wish_id IN (${placeholders}) ORDER BY created_at ASC`,
+    )
+    .all(params) as (WishReply & { wishId: string })[];
+  for (const reply of replies) {
+    const { wishId, ...rest } = reply;
+    const list = byWish.get(wishId);
+    if (list) list.push(rest);
+    else byWish.set(wishId, [rest]);
+  }
+  return rows.map((row) => ({ ...row, replies: byWish.get(row.id) ?? [] }));
+}
+
+const WISH_COLUMNS = `
+  w.id, w.from_email AS fromEmail, COALESCE(u.name, w.from_email) AS fromName,
+  w.audience, w.body, w.status, w.created_at AS createdAt
+`;
+
+/** One founder's own wishes, whoever they were addressed to. */
+export function listWishesFrom(email: string): WishRow[] {
+  const db = getDb();
+  const rows = db
+    .query(
+      `SELECT ${WISH_COLUMNS} FROM wishes w
+       LEFT JOIN users u ON u.email = w.from_email
+       WHERE w.from_email = $email ORDER BY w.created_at DESC`,
+    )
+    .all({ $email: email }) as Omit<WishRow, "replies">[];
+  return attachReplies(rows);
+}
+
+/**
+ * Everything addressed to one audience.
+ *
+ * Organizers also read the mentors' queue — they run the programme and a wish
+ * for a mentor is still theirs to make happen — but mentors read only their
+ * own, which is the whole point of picking who to address.
+ */
+export function listWishesFor(audiences: WishAudience[]): WishRow[] {
+  if (!audiences.length) return [];
+  const db = getDb();
+  const placeholders = audiences.map((_, i) => `$a${i}`).join(", ");
+  const params: Record<string, string> = {};
+  audiences.forEach((a, i) => { params[`$a${i}`] = a; });
+  const rows = db
+    .query(
+      `SELECT ${WISH_COLUMNS} FROM wishes w
+       LEFT JOIN users u ON u.email = w.from_email
+       WHERE w.audience IN (${placeholders})
+       ORDER BY w.status = 'answered', w.created_at DESC`,
+    )
+    .all(params) as Omit<WishRow, "replies">[];
+  return attachReplies(rows);
+}
+
+export function getWish(id: string): Omit<WishRow, "replies"> | null {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT ${WISH_COLUMNS} FROM wishes w
+       LEFT JOIN users u ON u.email = w.from_email WHERE w.id = $id`,
+    )
+    .get({ $id: id }) as Omit<WishRow, "replies"> | null;
+}
+
+export function createWish(id: string, fromEmail: string, audience: WishAudience, body: string): void {
+  const db = getDb();
+  db.run(
+    "INSERT INTO wishes (id, from_email, audience, body) VALUES ($id, $from, $audience, $body)",
+    { $id: id, $from: fromEmail, $audience: audience, $body: body.trim() },
+  );
+}
+
+/**
+ * How many wishes this founder has sent since a moment.
+ *
+ * Every wish emails a real person, so there is a cap. Without one a founder
+ * with a stuck key sends Mårten forty emails and the feature is switched off by
+ * whoever owns his inbox.
+ */
+export function countWishesSince(email: string, isoTimestamp: string): number {
+  const db = getDb();
+  const row = db
+    .query("SELECT COUNT(*) AS n FROM wishes WHERE from_email = $email AND created_at >= $since")
+    .get({ $email: email, $since: isoTimestamp }) as { n: number };
+  return row.n;
+}
+
+export function addWishReply(
+  id: string, wishId: string, authorEmail: string, authorName: string, body: string,
+): void {
+  const db = getDb();
+  db.run(
+    `INSERT INTO wish_replies (id, wish_id, author_email, author_name, body)
+     VALUES ($id, $wish, $author, $name, $body)`,
+    { $id: id, $wish: wishId, $author: authorEmail, $name: authorName, $body: body.trim() },
+  );
+  // Answering is what marks it answered; there is no separate button to forget.
+  db.run("UPDATE wishes SET status = 'answered' WHERE id = $wish", { $wish: wishId });
+}
+
 export type ProgrammeEventRow = {
   id: string;
   title: string;

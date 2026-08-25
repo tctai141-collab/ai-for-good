@@ -507,6 +507,45 @@ export function initSchema(db: Database) {
   `);
   db.run("CREATE INDEX IF NOT EXISTS programme_events_date ON programme_events(starts_on)");
 
+  /*
+   * Wishes: a founder asking the organizers or the mentors for something.
+   *
+   * Addressed to a role rather than a person. With one mentor on the programme
+   * a person would work today and break the moment there are two, or the moment
+   * Mårten hands over — a wish sent to an account that has left is a wish
+   * nobody reads. A role always has somebody in it.
+   *
+   * Attributed, deliberately and visibly. A check-in is private because it is
+   * thinking out loud; a wish is addressed *to* somebody and expects an answer,
+   * which cannot happen anonymously. The compose box says so before you type.
+   */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS wishes (
+      id TEXT PRIMARY KEY,
+      from_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      audience TEXT NOT NULL CHECK(audience IN ('organizers', 'mentors')),
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'answered')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run("CREATE INDEX IF NOT EXISTS wishes_audience ON wishes(audience, status)");
+  db.run("CREATE INDEX IF NOT EXISTS wishes_from ON wishes(from_email)");
+
+  /* Replies survive the author leaving the programme: the founder who was
+     answered should keep the answer. */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS wish_replies (
+      id TEXT PRIMARY KEY,
+      wish_id TEXT NOT NULL REFERENCES wishes(id) ON DELETE CASCADE,
+      author_email TEXT REFERENCES users(email) ON DELETE SET NULL,
+      author_name TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run("CREATE INDEX IF NOT EXISTS wish_replies_wish ON wish_replies(wish_id)");
+
   // What has already been said to whom, so a reminder is a reminder and not a
   // daily nag. One row per (deadline, founder, kind); the primary key is what
   // makes a second send impossible rather than merely unlikely.
