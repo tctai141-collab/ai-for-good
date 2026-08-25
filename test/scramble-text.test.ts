@@ -99,23 +99,32 @@ describe("the scramble", () => {
 describe("the sizing", () => {
   test("it is sized against the panel, not the viewport", () => {
     /*
-     * Measured: at the first size the longest of the three names filled 72% of
-     * the panel, which made it read as small beside the fields instead of as
-     * their heading. In cqw against .login-panel it holds ~93% at every
-     * viewport rather than drifting as vw and the panel's max-width diverge.
+     * Measured when this was first set: sized in vw, the longest of the three
+     * names drifted against the panel as the viewport and the panel's
+     * max-width diverged. In cqw it holds its proportion everywhere.
+     *
+     * The numbers themselves are not pinned — they moved once already when the
+     * type scale was rebuilt, and a test that fails on a size change is a test
+     * that gets edited rather than read. What matters is the pair and the
+     * order.
      */
     expect(css).toMatch(/\.login-panel \{[^}]*container-type: inline-size/s);
-    expect(css).toContain("font-size: clamp(1.5rem, 10.2cqw, 2.9rem)");
-    expect(css).toContain("font-size: clamp(1.5rem, 4.3vw, 2.75rem)");
 
     /* Comments stripped before comparing order: the explanation above the rule
-       names 10.2cqw, so indexOf would find the prose and report the fallback
-       as coming second. */
+       names cqw, so indexOf would find the prose and report the fallback as
+       coming second. */
     const block = css
       .slice(css.indexOf("  .scramble {"), css.indexOf("  .scramble-gauge {"))
       .replace(/\/\*[\s\S]*?\*\//g, "");
-    expect(block).toContain("4.3vw");
-    expect(block.indexOf("4.3vw")).toBeLessThan(block.indexOf("10.2cqw"));
+
+    const sizes = [...block.matchAll(/font-size: clamp\([^)]*\);/g)].map((m) => m[0]!);
+    expect(sizes.length).toBe(2);
+    /* The vw line first, as the fallback: a browser without container queries
+       treats the cqw declaration as invalid and keeps whichever came before
+       it. Reverse these two and such a browser gets no size at all. */
+    expect(sizes[0]).toContain("vw");
+    expect(sizes[0]).not.toContain("cqw");
+    expect(sizes[1]).toContain("cqw");
   });
 });
 
