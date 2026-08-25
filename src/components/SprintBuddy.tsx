@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
+import ProgrammeTimeline, { isoDay, type ProgrammeEvent } from "./ProgrammeTimeline";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
@@ -384,7 +385,7 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections";
+type View = "chat" | "reflections" | "programme";
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
@@ -570,9 +571,17 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         onDeleteThread={removeThread}
         decisions={decisions}
         onReflections={() => setView("reflections")}
+        onProgramme={() => setView("programme")}
         onSignOut={onSignOut}
         signOutLabel={signOutLabel}
-        onPickTeam={setCoachTeam}
+        onPickTeam={(team) => {
+          /* Leaves the programme as well as choosing a founder. Without this,
+             clicking "Cohort heatmap" while the programme is open sets the
+             selection behind a view that is still covering it, and the click
+             looks broken. */
+          setCoachTeam(team);
+          setView("chat");
+        }}
       />
 
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
@@ -653,10 +662,13 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
             firstRun={threads.length === 0 && checkins.length === 0}
           />
         )}
+        {view === "programme" && (
+          <Scroll><ProgrammeTimeline /></Scroll>
+        )}
         {persona === "founder" && view === "reflections" && (
           <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} /></Scroll>
         )}
-        {persona === "coach" && (
+        {persona === "coach" && view !== "programme" && (
           <Scroll>
             {coachTeam
               ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} />
@@ -689,12 +701,13 @@ type SidebarProps = {
   /** Only so the delete warning can say how many go with the conversation. */
   decisions: Decision[];
   onReflections: () => void;
+  onProgramme: () => void;
   onSignOut?: () => void;
   signOutLabel: string;
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -752,7 +765,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         <>
           <Tasks state={deadlines} />
 
-          <ProgrammeRail />
+          <ProgrammeRail onOpen={onProgramme} />
 
           {checkinDone ? (
             <div className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14, color: C.faint, marginBottom: 14, cursor: "default" }}>
@@ -810,6 +823,11 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           </div>
 
           <div style={{ borderTop: `2px solid var(--line-strong)`, paddingTop: 14, marginTop: 14 }}>
+            {/* Above Reflections because it is the cohort's schedule and gets
+                opened far more often than a founder's own archive. */}
+            <button onClick={onProgramme} className="navitem" style={{ ...navItem, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+              <Glyph>▤</Glyph> <span>Programme</span>
+            </button>
             <button onClick={onReflections} className="navitem" style={{ ...navItem, background: view === "reflections" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: view === "reflections" ? 600 : 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>◷</Glyph> <span>Reflections</span>
             </button>
@@ -822,8 +840,14 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         </>
       ) : (
         <>
-          <button onClick={() => onPickTeam(null)} className="navitem" style={{ ...navItem, marginBottom: 12, background: !coachTeam ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+          {/* Both of these are cohort-wide views, so they sit together above
+              the list of individual founders rather than one of them being
+              exiled to the footer. */}
+          <button onClick={() => onPickTeam(null)} className="navitem" style={{ ...navItem, background: view !== "programme" && !coachTeam ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
             <Glyph>▦</Glyph> <span>Cohort heatmap</span>
+          </button>
+          <button onClick={onProgramme} className="navitem" style={{ ...navItem, marginBottom: 12, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+            <Glyph>▤</Glyph> <span>Programme</span>
           </button>
           <p style={{ ...navLabel, marginTop: 0 }}>Your cohort</p>
           <div style={{ flex: 1, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
@@ -2719,8 +2743,18 @@ type ProgrammeWeek = { week: number; phase: string; title: string; milestones: s
  * waiting for when the programme has no weeks in it yet. Founders should be
  * able to learn that the schedule lives here before there is a schedule.
  */
-function ProgrammeRail() {
+/** "Tue 8 Sep", or "Tomorrow" when it is. */
+function shortWhen(day: string): string {
+  const date = new Date(`${day}T00:00:00`);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (day === isoDay(tomorrow)) return "Tomorrow";
+  return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function ProgrammeRail({ onOpen }: { onOpen: () => void }) {
   const [weeks, setWeeks] = useState<ProgrammeWeek[] | null>(null);
+  const [events, setEvents] = useState<ProgrammeEvent[]>([]);
   const [now, setNow] = useState(1);
   const [open, setOpen] = useState(false);
 
@@ -2734,8 +2768,28 @@ function ProgrammeRail() {
         setNow((d.currentWeek as number) ?? 1);
       })
       .catch(() => {});
+    /*
+     * The dated events, which are what this section is actually about.
+     *
+     * It used to read only the week themes, and once the programme had dates in
+     * it the sidebar said "Nothing scheduled yet" while the Programme page
+     * listed seven things. Two views of one schedule contradicting each other
+     * is worse than either of them being empty.
+     */
+    fetch("/api/programme-events")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (live && d) setEvents((d.events as ProgrammeEvent[]) ?? []); })
+      .catch(() => {});
     return () => { live = false; };
   }, []);
+
+  /* The next three things with a date on them. A founder looking at this
+     corner wants to know what is on, not what the week is themed around. */
+  const today = isoDay(new Date());
+  const upcoming = useMemo(
+    () => events.filter((e) => e.startsOn >= today).slice(0, 3),
+    [events, today],
+  );
 
   const ahead = useMemo(() => {
     if (!weeks) return [];
@@ -2761,10 +2815,60 @@ function ProgrammeRail() {
         the feature having gone missing. A section that says what it is waiting
         for is not an empty box.
       */}
-      {!shown.length && (
+      {!shown.length && !upcoming.length && (
         <p style={{ margin: 0, padding: "0 4px", fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>
           Nothing scheduled yet. The team fills this in as the sprint is planned.
         </p>
+      )}
+
+      {upcoming.length > 0 && (
+        <div style={{ display: "grid", gap: 9, marginBottom: shown.length ? 12 : 0 }}>
+          {upcoming.map((event) => (
+            <button
+              key={event.id}
+              type="button"
+              onClick={onOpen}
+              className="navitem"
+              style={{
+                display: "block", width: "100%", textAlign: "left",
+                padding: "0 4px", background: "transparent", border: "none",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              <span style={{
+                display: "block", fontSize: 10.5, fontWeight: 800, letterSpacing: 1.1,
+                textTransform: "uppercase",
+                color: event.startsOn === today ? C.accent : C.faint,
+              }}>
+                {event.startsOn === today ? "Today" : shortWhen(event.startsOn)}
+                {event.startTime ? ` · ${event.startTime}` : ""}
+              </span>
+              <span style={{ display: "block", margin: "2px 0 0", fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>
+                {event.title}
+              </span>
+              {event.location && (
+                <span style={{ display: "block", margin: "1px 0 0", fontSize: 11.5, color: C.faint, lineHeight: 1.4 }}>
+                  {event.location}
+                </span>
+              )}
+            </button>
+          ))}
+          {/* The way into the full thing, next to the thing it expands. The
+              footer item is the stable address; this is the one you find
+              while already looking at the schedule. */}
+          <button
+            type="button"
+            onClick={onOpen}
+            className="navitem"
+            style={{
+              display: "block", width: "100%", textAlign: "left",
+              background: "transparent", border: "none", color: C.faint,
+              cursor: "pointer", font: "600 11.5px/1 inherit", padding: "2px 4px",
+            }}
+          >
+            See the whole programme →
+          </button>
+        </div>
       )}
 
       <div style={{ display: "grid", gap: 10 }}>

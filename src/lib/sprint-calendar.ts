@@ -36,6 +36,18 @@ export function weekForDate(date: Date): number | null {
  * Whether a start date is configured. Without one, check-ins cannot be placed
  * into sprint weeks, so the cohort heatmap has nothing meaningful to draw.
  */
+/**
+ * The configured start date as YYYY-MM-DD, or null when there isn't one.
+ *
+ * Sent to the browser so the programme timeline can group dated events into
+ * sprint weeks itself. That is arithmetic on a public date, not a secret: the
+ * cohort is told when the sprint starts on the day they are invited.
+ */
+export function sprintStartDate(): string | null {
+  const start = startDate();
+  return start ? start.toISOString().slice(0, 10) : null;
+}
+
 export function isSprintDated(): boolean {
   return startDate() !== null;
 }

@@ -737,7 +737,43 @@ import KeyboardFor from "../components/KeyboardFor";
       }
       .dp-today:hover { border-color: rgba(255, 255, 255, 0.24); }
 
-    </style>
+      /* ── Programme events ── */
+  .ev-month {
+    margin: 22px 0 8px;
+    font-size: 0.75rem; font-weight: 700;
+    letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--ink-sub);
+  }
+  .ev-row {
+    display: grid;
+    grid-template-columns: 52px 92px 1fr auto auto;
+    align-items: baseline; gap: 12px;
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.875rem;
+  }
+  .ev-row.is-past { opacity: 0.5; }
+  .ev-date { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ev-time { color: var(--ink-sub); font-variant-numeric: tabular-nums; }
+  .ev-title { min-width: 0; }
+  .ev-loc { color: var(--ink-sub); }
+  .ev-kind {
+    padding: 1px 8px; border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    font-size: 0.6875rem; font-weight: 600; color: var(--ink-sub);
+    white-space: nowrap;
+  }
+  .ev-actions { display: flex; gap: 6px; }
+  .ev-actions button { padding: 3px 10px; font-size: 0.75rem; }
+  @media (max-width: 760px) {
+    /* The five-column grid gives the title about eight characters here. */
+    .ev-row { grid-template-columns: 52px 1fr; gap: 4px 12px; }
+    .ev-time { grid-column: 2; }
+    .ev-title, .ev-kind, .ev-actions { grid-column: 1 / -1; }
+    .ev-actions { margin-top: 4px; }
+  }
+
+</style>
   </head>
   <body>
     <main>
@@ -938,12 +974,72 @@ import KeyboardFor from "../components/KeyboardFor";
 
         <div class="tabpanel" id="tab-programme" hidden>
         <section class="panel">
-          <h2>Programme</h2>
+          <h2>Dates and times</h2>
           <p class="note" style="margin-top:0">
-            What the sprint is running each week. The advisor is given the current
-            week only, and is told plainly that it describes the cohort's schedule
-            and not any individual founder's company. Leave a week blank and it says
-            nothing about it at all — which is better than saying something stale.
+            Everything with a date on it: sessions, milestones, checkpoints, socials,
+            the trip. This is what the cohort sees under <strong>Programme</strong> in
+            their sidebar, as a timeline and as a calendar. Mentors and organizers see
+            the same view.
+          </p>
+          <p class="note" style="margin-top:0">
+            Times are the clock time in the room — the cohort's own wall clock, not
+            converted per person. Leave the time blank for something that takes a whole
+            day. The sprint week is worked out from the date, so moving the sprint start
+            moves everything with it.
+          </p>
+
+          <form id="event-form" class="row">
+            <input type="hidden" id="ev-id" />
+            <label style="flex:2 1 260px">
+              <span class="label-text">What is it</span>
+              <input id="ev-title" maxlength="200" required placeholder="Kiilto brief" />
+            </label>
+            <label>
+              <span class="label-text">Kind</span>
+              <select id="ev-kind">
+                <option value="session">Session</option>
+                <option value="milestone">Milestone</option>
+                <option value="checkpoint">Checkpoint</option>
+                <option value="social">Social</option>
+                <option value="trip">Trip</option>
+              </select>
+            </label>
+            <label>
+              <span class="label-text">Date</span>
+              <input id="ev-date" type="date" required />
+            </label>
+            <label>
+              <span class="label-text">Starts</span>
+              <input id="ev-start" type="time" />
+            </label>
+            <label>
+              <span class="label-text">Ends</span>
+              <input id="ev-end" type="time" />
+            </label>
+            <label style="flex:1 1 240px">
+              <span class="label-text">Where</span>
+              <input id="ev-location" maxlength="200" placeholder="Startup Sauna" />
+            </label>
+            <label style="flex:1 1 100%">
+              <span class="label-text">Anything else the cohort should know</span>
+              <textarea id="ev-description" rows="3" maxlength="2000" placeholder="Bring the one-pager. Kiilto's team joins for the second hour."></textarea>
+            </label>
+            <button type="submit" id="ev-submit">Add to the programme</button>
+            <button type="button" id="ev-cancel" class="secondary" hidden>Cancel</button>
+          </form>
+          <p class="message" id="ev-message" hidden></p>
+
+          <div id="event-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Week themes</h2>
+          <p class="note" style="margin-top:0">
+            The shape of a week rather than its diary: what the cohort is working on,
+            in prose. This is what Sprint Buddy is told about the current week, and it
+            is told plainly that it describes the cohort's schedule and not any
+            individual founder's company. Leave a week blank and it says nothing about
+            it at all, which is better than saying something stale.
           </p>
 
           <form id="programme-form" class="row">
@@ -2145,6 +2241,188 @@ import KeyboardFor from "../components/KeyboardFor";
         loadProgramme();
       });
 
+      // ---- Programme events ----------------------------------------------
+
+      const evId = document.getElementById("ev-id");
+      const evTitle = document.getElementById("ev-title");
+      const evKind = document.getElementById("ev-kind");
+      const evDate = document.getElementById("ev-date");
+      const evStart = document.getElementById("ev-start");
+      const evEnd = document.getElementById("ev-end");
+      const evLocation = document.getElementById("ev-location");
+      const evDescription = document.getElementById("ev-description");
+      const evSubmit = document.getElementById("ev-submit");
+      const evCancel = document.getElementById("ev-cancel");
+      const evMessage = document.getElementById("ev-message");
+      const eventList = document.getElementById("event-list");
+
+      const EVENT_KINDS = {
+        session: "Session", milestone: "Milestone", checkpoint: "Checkpoint",
+        social: "Social", trip: "Trip",
+      };
+
+      let programmeEvents = [];
+
+      function eventWhen(entry) {
+        if (!entry.startTime) return "All day";
+        return entry.endTime ? entry.startTime + "\u2013" + entry.endTime : entry.startTime;
+      }
+
+      function renderEvents() {
+        if (!programmeEvents.length) {
+          eventList.innerHTML = '<p class="note">Nothing scheduled yet.</p>';
+          return;
+        }
+
+        // Grouped by month so a fifteen-week programme is scannable rather than
+        // ninety undifferentiated rows.
+        const months = [];
+        for (const entry of programmeEvents) {
+          const key = entry.startsOn.slice(0, 7);
+          let group = months.find((m) => m.key === key);
+          if (!group) { group = { key: key, rows: [] }; months.push(group); }
+          group.rows.push(entry);
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        eventList.innerHTML = months.map(function (group) {
+          const label = new Date(group.key + "-01T00:00:00Z").toLocaleDateString("en-GB", {
+            month: "long", year: "numeric", timeZone: "UTC",
+          });
+          const rows = group.rows.map(function (entry) {
+            const past = entry.startsOn < today;
+            return '<div class="ev-row' + (past ? " is-past" : "") + '">' +
+              '<span class="ev-date">' + esc(entry.startsOn.slice(8) + "/" + entry.startsOn.slice(5, 7)) + '</span>' +
+              '<span class="ev-time">' + esc(eventWhen(entry)) + '</span>' +
+              '<span class="ev-title">' + esc(entry.title) +
+                (entry.location ? ' <span class="ev-loc">' + esc(entry.location) + '</span>' : "") +
+              '</span>' +
+              '<span class="ev-kind">' + esc(EVENT_KINDS[entry.kind] || entry.kind) + '</span>' +
+              '<span class="ev-actions">' +
+                '<button type="button" data-edit-event="' + esc(entry.id) + '">Edit</button>' +
+                '<button type="button" class="danger" data-delete-event="' + esc(entry.id) + '">Remove</button>' +
+              '</span>' +
+            '</div>';
+          }).join("");
+          return '<h3 class="ev-month">' + esc(label) + '</h3>' + rows;
+        }).join("");
+      }
+
+      async function loadEvents() {
+        let res;
+        try {
+          res = await fetch("/api/programme-events");
+        } catch {
+          return say(evMessage, "Could not reach the server.", true);
+        }
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        programmeEvents = data.events || [];
+        renderEvents();
+      }
+
+      function resetEventForm() {
+        evId.value = "";
+        evTitle.value = "";
+        evKind.value = "session";
+        evDate.value = "";
+        evStart.value = "";
+        evEnd.value = "";
+        evLocation.value = "";
+        evDescription.value = "";
+        evSubmit.textContent = "Add to the programme";
+        evCancel.hidden = true;
+      }
+
+      evCancel.addEventListener("click", function () {
+        resetEventForm();
+        say(evMessage, "", false);
+        evMessage.hidden = true;
+      });
+
+      eventList.addEventListener("click", async function (event) {
+        const editId = event.target.getAttribute && event.target.getAttribute("data-edit-event");
+        if (editId) {
+          const entry = programmeEvents.find(function (e) { return e.id === editId; });
+          if (!entry) return;
+          evId.value = entry.id;
+          evTitle.value = entry.title;
+          evKind.value = entry.kind;
+          evDate.value = entry.startsOn;
+          evStart.value = entry.startTime;
+          evEnd.value = entry.endTime;
+          evLocation.value = entry.location;
+          evDescription.value = entry.description;
+          evSubmit.textContent = "Save changes";
+          evCancel.hidden = false;
+          evTitle.focus();
+          evTitle.scrollIntoView({ block: "center" });
+          return;
+        }
+
+        const button = event.target;
+        const deleteId = button.getAttribute && button.getAttribute("data-delete-event");
+        if (!deleteId) return;
+
+        /* Two-step rather than confirm(), which is how the rest of this page
+           asks: a modal blocks the whole page to ask about one row. A
+           programme date is something twenty people may already have in their
+           own calendars, so it does get asked. */
+        if (button.dataset.armed !== "yes") {
+          button.dataset.armed = "yes";
+          button.textContent = "Sure?";
+          setTimeout(function () {
+            if (!button.isConnected) return;
+            button.dataset.armed = "";
+            button.textContent = "Remove";
+          }, 4000);
+          return;
+        }
+
+        let res;
+        try {
+          res = await fetch("/api/programme-events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "delete", id: deleteId }),
+          });
+        } catch {
+          return say(evMessage, "Could not reach the server.", true);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return say(evMessage, data.error || "Could not remove that.", true);
+        say(evMessage, "Removed.", false);
+        loadEvents();
+      });
+
+      document.getElementById("event-form").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        let res;
+        try {
+          res = await fetch("/api/programme-events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: evId.value || undefined,
+              title: evTitle.value,
+              kind: evKind.value,
+              startsOn: evDate.value,
+              startTime: evStart.value,
+              endTime: evEnd.value,
+              location: evLocation.value,
+              description: evDescription.value,
+            }),
+          });
+        } catch {
+          return say(evMessage, "Could not reach the server.", true);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return say(evMessage, data.error || "Could not save that.", true);
+        say(evMessage, evId.value ? "Saved." : "Added to the programme.", false);
+        resetEventForm();
+        loadEvents();
+      });
+
       // ---- Knowledge base ------------------------------------------------
 
       const kbId = document.getElementById("kb-id");
@@ -3092,6 +3370,7 @@ import KeyboardFor from "../components/KeyboardFor";
         if (myRole === "mentor") return;
         loadDeadlines();
         loadProgramme();
+        loadEvents();
         loadKnowledge();
         loadBroadcast();
       });

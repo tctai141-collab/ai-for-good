@@ -4,7 +4,7 @@ import { listProgrammeWeeks, recordAdminAction, upsertProgrammeWeek } from "../.
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import { cap } from "../../lib/limits";
-import { currentSprintWeek, TOTAL_WEEKS } from "../../lib/sprint-calendar";
+import { currentSprintWeek, sprintStartDate, TOTAL_WEEKS } from "../../lib/sprint-calendar";
 
 /**
  * The cohort's programme: readable by the cohort, editable by organizers.
@@ -42,6 +42,10 @@ export const GET: APIRoute = async ({ cookies }) => {
       totalWeeks: TOTAL_WEEKS,
       weeks: listProgrammeWeeks(),
       currentWeek: currentSprintWeek(),
+      /* So the timeline can place a dated event into its sprint week without a
+         second round trip, and can say "no start date set" rather than
+         silently filing everything under week 1. */
+      startDate: sprintStartDate(),
     });
   } catch (error) {
     reportError(error, { where: "programme.GET" });
