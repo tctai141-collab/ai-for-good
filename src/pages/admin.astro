@@ -159,10 +159,19 @@ import QuickActions from "../components/QuickActions";
         border: 1px solid var(--border);
         color: var(--muted);
       }
+      /* "not set up" broke over three lines the moment the column was narrow. */
+      .pill { white-space: nowrap; }
       .pill.active { color: var(--ok); border-color: rgba(111, 207, 151, 0.4); }
       .pill.pending { color: #e2b93b; border-color: rgba(226, 185, 59, 0.4); }
       .pill.organizer { color: var(--accent); border-color: rgba(94, 106, 210, 0.4); }
       .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+      /* A form row directly after the panel's explanatory copy had no gap at
+         all: .note ends with margin-bottom 0 and the first field label starts
+         immediately, so the uppercase label read as another line of the
+         paragraph. */
+      .note + .row,
+      .note + .field,
+      .note + label { margin-top: 16px; }
       label { display: block; }
       /* The date picker is not a <label>: it wraps a button, and a label
          wrapping a button swallows the click on some browsers. */
@@ -481,6 +490,27 @@ import QuickActions from "../components/QuickActions";
 
       @media (prefers-reduced-motion: reduce) {
         .tab-cursor { transition: opacity 160ms ease; }
+      }
+
+      .row-actions { text-align: right; }
+
+      /* ── Phone ──
+         The people table is five columns wide and the last one holds the only
+         buttons on the row. At 390px it ran off the side of the screen, so
+         "New link" and "Remove" were simply unreachable — you could read the
+         cohort on a phone and do nothing to it.
+
+         Each row becomes a block instead. No JS change: the rows are built in
+         script and this only re-lays what is already there. */
+      @media (max-width: 700px) {
+        .panel table, .panel tbody, .panel tr, .panel td { display: block; width: 100%; }
+        .panel thead { display: none; }
+        .panel tr { border-top: 1px solid var(--border); padding: 12px 0; }
+        .panel td { border: 0; padding: 3px 0; }
+        .row-actions { text-align: left; margin-top: 10px; }
+        /* Clear of the quick-actions trigger, which is fixed to this corner
+           and otherwise sits on top of the last row. */
+        main { padding-bottom: 96px; }
       }
 
       /* Long lists scroll inside their own box rather than growing the page. */
@@ -1332,7 +1362,7 @@ import QuickActions from "../components/QuickActions";
           status.append(statusPill);
 
           const actions = document.createElement("td");
-          actions.style.textAlign = "right";
+          actions.className = "row-actions";
 
           const reinvite = document.createElement("button");
           reinvite.className = "ghost";
@@ -2214,7 +2244,12 @@ import QuickActions from "../components/QuickActions";
         const data = await res.json();
         knowledgeEntries = data.entries || [];
         const size = data.size || {};
-        const pct = Math.round((size.chars / size.budgetChars) * 100);
+        /* approxTokens was already guarded and this was not, so a response
+           without the size block rendered "NaN% of the budget" to the
+           operator. */
+        const pct = size.budgetChars
+          ? Math.round(((size.chars || 0) / size.budgetChars) * 100)
+          : 0;
         kbSize.textContent =
           "Active pack: ~" + (size.approxTokens || 0) + " tokens, " + pct + "% of the budget." +
           (size.truncated ? " Over budget — the lowest-ordered entries are being dropped." : "");

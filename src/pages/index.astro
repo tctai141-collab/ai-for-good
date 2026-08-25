@@ -1,5 +1,5 @@
 ---
-import App from "../components/App";
+import Root from "../components/Root";
 ---
 
 <!doctype html>
@@ -18,7 +18,10 @@ import App from "../components/App";
     <link rel="stylesheet" href="/fonts/fonts.css" />
   </head>
   <body>
-    <App client:only="react" />
+    <!-- Root is App wrapped in an error boundary. One island rather than two
+         nested ones: nesting client:only islands gives each its own React
+         tree, so the boundary never sees the app throw. -->
+    <Root client:only="react" />
   </body>
 </html>
 

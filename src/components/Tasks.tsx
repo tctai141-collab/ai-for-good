@@ -286,7 +286,11 @@ export default function Tasks({ state }: { state: DeadlinesState }) {
     ? 0
     : live.length - visible.length + upcoming.length + done.length - (namesNext ? 1 : 0);
 
-  const { completed, total } = data.progress;
+  /* Defaulted, not destructured straight off the payload. A 200 whose body
+     happens to lack this key threw here, and with no boundary above it that
+     took out the entire app — reproduced, black screen, no message. The
+     boundary now catches it; this stops it happening at all. */
+  const { completed, total } = data.progress ?? { completed: 0, total: 0 };
 
   return (
     <section aria-label="Your deadlines" style={{ marginBottom: 16 }}>
