@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
@@ -22,6 +22,8 @@ import { advisorErrorMessage } from "../lib/advisor-errors";
 import TextShimmer from "./TextShimmer";
 import InteractiveHoverButton from "./InteractiveHoverButton";
 import GlassFilter from "./GlassFilter";
+import GlassToggle, { GLASS_TOGGLE_CSS } from "./GlassToggle";
+import OnScreenKeyboard, { applyKey, OSK_CSS, type KeyOutput } from "./OnScreenKeyboard";
 
 function formatMarkdown(text: string): string {
   let out = text
@@ -1171,6 +1173,31 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
   const [idlePrompt, setIdlePrompt] = useState(drawPrompt);
   const [composerFocused, setComposerFocused] = useState(false);
 
+  /*
+   * The on-screen keyboard.
+   *
+   * Off by default and remembered per browser: somebody who needs it needs it
+   * every time, and somebody who does not should never see it again after
+   * turning it off.
+   */
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const [keyboardOn, setKeyboardOn] = useState(false);
+  /* Where the on-screen keyboard will type next. Tracked rather than read off
+     the element, because a controlled textarea's DOM state lags a frame. */
+  const caretRef = useRef(0);
+
+  useEffect(() => {
+    try { setKeyboardOn(localStorage.getItem("sprintbuddy.osk") === "1"); } catch { /* private mode */ }
+  }, []);
+
+  const toggleKeyboard = useCallback((next: boolean) => {
+    setKeyboardOn(next);
+    try { localStorage.setItem("sprintbuddy.osk", next ? "1" : "0"); } catch { /* private mode */ }
+    /* Put the caret back in the field, so the first key has somewhere to go. */
+    if (next) requestAnimationFrame(() => composerRef.current?.focus());
+  }, []);
+
+
   const existingFromActive = active.id ? threads.find((t) => t.id === active.id) : null;
   /* createdThreadId keeps subsequent sends updating the same thread rather
      than spawning duplicates after each user reply. */
@@ -1310,6 +1337,40 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
     setBusy(false);
   };
 
+  const onKeyboardKey = useCallback((out: KeyOutput) => {
+    const el = composerRef.current;
+    if (!el) return;
+
+    /* Enter sends, exactly as it does on a real keyboard here — the composer's
+       own handler treats a bare Enter as send, and the on-screen key would be
+       a strange exception if it inserted a newline instead. */
+    if (out.type === "enter") { send(); return; }
+
+    /*
+     * Computed from React's own state, not from the DOM.
+     *
+     * The first version read el.value and el.selectionStart. For a controlled
+     * textarea those are last render's, so two presses inside one frame both
+     * start from the same string and the second throws away the first —
+     * "Hi there" came out as "err422Y". A functional update plus a caret we
+     * keep ourselves is correct however fast the keys arrive.
+     */
+    setInput((prev) => {
+      const start = Math.min(caretRef.current, prev.length);
+      const { value, caret } = applyKey(prev, start, start, out);
+      caretRef.current = caret;
+      return value;
+    });
+
+    /* After React has written the value, or the range is set against the old
+       one and the caret jumps to the end on the next keystroke. */
+    requestAnimationFrame(() => {
+      el.focus();
+      const at = Math.min(caretRef.current, el.value.length);
+      el.setSelectionRange(at, at);
+    });
+  }, [send]);
+
   return (
     <>
       {/* The context strip: the time-of-day line, plus the sharing control.
@@ -1382,12 +1443,24 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
           <div className="composer-box" style={{ display: "flex", gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             <div style={{ position: "relative", flex: 1, display: "flex" }}>
               <AnimatedPlaceholder text={idlePrompt} paused={composerFocused || input.length > 0} />
-              <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
+              <textarea ref={composerRef} value={input} onChange={(e) => { caretRef.current = e.target.selectionStart ?? e.target.value.length; setInput(e.target.value); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1}
                 onFocus={() => setComposerFocused(true)}
                 onBlur={() => setComposerFocused(false)}
+                /* A click, an arrow key or a selection moves the caret without
+                   going through the on-screen keyboard; this keeps the two in
+                   step so the next tap inserts where the founder is looking. */
+                onSelect={(e) => { caretRef.current = e.currentTarget.selectionStart ?? 0; }}
                 aria-label="Message Sprint Buddy"
                 style={{ flex: 1, background: "transparent", border: "none", padding: "10px 2px", color: C.ink, fontSize: 16, lineHeight: 1.5, resize: "none", fontFamily: "inherit", minHeight: 44, maxHeight: 160, outline: "none" }} />
             </div>
+            {/* The switch sits inside the composer, next to Send, because that
+                is where somebody notices they cannot type. */}
+            <GlassToggle
+              id="osk-toggle"
+              checked={keyboardOn}
+              onChange={toggleKeyboard}
+              label="On-screen keyboard"
+            />
             <button
               onClick={() => send()}
               disabled={busy || !input.trim()}
@@ -1398,6 +1471,12 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
               <span aria-hidden="true">↑</span>
             </button>
           </div>
+
+          {keyboardOn && (
+            <div style={{ marginTop: 12 }}>
+              <OnScreenKeyboard onKey={onKeyboardKey} />
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -3316,6 +3395,9 @@ const CSS = `
   .wg-consent-actions { flex-direction: column-reverse; }
   .wg-consent-actions button { width: 100%; }
 }
+
+${GLASS_TOGGLE_CSS}
+${OSK_CSS}
 
 /* ---- Buttons ---------------------------------------------------------------
    Two materials, and the tier is read off the material rather than off a
