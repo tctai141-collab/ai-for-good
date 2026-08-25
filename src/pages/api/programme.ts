@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../lib/limits";
 import { listProgrammeWeeks, recordAdminAction, upsertProgrammeWeek } from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
@@ -54,12 +55,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (!session) return json({ error: "Not signed in." }, 401);
     if (session.role !== "organizer") return json({ error: "Organizers only." }, 403);
 
-    let body: { week?: unknown; phase?: unknown; title?: unknown; milestones?: unknown; sessions?: unknown };
-    try {
-      body = (await request.json()) as typeof body;
-    } catch {
-      return json({ error: "Malformed request." }, 400);
-    }
+    const read = await readJsonBody<{ week?: unknown; phase?: unknown; title?: unknown; milestones?: unknown; sessions?: unknown }>(request);
+    if (!read.ok) return json({ error: read.error }, read.status);
+    const body = read.value;
 
     const week = Number(body.week);
     if (!Number.isInteger(week) || week < 1 || week > TOTAL_WEEKS) {

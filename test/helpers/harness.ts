@@ -74,9 +74,17 @@ function drain(stream: ReadableStream<Uint8Array>, sink: string[]): void {
 /**
  * Waits for the port the server actually bound.
  *
- * Picking a free port ourselves and passing it in has a race: between closing
- * the probe socket and the child binding, another test file can take the same
- * port. Letting the OS assign (PORT=0) and reading the port back removes it.
+ * The harness picks the port rather than letting the OS assign it, which it
+ * used to. That change is not cosmetic: setup links are now built only from a
+ * configured PUBLIC_BASE_URL and never from a request header, because a header
+ * is chosen by whoever sent the request and the link it lands in sets a
+ * founder's password. With PORT=0 the harness could not know its own origin
+ * before the child booted, so it cleared PUBLIC_BASE_URL and every test ran
+ * down a fallback that production does not have.
+ *
+ * Picking the port has a race — another test file can take it between the
+ * probe closing and the child binding — so `reservePort` retries rather than
+ * pretending the race does not exist.
  */
 async function waitForPort(output: string[], deadlineMs = 15_000): Promise<number> {
   const deadline = Date.now() + deadlineMs;
@@ -90,9 +98,43 @@ async function waitForPort(output: string[], deadlineMs = 15_000): Promise<numbe
   }
 }
 
+/** A port nothing is listening on right now. Racy by nature; callers retry. */
+async function reservePort(): Promise<number> {
+  const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+  const port = probe.port;
+  await probe.stop(true);
+  if (port == null) throw new Error("could not reserve a port");
+  return port;
+}
+
+/** Thrown when the reserved port was taken before the child could bind it. */
+class PortTaken extends Error {}
+
+/**
+ * Starts a server, retrying if the reserved port was stolen in between.
+ *
+ * Five attempts: the window is a few milliseconds wide and losing it five
+ * times running would mean something other than chance.
+ */
 export async function startServer(
   options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string } = {},
 ): Promise<Harness> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await startServerOnce(options);
+    } catch (error) {
+      if (!(error instanceof PortTaken)) throw error;
+      last = error;
+    }
+  }
+  throw last;
+}
+
+async function startServerOnce(
+  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string } = {},
+): Promise<Harness> {
+  const port = await reservePort();
   const emailEnabled = options.email !== false;
   if (!(await Bun.file(ENTRY).exists())) {
     throw new Error(`${ENTRY} not found — run \`bun run build\` before \`bun test\`.`);
@@ -167,18 +209,17 @@ export async function startServer(
       ...process.env,
       DB_PATH: dbPath,
       /*
-       * Explicitly cleared. The server is spawned on an OS-assigned port, so
-       * the harness cannot know its own origin in advance and cannot set a
-       * matching PUBLIC_BASE_URL — and inheriting the developer's would pin
-       * the CSRF check to the production hostname and reject every request.
-       * Unset, the middleware falls back to comparing Origin against Host,
-       * which is the correct same-origin test for this server. The configured
-       * path is covered directly in test/csrf.test.ts.
+       * Set, and set to this server's own origin.
+       *
+       * It used to be cleared, because with an OS-assigned port the harness
+       * could not know its origin in advance. That left every test running
+       * down a fallback production does not have: setup links are built only
+       * from a configured origin now, and a run without one refuses to issue
+       * one at all.
        */
-      PUBLIC_BASE_URL: "",
+      PUBLIC_BASE_URL: `http://127.0.0.1:${port}`,
       HOST: "127.0.0.1",
-      // 0 = let the OS assign; the real port is read back from the startup line.
-      PORT: "0",
+      PORT: String(port),
       NODE_ENV: "production",
       // Never a real key: no test may reach the live API.
       ANTHROPIC_API_KEY: "test-key-not-real",
@@ -204,7 +245,12 @@ export async function startServer(
   drain(proc.stdout as ReadableStream<Uint8Array>, output);
   drain(proc.stderr as ReadableStream<Uint8Array>, output);
 
-  const port = await waitForPort(output);
+  const bound = await waitForPort(output);
+  if (bound !== port) {
+    // Something else took it between the probe and the spawn.
+    proc.kill();
+    throw new PortTaken();
+  }
   const url = `http://127.0.0.1:${port}`;
 
   const deadline = Date.now() + 15_000;

@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../lib/limits";
 import {
   completedDeadlineIds,
   createDeadline,
@@ -159,11 +160,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     const session = getSessionUser(cookies);
     if (!session) return err("Not signed in.", 401);
 
-    try {
-      body = (await request.json()) as typeof body;
-    } catch {
-      return err("Malformed request.");
-    }
+    const read = await readJsonBody<typeof body>(request);
+    if (!read.ok) return err(read.error, read.status);
+    body = read.value;
 
     const organizerOnly = () =>
       session.role === "organizer" ? null : err("Organizers only.", 403);

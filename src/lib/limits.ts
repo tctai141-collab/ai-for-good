@@ -163,3 +163,75 @@ export function capHistory<T extends { role: string; content: string }>(messages
  * because one of them fumbled a password is a worse failure than the attack.
  */
 export const IP_FAILURE_LIMIT = 30;
+
+/**
+ * Reads a JSON body without trusting the size the caller claimed.
+ *
+ * The middleware rejects anything whose `Content-Length` is over the cap, and
+ * for a long time that was the whole defence. It is not one: a request that
+ * omits `Content-Length` and sends `Transfer-Encoding: chunked` arrives with a
+ * declared size of zero and sails straight through. Verified against the
+ * running server — a 5 MB body that is refused with 413 when it declares
+ * itself is parsed in full when it does not.
+ *
+ * That matters here because of what the cap is for. The note above it records
+ * a 20 MB write accepted in 112 ms onto a 1 GB disk, so roughly fifty of them
+ * fill it and take the database down with the app. A header anyone can omit is
+ * not what should stand between the cohort and that.
+ *
+ * So the bytes are counted as they arrive and the read is abandoned the moment
+ * it goes over, rather than after the whole thing is in memory.
+ */
+export type BodyResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; status: 400 | 413; error: string };
+
+export async function readJsonBody<T>(request: Request): Promise<BodyResult<T>> {
+  const body = request.body;
+
+  /* No stream to meter — Bun has already buffered it, and the middleware's
+     Content-Length check is what bounded it. */
+  if (!body) {
+    try {
+      return { ok: true, value: (await request.json()) as T };
+    } catch {
+      return { ok: false, status: 400, error: "Malformed request." };
+    }
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      size += value.byteLength;
+      if (size > MAX_BODY_BYTES) {
+        /* Stop reading rather than draining: unlike the middleware's path
+           this reply closes the connection, so there is no keep-alive stream
+           left to desynchronise. */
+        await reader.cancel().catch(() => {});
+        return { ok: false, status: 413, error: "That request is too large." };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { ok: false, status: 400, error: "Malformed request." };
+  }
+
+  const joined = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, at);
+    at += chunk.byteLength;
+  }
+
+  try {
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(joined)) as T };
+  } catch {
+    return { ok: false, status: 400, error: "Malformed request." };
+  }
+}

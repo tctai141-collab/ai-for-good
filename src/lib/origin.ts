@@ -39,23 +39,40 @@ function acceptableHosts(request: Request): Set<string> {
   };
 
   /*
-   * When the origin is configured, it is the only answer.
+   * The configured origin, when there is one, *and* the host the browser
+   * actually addressed.
    *
-   * This used to add the request's own `X-Forwarded-Host` and `Host` on top,
-   * which is the shape that makes a CSRF check circular: a caller who can set
-   * both the Origin and the forwarded host passes trivially. A browser cannot
-   * set either, so this was never exploitable from a victim's tab — but a
-   * check that only works because of a property it does not verify is not
-   * worth keeping in that form.
+   * A previous version made PUBLIC_BASE_URL the only answer, on the reasoning
+   * that also trusting the request's own headers makes the check circular:
+   * anyone who can set both Origin and X-Forwarded-Host passes trivially.
+   * That reasoning is true and it does not matter, which is the point worth
+   * writing down.
+   *
+   * CSRF is about a *browser* being made to send a request with credentials it
+   * already holds. A browser sets Origin and Host itself and script cannot
+   * change either, so the ordinary same-origin comparison is exactly the check
+   * that is wanted. Someone who can forge both headers is not a browser and is
+   * not carrying anybody's session cookie; there is nothing for them to ride.
+   *
+   * Excluding the request's own host, meanwhile, has a cost that already came
+   * due. This service answers on its custom domain and on its onrender.com
+   * address, and with only the configured host accepted, every state-changing
+   * request from the second one was rejected — chat, check-in, deadlines and
+   * sign-in — with a 403 that no log recorded. That is the regression the
+   * "second hostname" test exists for.
+   *
+   * It matters more now than it did: setup links are built only from
+   * PUBLIC_BASE_URL, so that variable has to be set on this deployment. If
+   * setting it also silently narrowed the CSRF check to one hostname, fixing
+   * the link would break the site.
    */
   const configured = process.env.PUBLIC_BASE_URL?.trim();
   if (configured) {
     try {
       add(new URL(configured).host);
-      return hosts;
     } catch {
-      // Misconfigured. Fall through to the request's own view, which still
-      // gives the ordinary same-origin comparison.
+      // Misconfigured; the request's own view below still gives the
+      // same-origin comparison.
     }
   }
 
