@@ -710,7 +710,12 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
   }, []);
 
   const panel = (
-    <div style={{ width: 304, height: "100%", display: "flex", flexDirection: "column", padding: "24px 20px" }}>
+    /* Bottom padding is its own value, and generous.
+       24px was clear of the edge by measurement and still read as touching it;
+       a control that looks like it is falling off the screen is one people
+       hesitate over whether or not it is. env() adds the phone's home-indicator
+       strip on top, where the browser's own furniture eats the last few pixels. */
+    <div style={{ width: 304, height: "100%", display: "flex", flexDirection: "column", padding: "24px 20px calc(40px + env(safe-area-inset-bottom, 0px))" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "0 4px 28px" }}>
           {/*
             One wordmark, cut from moving light.
@@ -1047,7 +1052,7 @@ function SidebarRail({
       ];
 
   return (
-    <div style={{ width, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0", gap: 4 }}>
+    <div style={{ width, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", padding: "18px 0 calc(34px + env(safe-area-inset-bottom, 0px))", gap: 4 }}>
       <button
         onClick={onExpand}
         aria-label="Expand sidebar"
@@ -1652,7 +1657,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
             18px was the whole clearance whether or not sixty keys were sitting
             there, and a keyboard that ends flush with the bottom edge reads as
             cut off even when every key is on screen. */}
-        <div style={{ maxWidth: 720, margin: "0 auto", padding: keyboardOn ? "12px 24px 26px" : "12px 24px 18px" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: keyboardOn ? "12px 24px calc(40px + env(safe-area-inset-bottom, 0px))" : "12px 24px calc(30px + env(safe-area-inset-bottom, 0px))" }}>
           <div className="composer-row">
           <div className="composer-box" style={{ display: "flex", flex: 1, minWidth: 0, gap: 10, alignItems: "flex-end", background: C.card, border: "1px solid var(--line-strong)", borderRadius: 12, padding: "10px 10px 10px 14px", transition: "border-color .15s ease" }}>
             {/* minWidth 0, or the textarea's intrinsic width becomes a floor

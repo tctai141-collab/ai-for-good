@@ -188,6 +188,24 @@ describe("nothing runs off the bottom of a short screen", () => {
   test("the keyboard gets more clearance than a bare composer", () => {
     // 18px was the whole gap whether or not sixty keys were sitting there, and
     // a keyboard flush with the bottom edge reads as cut off.
-    expect(app).toContain('keyboardOn ? "12px 24px 26px" : "12px 24px 18px"');
+    const composer = app.slice(app.indexOf("Bottom padding is its own value"), app.indexOf("{/* composer */}") + 900);
+    expect(app).toContain('keyboardOn ? "12px 24px calc(40px');
+    expect(app).toContain('"12px 24px calc(30px');
+    expect(composer.length).toBeGreaterThan(0);
+  });
+
+  test("the bottom edge is given real room, not just clearance on paper", () => {
+    /*
+     * 24 and 26px measured clear and still read as touching the edge. A
+     * control that looks like it is falling off the screen is one people
+     * hesitate over whether or not it actually is.
+     */
+    expect(app).toContain('padding: "24px 20px calc(40px + env(safe-area-inset-bottom, 0px))"');
+    expect(app).toContain('padding: "18px 0 calc(34px + env(safe-area-inset-bottom, 0px))"');
+  });
+
+  test("the phone's home-indicator strip is added on top", () => {
+    // Where the browser's own furniture eats the last few pixels.
+    expect((app.match(/env\(safe-area-inset-bottom, 0px\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 });
