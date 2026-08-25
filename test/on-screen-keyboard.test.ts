@@ -17,7 +17,6 @@ import { applyKey, type KeyOutput } from "../src/components/OnScreenKeyboard";
 
 const kb = readFileSync("src/components/OnScreenKeyboard.tsx", "utf-8");
 const composer = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
-const forHost = readFileSync("src/components/KeyboardFor.tsx", "utf-8");
 const toggle = readFileSync("src/components/GlassToggle.tsx", "utf-8");
 const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
 
@@ -129,38 +128,28 @@ describe("what was left out of the supplied component", () => {
   });
 });
 
-describe("the admin host", () => {
-  test("tells the page it typed", () => {
-    /*
-     * The broadcast panel recounts recipients and re-checks the wording hash
-     * on every keystroke. Setting .value fires nothing, so without this a
-     * message typed on the on-screen keyboard would never unlock Send.
-     */
-    expect(forHost).toContain('new Event("input", { bubbles: true })');
-  });
-
-  test("both hosts go through the same insertion rules", () => {
-    expect(forHost).toContain("applyKey(");
+describe("where it appears", () => {
+  test("the founder composer, and nowhere else", () => {
+    expect(composer).toContain("<OnScreenKeyboard onKey={onKeyboardKey} />");
+    // Insertion still goes through the shared rules rather than the DOM.
     expect(composer).toContain("applyKey(");
   });
 
-  test("it renders nothing when its target is not there", () => {
-    // Rather than a switch beside a field it cannot type into.
-    expect(forHost).toContain("if (!ready || !targetRef.current) return null;");
-  });
-});
-
-describe("where it appears", () => {
-  test("the founder composer and the admin broadcast box", () => {
-    expect(composer).toContain("<OnScreenKeyboard onKey={onKeyboardKey} />");
+  test("not on /admin", () => {
+    /*
+     * It was under the broadcast box, on the reasoning that /admin has no chat
+     * and that is the one place an organizer writes prose. In practice it made
+     * a dense operations page worse: a vintage keyboard under a form is
+     * furniture, and organizers are at a desk with a real one.
+     */
     const admin = readFileSync("src/pages/admin.astro", "utf-8");
-    expect(admin).toContain('<KeyboardFor client:load targetId="bc-body"');
+    expect(admin).not.toContain("KeyboardFor");
+    expect(admin).not.toContain("OnScreenKeyboard");
   });
 
   test("off by default, and remembered once chosen", () => {
     // Somebody who needs it needs it every time; somebody who does not should
     // not meet it twice.
     expect(composer).toContain('localStorage.getItem("sprintbuddy.osk") === "1"');
-    expect(forHost).toContain("localStorage.getItem(storageKey) === \"1\"");
   });
 });
