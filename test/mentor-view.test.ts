@@ -20,8 +20,17 @@ let h: Harness;
 let organizer: Session;
 
 const admin = readFileSync("src/pages/admin.astro", "utf-8");
-const script = admin
-  .slice(admin.indexOf("async function loadMentor()"), admin.indexOf("async function loadMentor()") + 7000);
+/* The whole function, bounded by what follows it rather than by a character
+   count. A fixed window silently stopped covering the tail the first time a
+   comment was added, and three assertions went from checking the code to
+   checking nothing. */
+const script = (() => {
+  const from = admin.indexOf("async function loadMentor()");
+  const to = admin.indexOf("      load().then(", from);
+  expect(from).toBeGreaterThan(-1);
+  expect(to).toBeGreaterThan(from);
+  return admin.slice(from, to);
+})();
 
 beforeAll(async () => {
   h = await startServer();
@@ -109,5 +118,44 @@ describe("where it sits", () => {
     expect(script).toContain("esc(r.name)");
     expect(script).toContain("esc(t.founderName");
     expect(script).toContain("esc(d.title)");
+  });
+});
+
+describe("an organizer has everything a mentor has", () => {
+  test("the mentor page is not gated to mentors", () => {
+    /*
+     * "This week" is a tab like any other and applyRole only hides tabs *for*
+     * a mentor, so an organizer sees it alongside the operating tabs. Worth a
+     * test because the obvious way to build this would have been to show the
+     * page only to the role it was named after, and an organizer would have
+     * lost the one screen that says who to talk to.
+     */
+    expect(admin).toContain('if (role !== "mentor") return;');
+    // Loaded for everybody; only the organizer-only panels are skipped.
+    expect(admin).toMatch(/load\(\)\.then\(\(\) => \{\s*loadMentor\(\);\s*loadShared\(\);\s*if \(myRole === "mentor"\) return;/);
+  });
+
+  test("the role is recorded on both paths", () => {
+    // It was only ever assigned on the mentor branch, so myRole stayed null
+    // for organizers and the loads below it worked by accident.
+    expect(admin).toContain('applyRole("organizer");');
+    expect(admin).toContain('applyRole("mentor");');
+  });
+});
+
+describe("the cohort gap claim needs a cohort", () => {
+  test("it will not call four gaps out of one profile", () => {
+    /*
+     * Six kinds of work, two gifts each: a single shared profile leaves four
+     * "gaps" by arithmetic. The page said the cohort was short of four things
+     * on the strength of one person — derived from the data and untrue.
+     */
+    expect(script).toContain("const enough = map.length >= 3 && map.length >= teams.length / 2;");
+    expect(script).toContain("Too few to say what the cohort is short of yet.");
+  });
+
+  test("a list of gaps reads as a list", () => {
+    // "Discernment or Galvanizing or Enablement or Tenacity" was the tell.
+    expect(script).toContain('labels.slice(0, -1).join(", ") + " or " + labels[labels.length - 1]');
   });
 });

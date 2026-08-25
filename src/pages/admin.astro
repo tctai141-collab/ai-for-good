@@ -1948,6 +1948,10 @@ import QuickActions from "../components/QuickActions";
             return;
           }
           const data = await res.json();
+          /* Set for organizers too. It was only ever assigned on the mentor
+             branch, so `myRole` stayed null here and the loads below worked by
+             accident — the next thing to read it would not have. */
+          applyRole("organizer");
           me = data.you;
           const pending = data.users.filter((u) => !u.activated).length;
           lede.textContent =
@@ -2995,15 +2999,39 @@ import QuickActions from "../components/QuickActions";
           const TYPES = [["wonder","Wonder"],["invention","Invention"],["discernment","Discernment"],
                          ["galvanizing","Galvanizing"],["enablement","Enablement"],["tenacity","Tenacity"]];
           const gaps = TYPES.filter(([id]) => !map.some((r) => (r.gifts || []).includes(id)));
+
+          /*
+           * The gap claim needs enough people to be a claim.
+           *
+           * Six kinds of work and two gifts each: one founder leaves four
+           * "gaps" by arithmetic, and the page said the cohort was short of
+           * four things on the strength of a single profile. That is the same
+           * failure as crying wolf on day one — technically derived from the
+           * data, and telling a mentor something that is not true.
+           *
+           * Half the cohort and at least three people. Below that the honest
+           * thing is to report the sample and say nothing about the cohort.
+           */
+          const enough = map.length >= 3 && map.length >= teams.length / 2;
+          const list = (labels) =>
+            labels.length <= 1
+              ? labels[0] || ""
+              : labels.slice(0, -1).join(", ") + " or " + labels[labels.length - 1];
+
           sections.push(
             '<section class="panel"><h2>What this cohort is short of</h2>' +
             "<p class=\"note\" style=\"margin-top:0\">" +
-            (gaps.length
-              ? "Nobody who has shared a working-style profile is gifted at <strong>" +
-                gaps.map(([, label]) => label).join(" or ") +
-                "</strong>. That is the work they will avoid without noticing."
-              : "Every kind of work has somebody gifted at it.") +
-            " Based on " + map.length + " of " + teams.length + " founders." +
+            (!enough
+              ? map.length + " of " + teams.length + " founders have shared a working-style profile" +
+                (map.length === 1 ? "" : " so far") +
+                ". Too few to say what the cohort is short of yet."
+              : gaps.length
+                ? "Nobody who has shared a working-style profile is gifted at <strong>" +
+                  list(gaps.map(([, label]) => label)) +
+                  "</strong>. That is the work they will avoid without noticing." +
+                  " Based on " + map.length + " of " + teams.length + " founders."
+                : "Every kind of work has somebody gifted at it." +
+                  " Based on " + map.length + " of " + teams.length + " founders.") +
             "</p></section>");
         }
 
