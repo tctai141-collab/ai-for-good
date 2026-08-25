@@ -774,6 +774,18 @@ import QuickActions from "../components/QuickActions";
     .wish-replybox button { width: 100%; }
   }
 
+  .import-box {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-top: 18px; padding: 14px 16px;
+    border: 1px dashed var(--border-strong); border-radius: 12px;
+  }
+  .import-box > div { flex: 1 1 320px; min-width: 0; }
+  #ev-import-result {
+    margin-top: 10px; padding: 12px 14px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
   /* ── Programme events ── */
   .ev-month {
     margin: 22px 0 8px;
@@ -1066,6 +1078,22 @@ import QuickActions from "../components/QuickActions";
             <button type="button" id="ev-cancel" class="secondary" hidden>Cancel</button>
           </form>
           <p class="message" id="ev-message" hidden></p>
+
+          <!-- Forty-one entries is too many to type and a shell is too much to
+               ask, so the F26 schedule loads from here. Shows what it would
+               change before it changes anything. -->
+          <div class="import-box">
+            <div>
+              <strong>The F26 schedule, weeks 1 to 7</strong>
+              <p class="note" style="margin:2px 0 0">
+                41 sessions, check-ups, the sauna and the cottage weekend, the report
+                submission and the board presentation. Speakers are named only where
+                the plan said confirmed.
+              </p>
+            </div>
+            <button type="button" id="ev-import">Load it</button>
+          </div>
+          <div id="ev-import-result" hidden></div>
 
           <div id="event-list"></div>
         </section>
@@ -2462,6 +2490,78 @@ import QuickActions from "../components/QuickActions";
           return '<h3 class="ev-month">' + esc(label) + '</h3>' + rows;
         }).join("");
       }
+
+      const evImport = document.getElementById("ev-import");
+      const evImportResult = document.getElementById("ev-import-result");
+
+      async function importF26(action) {
+        let res;
+        try {
+          res = await fetch("/api/programme-events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: action }),
+          });
+        } catch {
+          say(evMessage, "Could not reach the server.", true);
+          return null;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          say(evMessage, data.error || "That did not work.", true);
+          return null;
+        }
+        return data;
+      }
+
+      evImport.addEventListener("click", async function () {
+        /* Two steps. The first counts and writes nothing; the second writes.
+           Loading a schedule over whatever is already there is not something
+           to find out afterwards. */
+        if (evImport.dataset.armed !== "yes") {
+          const preview = await importF26("preview-f26");
+          if (!preview) return;
+
+          const lines = [];
+          lines.push("<p class=\"note\" style=\"margin:0 0 6px\"><strong>" + preview.total +
+            " entries</strong> \u00b7 " + preview.added + " new, " + preview.changed +
+            " would change, " + preview.same + " already the same.</p>");
+          if (preview.changed > 0) {
+            lines.push('<p class="note" style="margin:0 0 6px">' + preview.changed +
+              " of these " + (preview.changed === 1 ? "has" : "have") +
+              " been edited here since. Loading puts the original back.</p>");
+          }
+          lines.push('<p class="note" style="margin:0 0 4px"><strong>Read these first &mdash; ' +
+            "the source disagreed with itself about four dates:</strong></p><ul class=\"note\" style=\"margin:0;padding-left:18px\">" +
+            (preview.conflicts || []).map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") +
+            "</ul>");
+          evImportResult.innerHTML = lines.join("");
+          evImportResult.hidden = false;
+
+          evImport.dataset.armed = "yes";
+          evImport.textContent = "Load all " + preview.total;
+          /* Long, because the panel it just printed is four lines of dates
+             that disagree with each other and somebody is meant to read them.
+             The four-second arming used elsewhere is for a one-word Remove. */
+          setTimeout(function () {
+            if (!evImport.isConnected || evImport.dataset.armed !== "yes") return;
+            evImport.dataset.armed = "";
+            evImport.textContent = "Load it";
+          }, 120000);
+          return;
+        }
+
+        evImport.dataset.armed = "";
+        evImport.disabled = true;
+        evImport.textContent = "Loading\u2026";
+        const done = await importF26("import-f26");
+        evImport.disabled = false;
+        evImport.textContent = "Load it";
+        if (!done) return;
+        evImportResult.hidden = true;
+        say(evMessage, done.total + " entries loaded. They are on the cohort's Programme now.", false);
+        loadEvents();
+      });
 
       async function loadEvents() {
         let res;
