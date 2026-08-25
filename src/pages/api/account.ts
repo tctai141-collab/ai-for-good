@@ -99,7 +99,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (!session) return json({ error: "Not signed in." }, 401);
 
     const read = await readJsonBody<{ action?: string; confirm?: unknown }>(request);
-    if (!read.ok) return json({ error: read.error }, read.status);
+    if (!read.ok) return read.response;
     const body = read.value;
 
     if (body.action !== "delete") {

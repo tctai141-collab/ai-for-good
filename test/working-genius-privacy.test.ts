@@ -11,7 +11,20 @@ import {
 import { WORKING_GENIUS_ITEMS } from "../src/lib/workingGenius";
 
 /**
- * The working-style profile is the founder's and nobody else's.
+ * What is shared about a working-style profile, and what is not.
+ *
+ * This file used to be called "the profile is the founder's and nobody else's",
+ * and it enforced exactly that. The product decision changed: the profile is
+ * shared with the operating team, by consent taken on a card before any
+ * question is answered, and the server refuses to save a submission that does
+ * not carry that agreement.
+ *
+ * The line that did not move is the one that matters most here. What is
+ * offered on that card is the ranking and the bands. The individual answers
+ * and the free text are not, and there is no organizer route to them at all —
+ * not a redacted one, not an aggregate. Several tests below check the response
+ * *text* rather than a parsed field, because the property is that those things
+ * are nowhere in it.
  *
  * The card in the app says so before they start and again on the result, and
  * this file is what makes the sentence true. It is here because the promise was
@@ -54,7 +67,7 @@ beforeAll(async () => {
   const saved = await post(
     h,
     "/api/persistence",
-    { action: "save-working-genius", userEmail: alice.email, workingGeniusResponses: completeAnswers() },
+    { action: "save-working-genius", userEmail: alice.email, workingGeniusResponses: completeAnswers(), workingGeniusShareConsent: true },
     alice.cookie,
   );
   if (!saved.ok) throw new Error(`seeding Alice's profile failed: ${await saved.text()}`);
@@ -74,15 +87,52 @@ describe("reading a working-style profile", () => {
     expect(data.workingGenius!.user_email).toBe(alice.email);
   });
 
-  test("an organizer cannot read a founder's, and gets no fragment of it", async () => {
+  test("an organizer reads the profile a founder agreed to share, and nothing under it", async () => {
+    /*
+     * This test used to require a 403. The rule changed deliberately: a
+     * founder now agrees, before they answer anything, that the operating team
+     * may see their profile — and the server refuses to save a submission that
+     * does not carry that agreement.
+     *
+     * What did not change is the line underneath. The consent card offers the
+     * ranking and the bands and says in as many words that the individual
+     * answers and the free text are not shared. So the shape an organizer gets
+     * has no result_json in it — the column that holds all thirty answers and
+     * whatever the founder typed when they said "neither, or it depends",
+     * which is where people write about a cofounder they have not spoken to.
+     *
+     * Checked against the response text, not a parsed field: the point is that
+     * it is not anywhere in the body.
+     */
     const res = await read(organizer, alice.email);
-    expect(res.status).toBe(403);
-    // Not merely absent from a parsed field: the answers must not be anywhere
-    // in the response at all.
+    expect(res.status).toBe(200);
+
     const body = await res.text();
+    const parsed = JSON.parse(body) as {
+      workingGenius: { primary_type?: string; counts_json?: string; result_json?: string } | null;
+      takes: unknown[];
+      shared: boolean;
+    };
+
+    expect(parsed.shared).toBe(true);
+    expect(parsed.workingGenius?.primary_type).toBeTruthy();
+    expect(parsed.workingGenius?.counts_json).toBeTruthy();
+
+    expect(parsed.workingGenius).not.toHaveProperty("result_json");
     expect(body).not.toContain("result_json");
-    expect(body).not.toContain("genius");
-    expect(body).not.toContain("invention");
+    // Fields that only ever appear inside the scored result.
+    expect(body).not.toContain("abstentions");
+    expect(body).not.toContain("overrides");
+    // And no history: four profiles over a sprint is not a profile.
+    expect(parsed.takes).toEqual([]);
+  });
+
+  test("an organizer gets nothing for a founder who has not taken it", async () => {
+    const res = await read(organizer, bob.email);
+    expect(res.status).toBe(200);
+    const parsed = (await res.json()) as { workingGenius: unknown; shared: boolean };
+    expect(parsed.shared).toBe(false);
+    expect(parsed.workingGenius).toBeNull();
   });
 
   test("another founder cannot read it either", async () => {
@@ -101,7 +151,7 @@ describe("writing a working-style profile", () => {
     const res = await post(
       h,
       "/api/persistence",
-      { action: "save-working-genius", userEmail: alice.email, workingGeniusResponses: completeAnswers() },
+      { action: "save-working-genius", userEmail: alice.email, workingGeniusResponses: completeAnswers(), workingGeniusShareConsent: true },
       organizer.cookie,
     );
     expect(res.status).toBe(403);
@@ -111,7 +161,7 @@ describe("writing a working-style profile", () => {
     const res = await post(
       h,
       "/api/persistence",
-      { action: "save-working-genius", userEmail: alice.email, workingGeniusResponses: completeAnswers() },
+      { action: "save-working-genius", userEmail: alice.email, workingGeniusResponses: completeAnswers(), workingGeniusShareConsent: true },
       bob.cookie,
     );
     expect(res.status).toBe(403);

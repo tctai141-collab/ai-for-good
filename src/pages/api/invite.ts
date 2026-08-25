@@ -41,7 +41,7 @@ export const GET: APIRoute = async ({ request }) => {
 
 export const POST: APIRoute = async ({ cookies, request }) => {
   const read = await readJsonBody<{ token?: unknown; password?: unknown }>(request);
-  if (!read.ok) return Response.json({ error: read.error }, { status: read.status });
+  if (!read.ok) return read.response;
   const body = read.value;
 
   const token = typeof body.token === "string" ? body.token : null;

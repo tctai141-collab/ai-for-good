@@ -56,7 +56,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (session.role !== "organizer") return json({ error: "Organizers only." }, 403);
 
     const read = await readJsonBody<{ week?: unknown; phase?: unknown; title?: unknown; milestones?: unknown; sessions?: unknown }>(request);
-    if (!read.ok) return json({ error: read.error }, read.status);
+    if (!read.ok) return read.response;
     const body = read.value;
 
     const week = Number(body.week);

@@ -31,7 +31,7 @@ const INVALID_CREDENTIALS = "Invalid email or password.";
 
 export const POST: APIRoute = async ({ cookies, request }) => {
   const read = await readJsonBody<{ email?: unknown; password?: unknown }>(request);
-  if (!read.ok) return Response.json({ error: read.error }, { status: read.status });
+  if (!read.ok) return read.response;
   const body = read.value;
 
   const email = normalizeEmail(body.email);

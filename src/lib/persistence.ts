@@ -302,6 +302,17 @@ export async function saveWorkingGenius(
      object carries the click plus whatever the founder typed. */
   workingGeniusResponses: Record<string, string | { choice: string; text?: string }>,
 ): Promise<WorkingGeniusResult> {
-  const data = await post({ action: "save-working-genius", userEmail, workingGeniusResponses });
+  /*
+   * The consent travels with the answers rather than being sent when the card
+   * is accepted. One request, so there is no state where thirty answers exist
+   * without a record of what the founder agreed to — the server refuses the
+   * save outright if it is missing.
+   */
+  const data = await post({
+    action: "save-working-genius",
+    userEmail,
+    workingGeniusResponses,
+    workingGeniusShareConsent: true,
+  });
   return data.result as WorkingGeniusResult;
 }

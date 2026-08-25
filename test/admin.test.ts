@@ -45,6 +45,7 @@ beforeAll(async () => {
   }, founder.cookie);
   await post(h, "/api/persistence", {
     action: "save-working-genius", userEmail: founder.email,
+    workingGeniusShareConsent: true,
     workingGenius: { primary: "wonder", counts: { wonder: 3 }, completedAt: "2026-08-17" },
   }, founder.cookie);
   await post(h, "/api/persistence", { action: "increment-visits", userEmail: founder.email }, founder.cookie);
@@ -169,6 +170,7 @@ describe("user deletion (H-4)", () => {
     await post(h, "/api/persistence", { action: "increment-visits", userEmail: victim.email }, victim.cookie);
     await post(h, "/api/persistence", {
       action: "save-working-genius", userEmail: victim.email,
+    workingGeniusShareConsent: true,
       workingGenius: { primary: "tenacity", counts: { tenacity: 2 }, completedAt: "2026-08-17" },
     }, victim.cookie);
 

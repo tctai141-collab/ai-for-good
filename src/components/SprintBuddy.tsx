@@ -10,6 +10,7 @@ import {
   nextRetakeDate,
   retakeOpen,
   typeById,
+  WIDGET_ORDER,
   type WorkingGeniusAnswer,
   type WorkingGeniusBand,
   type WorkingGeniusId,
@@ -326,6 +327,15 @@ type Team = {
 };
 
 /** What /api/cohort returns: real founders, aggregate signals only. */
+type WorkingGeniusMapRow = {
+  email: string;
+  name: string;
+  gifts: WorkingGeniusId[];
+  competencies: WorkingGeniusId[];
+  drains: WorkingGeniusId[];
+  takenOn: string;
+};
+
 type CohortData = {
   week: number;
   totalWeeks: number;
@@ -334,6 +344,10 @@ type CohortData = {
   quiet: number;
   cohortSize: number;
   startDateConfigured: boolean;
+  /** Founders who agreed to be on the map. Bands only, never answers. */
+  map: WorkingGeniusMapRow[];
+  /** How many did not. Counted, never named — see the API for why. */
+  mapWithheld: number;
 };
 
 const WEEKS = Array.from({ length: 15 }, (_, i) => `W${i + 1}`);
@@ -1638,6 +1652,8 @@ function Reflections({
   const nextWindow = nextRetakeDate(lastTakenOn);
 
   const [wgStarted, setWgStarted] = useState(false);
+  /** The consent card is open. Nothing is answered or saved until it is not. */
+  const [wgConsenting, setWgConsenting] = useState(false);
   const [wgIndex, setWgIndex] = useState(0);
   const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusAnswer>>({});
   /* The open box for the current item, kept out of `wgAnswers` until it is
@@ -1719,7 +1735,17 @@ function Reflections({
     setWgIndex(wgIndex - 1);
   };
 
+  /*
+   * Both entry points open the consent card first.
+   *
+   * Nothing starts until the founder has read what happens to the result and
+   * said yes, including a retake: consent is to a particular arrangement, and
+   * the arrangement is the same every time it is asked.
+   */
+  const askWorkingGenius = () => setWgConsenting(true);
+
   const startWorkingGenius = () => {
+    setWgConsenting(false);
     setWgAnswers({});
     setWgText("");
     setWgHatch(false);
@@ -1838,7 +1864,7 @@ function Reflections({
             canRetake ? (
               <button
                 type="button"
-                onClick={startWorkingGenius}
+                onClick={askWorkingGenius}
                 style={{
                   background: "none", border: `1px solid ${C.accent}`, borderRadius: 999,
                   padding: "7px 15px", color: C.accent, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
@@ -1874,6 +1900,9 @@ function Reflections({
         )}
 
         {(!wgStarted || wgResult) && <WgPrivateNote />}
+        {wgConsenting && (
+          <WgConsent onAgree={startWorkingGenius} onCancel={() => setWgConsenting(false)} />
+        )}
 
         {wgResult ? (
           <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
@@ -2061,7 +2090,7 @@ function Reflections({
               <button
                 type="button"
                 className="btn-metal"
-                onClick={startWorkingGenius}
+                onClick={askWorkingGenius}
                 disabled={!userEmail}
                 style={{ padding: "12px 22px", fontSize: 14.5, fontWeight: 700 }}
               >
@@ -2400,9 +2429,70 @@ function WgPrivateNote() {
         fontStyle: "italic",
       }}
     >
-      This one is yours alone. Your answers and your result are not visible to
-      the operating team, to mentors, or to anyone else in the cohort.
+      The operating team can see your profile — the six ranked, and which two
+      you are gifted at. They cannot see your individual answers or anything you
+      wrote in your own words, and neither can anyone else in the cohort.
     </p>
+  );
+}
+
+/**
+ * The consent card, shown before anything is answered.
+ *
+ * The result used to be the founder's and nobody else's, and the note above
+ * this said so in those words. It is shared with the operating team now, which
+ * is a decision the founder has to make before they start rather than discover
+ * afterwards — so this is a gate, not a notice: there is no way into the
+ * questions except through the button that agrees.
+ *
+ * The copy says exactly what is shared and exactly what is not, because the
+ * distinction is the whole point. A ranking of six work types is a reasonable
+ * thing to hand a coach. The free text beside "neither, or it depends" is where
+ * people write about a cofounder they have not spoken to yet, and that is not
+ * shared, so it should not be left ambiguous.
+ */
+function WgConsent({ onAgree, onCancel }: { onAgree: () => void; onCancel: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    /* showModal, not open: it brings the focus trap, Escape and the backdrop
+       with it rather than leaving the page behind it reachable. */
+    if (!dialog.open) dialog.showModal();
+    /* Escape and the backdrop both close it, and closing without agreeing is
+       not agreeing. */
+    const onClose = () => onCancel();
+    dialog.addEventListener("close", onClose);
+    return () => dialog.removeEventListener("close", onClose);
+  }, [onCancel]);
+
+  return (
+    <dialog ref={ref} className="wg-consent" aria-labelledby="wg-consent-title">
+      <h2 id="wg-consent-title">Before you start</h2>
+      <p>
+        Your result is shared with the Sprint operating team. That means the two
+        kinds of work you are gifted at, the two that drain you, and where the
+        other two sit — the same picture you will see.
+      </p>
+      <p>
+        <strong>Not shared:</strong> your thirty individual answers, and anything
+        you type in the box when you answer &ldquo;neither, or it depends&rdquo;.
+        Nobody but you reads those.
+      </p>
+      <p className="wg-consent-why">
+        It is shared so the team can put people on the work that suits them and
+        see what the cohort is short of. Other founders do not see your profile.
+      </p>
+      <div className="wg-consent-actions">
+        <button type="button" className="btn-glass" onClick={onCancel}>
+          Not now
+        </button>
+        <button type="button" className="btn-metal" onClick={onAgree} autoFocus>
+          I agree, start
+        </button>
+      </div>
+    </dialog>
   );
 }
 
@@ -2700,10 +2790,132 @@ function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision
   );
 }
 
+/**
+ * Who in the cohort is gifted at what.
+ *
+ * Shown to the operating team, built only from founders who agreed to it on
+ * the card before they answered anything. What is here is the band per type
+ * and nothing under it: no individual answers, no free text. The server has no
+ * route to those for an organizer at all, which is the only way that promise
+ * stays true as this page grows.
+ *
+ * Founders who did not share are counted, not named. "Three have not shared"
+ * is a fact the team needs; a list turns a voluntary thing into a visible
+ * omission, which is not what was agreed to.
+ *
+ * The column totals are the point of reading it across rather than down. A
+ * cohort with nobody gifted at Tenacity finishes nothing, and that is invisible
+ * one profile at a time.
+ */
+function WorkingGeniusMap({ rows, withheld }: { rows: WorkingGeniusMapRow[]; withheld: number }) {
+  if (rows.length === 0) {
+    return (
+      <div style={{ marginTop: 34, paddingTop: 22, borderTop: `1px solid ${C.line}` }}>
+        <p style={kicker}>Team map</p>
+        <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.6, color: C.sub }}>
+          {withheld > 0
+            ? `Nobody has shared a working-style profile yet. ${withheld} ${withheld === 1 ? "founder has" : "founders have"} not taken it.`
+            : "Appears once founders take the working-style assessment and agree to share the result."}
+        </p>
+      </div>
+    );
+  }
+
+  const band = (row: WorkingGeniusMapRow, id: WorkingGeniusId) =>
+    row.gifts.includes(id) ? "gift" : row.competencies.includes(id) ? "competency" : "drain";
+
+  const giftedAt = (id: WorkingGeniusId) => rows.filter((r) => r.gifts.includes(id)).length;
+  const gaps = WIDGET_ORDER.filter((id) => giftedAt(id) === 0);
+
+  return (
+    <div style={{ marginTop: 34, paddingTop: 22, borderTop: `1px solid ${C.line}` }}>
+      <p style={kicker}>Team map</p>
+      <p style={{ margin: "10px 0 18px", fontSize: 14, lineHeight: 1.6, color: C.sub }}>
+        Where each founder&rsquo;s energy goes, from the working-style assessment.
+        Shared with their agreement; their individual answers are not.
+        {withheld > 0 && ` ${withheld} ${withheld === 1 ? "founder has" : "founders have"} not shared.`}
+      </p>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", minWidth: 460, fontSize: 13.5 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "0 14px 8px 0", fontWeight: 600, color: C.faint, fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase" }}>
+                Founder
+              </th>
+              {WIDGET_ORDER.map((id) => (
+                <th key={id} style={{ padding: "0 10px 8px", fontWeight: 600, color: C.faint, fontSize: 11, letterSpacing: 0.6 }}>
+                  {typeById(id).label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.email} style={{ borderTop: `1px solid ${C.line}` }}>
+                <td style={{ padding: "9px 14px 9px 0", color: C.ink, whiteSpace: "nowrap" }}>{row.name}</td>
+                {WIDGET_ORDER.map((id) => {
+                  const b = band(row, id);
+                  return (
+                    <td key={id} style={{ padding: "9px 10px", textAlign: "center" }}>
+                      {/* A filled dot, a hollow one, or nothing — so the three
+                          bands are told apart by shape and not by colour
+                          alone. The text beside it is what a screen reader
+                          reads; the dot is what an eye reads. */}
+                      <span aria-hidden="true" style={{ color: b === "drain" ? C.faint : C.ink, fontSize: 15 }}>
+                        {b === "gift" ? "\u25cf" : b === "competency" ? "\u25cb" : "\u00b7"}
+                      </span>
+                      <span className="sr-only">{`${typeById(id).label}: ${b === "gift" ? "gifted" : b === "competency" ? "competent" : "drains them"}`}</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: "flex", gap: 18, marginTop: 14, flexWrap: "wrap", fontSize: 13, color: C.sub }}>
+        <span>&#9679; gifted at</span>
+        <span>&#9675; can do it</span>
+        <span>&middot; drains them</span>
+      </div>
+
+      {gaps.length > 0 && (
+        <p style={{ margin: "16px 0 0", fontSize: 14, lineHeight: 1.6, color: C.ink }}>
+          Nobody who has shared is gifted at{" "}
+          <strong>{gaps.map((id) => typeById(id).label).join(" or ")}</strong>. That is the
+          work this cohort will avoid without noticing.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Coach: cohort heatmap ---------------- */
 function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort: CohortData | null; loading: boolean }) {
   const teams = cohort?.teams ?? [];
   const week = cohort?.week ?? 1;
+
+  /*
+   * Whoever needs attention first, then whoever has gone quiet, then the rest
+   * by name. The page is called "where to put your attention" and the answer
+   * was previously in whatever order the database returned.
+   *
+   * Ordering only. Colour follows the check-in and never the row's position,
+   * so a founder does not change colour when somebody else's week changes.
+   */
+  const sortedTeams = useMemo(() => {
+    const settled = Math.max(1, week - 1);
+    const rank = (t: Team) => {
+      const v = t.temp[settled - 1] ?? 1;
+      if (v >= 3) return 0;
+      if (v === 2) return 1;
+      if (v === 0) return 2;
+      return 3;
+    };
+    return [...teams].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  }, [teams, week]);
 
   if (loading) {
     return (
@@ -2743,23 +2955,88 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
         </div>
       )}
 
+      {/*
+        The grid.
+
+        Three things were wrong with the version this replaces, and the first
+        is the one that mattered.
+
+        A future week and a week nobody checked in looked identical — both an
+        empty cell — while the legend underneath said "an empty cell is an
+        absence, not a verdict". In week three of fifteen, twelve of every row
+        were future weeks being read as twelve absences. Weeks after the
+        current one are now drawn as ruled-off ground rather than as cells, so
+        absence starts meaning absence.
+
+        Second, the current week was not marked at all, so there was no anchor
+        for "this week" on a grid whose whole subject is this week.
+
+        Third, every cell was a button with a `title` and no accessible name,
+        which is fifteen unlabelled buttons per row to a screen reader. Each
+        cell now says who, which week and what.
+
+        Rows sort by whoever needs attention first. That is ordering, not
+        recolouring: a founder's colour follows their check-in and never their
+        position.
+      */}
       <div style={{ overflowX: "auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "11rem repeat(15, 24px)", alignItems: "center", gap: 3, minWidth: 540 }}>
           <div />
-          {WEEKS.map((w) => <div key={w} style={{ textAlign: "center", fontSize: 11, color: C.faint, padding: "6px 0", letterSpacing: 0.4 }}>{w}</div>)}
-          {teams.map((t) => (
+          {WEEKS.map((w, i) => (
+            <div
+              key={w}
+              style={{
+                textAlign: "center",
+                fontSize: 11,
+                color: i + 1 === week ? C.ink : C.faint,
+                fontWeight: i + 1 === week ? 700 : 400,
+                padding: "6px 0",
+                letterSpacing: 0.4,
+              }}
+            >
+              {w}
+            </div>
+          ))}
+          {sortedTeams.map((t) => (
             <React.Fragment key={t.id}>
               <button onClick={() => onPick(t)} className="row" style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, background: "none", border: "none", cursor: "pointer", color: C.ink, textAlign: "left", padding: "6px 8px", borderRadius: 6 }}>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 14, fontWeight: 600 }}>{t.name}</span>
               </button>
-              {t.temp.map((v, i) => (
-                <button
-                  key={i}
-                  onClick={() => onPick(t)}
-                  title={`${t.name} · ${WEEKS[i]} · ${tempLabel(v)}`}
-                  style={{ display: "block", height: 24, width: 24, borderRadius: 3, border: tempBorder(v), boxSizing: "border-box", cursor: "pointer", background: tempColor(v), opacity: tempA(), margin: 0 }}
-                />
-              ))}
+              {t.temp.map((v, i) => {
+                const future = i + 1 > week;
+                const current = i + 1 === week;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => onPick(t)}
+                    disabled={future}
+                    aria-label={
+                      future
+                        ? `${t.name}, ${WEEKS[i]}, not reached yet`
+                        : `${t.name}, ${WEEKS[i]}, ${tempLabel(v)}`
+                    }
+                    title={future ? `${t.name} · ${WEEKS[i]} · not reached yet` : `${t.name} · ${WEEKS[i]} · ${tempLabel(v)}`}
+                    style={{
+                      display: "block",
+                      height: 24,
+                      width: 24,
+                      borderRadius: 3,
+                      boxSizing: "border-box",
+                      margin: 0,
+                      /* A week that has not happened is not a cell. Drawn as a
+                         hairline on the baseline so the row still reads as a
+                         row, without offering a value it does not have. */
+                      border: future ? "none" : tempBorder(v),
+                      background: future
+                        ? `linear-gradient(to bottom, transparent 11px, ${C.line} 11px, ${C.line} 13px, transparent 13px)`
+                        : tempColor(v),
+                      cursor: future ? "default" : "pointer",
+                      outline: current && !future ? `1px solid ${C.line}` : "none",
+                      outlineOffset: 2,
+                    }}
+                  />
+                );
+              })}
             </React.Fragment>
           ))}
         </div>
@@ -2770,7 +3047,17 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
         <Legend c={TEMP_MONITOR} l="Monitor" />
         <Legend c={TEMP_NEEDS_ATTENTION} l="Needs attention" />
         <Legend c="transparent" l="No check-in" outlined />
-        <span style={{ color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 13.5 }}>An empty cell is an absence, not a verdict.</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+          <span
+            aria-hidden="true"
+            style={{
+              display: "block", width: 14, height: 14,
+              background: `linear-gradient(to bottom, transparent 6px, ${C.line} 6px, ${C.line} 8px, transparent 8px)`,
+            }}
+          />
+          Not reached yet
+        </span>
+        <span style={{ color: C.faint, fontStyle: "italic", fontSize: 13 }}>An empty cell is an absence, not a verdict.</span>
       </div>
 
       {/* Two different problems, so two different prompts. Silence is checked
@@ -2785,6 +3072,8 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
           </p>
         </div>
       )}
+
+      <WorkingGeniusMap rows={cohort?.map ?? []} withheld={cohort?.mapWithheld ?? 0} />
 
       {(cohort?.needAttention ?? 0) >= 2 && (
         <div style={{ marginTop: 16, background: C.yellow, color: "oklch(13% 0.008 250)", borderRadius: 8, padding: "16px 20px" }}>
@@ -2991,6 +3280,42 @@ const CSS = `
 .thread-delete:hover { color: var(--brand-red)!important; background: rgba(255,255,255,0.07)!important; }
 .thread-delete:focus-visible { opacity: 1; outline: 2px solid var(--brand-accent); outline-offset: 1px; }
 @media (hover: none) { .thread-delete { opacity: 0.5; } }
+
+/* ---- The working-style consent card ------------------------------------- */
+.wg-consent {
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 24px 26px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface-card);
+  color: var(--ink);
+  font-family: inherit;
+}
+.wg-consent::backdrop { background: rgba(0, 0, 0, 0.62); }
+.wg-consent h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: var(--track-heading);
+}
+.wg-consent p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-sub);
+}
+.wg-consent p strong { color: var(--ink); font-weight: 600; }
+.wg-consent-why { color: var(--ink-faint) !important; font-size: 13px !important; }
+.wg-consent-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+@media (max-width: 480px) {
+  .wg-consent-actions { flex-direction: column-reverse; }
+  .wg-consent-actions button { width: 100%; }
+}
 
 /* ---- Buttons ---------------------------------------------------------------
    Two materials, and the tier is read off the material rather than off a

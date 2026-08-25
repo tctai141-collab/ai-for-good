@@ -69,7 +69,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (error) return error;
 
     const read = await readJsonBody<{ action?: string; id?: unknown; persona?: unknown; topic?: unknown; body?: unknown; position?: unknown; source?: unknown; status?: unknown }>(request);
-    if (!read.ok) return json({ error: read.error }, read.status);
+    if (!read.ok) return read.response;
     const body = read.value;
 
     const persona = typeof body.persona === "string" && PERSONAS.has(body.persona) ? body.persona : PERSONA;

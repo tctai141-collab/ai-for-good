@@ -111,9 +111,18 @@ export const POST: APIRoute = async ({ cookies, request }) => {
        * an object carrying the click plus whatever the founder typed.
        */
       workingGeniusResponses?: Record<string, unknown>;
+      /**
+       * That the founder agreed organizers may see their profile.
+       *
+       * Required, not optional. The consent is the entire basis on which an
+       * organizer is allowed to read this, so a submission that does not carry
+       * it is refused rather than stored unshared — a half-consented row is a
+       * question nobody can answer later.
+       */
+      workingGeniusShareConsent?: unknown;
       checkinId?: string;
     }>(request);
-    if (!read.ok) return json({ error: read.error }, read.status);
+    if (!read.ok) return read.response;
     const body = read.value;
 
     switch (body.action) {
@@ -253,6 +262,11 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         if (!body.userEmail || !body.workingGeniusResponses) {
           return err("workingGeniusResponses + userEmail required");
         }
+        /* Strictly true. Anything else — absent, "false", a truthy string —
+           is not somebody agreeing to be shown to the operating team. */
+        if (body.workingGeniusShareConsent !== true) {
+          return err("This cannot be saved without agreeing to share the profile.", 400);
+        }
 
         // Only answers to items that exist, naming options those items offer.
         // Anything else is dropped rather than rejected: a half-recognised
@@ -329,6 +343,10 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           result_json: JSON.stringify(result),
           instrument_version: INSTRUMENT_VERSION,
           consistency: result.consistency,
+          /* Stamped server-side. A client-supplied timestamp is not evidence
+             of anything. */
+          shared_at: new Date().toISOString(),
+          shared_scope: "profile",
         });
         // Kept as well as overwritten: the point of four takes is the comparison.
         recordWorkingGeniusTake(session!.email, {
@@ -446,12 +464,41 @@ export const GET: APIRoute = async ({ cookies, request }) => {
        * across the cohort is exactly the use the founder is being promised
        * will not happen.
        */
-      case "working-genius":
-        if (!isOwner) return err("forbidden", 403);
+      case "working-genius": {
+        if (isOwner) {
+          return json({
+            workingGenius: getWorkingGenius(userEmail),
+            takes: listWorkingGeniusTakes(userEmail),
+          });
+        }
+        /*
+         * An organizer gets the profile of a founder who agreed to share it,
+         * and nothing else.
+         *
+         * result_json is not in this shape and must never be. It carries all
+         * thirty individual answers and whatever the founder typed in their own
+         * words when they said "neither, or it depends" — which is where people
+         * write about a cofounder they have not spoken to, or money. What was
+         * consented to is the profile: the ranking and the bands.
+         *
+         * Nor are the takes. A history of four profiles is a different thing
+         * from a profile, and the card does not offer it.
+         */
+        if (session!.role !== "organizer") return err("forbidden", 403);
+        const shared = getWorkingGenius(userEmail);
+        if (!shared || !shared.shared_at) return json({ workingGenius: null, takes: [], shared: false });
         return json({
-          workingGenius: getWorkingGenius(userEmail),
-          takes: listWorkingGeniusTakes(userEmail),
+          workingGenius: {
+            user_email: shared.user_email,
+            primary_type: shared.primary_type,
+            counts_json: shared.counts_json,
+            completed_at: shared.completed_at,
+          },
+          takes: [],
+          shared: true,
+          sharedAt: shared.shared_at,
         });
+      }
 
       // Derived here rather than in the browser because placing a date into a
       // sprint week needs SPRINT_START_DATE, which is server-side only.

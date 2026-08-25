@@ -125,7 +125,7 @@ describe("the lock is enforced on the server", () => {
     post(
       h,
       "/api/persistence",
-      { action: "save-working-genius", userEmail: founder.email, workingGeniusResponses: answers() },
+      { action: "save-working-genius", userEmail: founder.email, workingGeniusResponses: answers(), workingGeniusShareConsent: true },
       founder.cookie,
     );
 
@@ -181,13 +181,26 @@ describe("the lock is enforced on the server", () => {
     expect(JSON.parse(data.takes[0]!.result_json).ranking).toHaveLength(6);
   });
 
-  test("history is founder-only, like everything else about this", async () => {
+  test("history stays founder-only even though the profile is now shared", async () => {
+    /*
+     * The profile is shared with organizers, by consent taken before the
+     * questions. A history of four profiles is not the profile: it is a record
+     * of how somebody changed over a sprint, which is a different thing to
+     * hand over and is not what the card offers. So an organizer reading this
+     * gets the current bands and an empty takes list.
+     */
     const res = await get(
       h,
       `/api/persistence?resource=working-genius&user=${encodeURIComponent(founder.email)}`,
       organizer.cookie,
     );
-    expect(res.status).toBe(403);
-    expect(await res.text()).not.toContain("taken_on");
+    expect(res.status).toBe(200);
+
+    const body = await res.text();
+    expect(JSON.parse(body).takes).toEqual([]);
+    expect(body).not.toContain("taken_on");
+    // And never the answers themselves.
+    expect(body).not.toContain("result_json");
+    expect(body).not.toContain("abstentions");
   });
 });

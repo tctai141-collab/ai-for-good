@@ -161,7 +161,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (!session) return err("Not signed in.", 401);
 
     const read = await readJsonBody<typeof body>(request);
-    if (!read.ok) return err(read.error, read.status);
+    if (!read.ok) return read.response;
     body = read.value;
 
     const organizerOnly = () =>
