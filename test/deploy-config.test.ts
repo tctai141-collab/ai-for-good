@@ -51,6 +51,20 @@ describe("render.yaml", () => {
     }
   });
 
+  test("declares every variable the code reads that has no safe default", () => {
+    /*
+     * BACKUP_ENCRYPTION_KEY was read by src/lib/backup.ts and by the restore
+     * script, and declared nowhere. Undeclared means a blueprint rebuild never
+     * prompts for it, and unset the backup is written in the clear — the whole
+     * database, password hashes and thirty days of private conversations, into
+     * object storage whose credentials *are* declared two lines above.
+     */
+    const env = envVars();
+    for (const key of ["BACKUP_ENCRYPTION_KEY", "R2_BUCKET", "RESEND_API_KEY", "ANTHROPIC_API_KEY"]) {
+      expect(env.has(key)).toBe(true);
+    }
+  });
+
   test("real secrets stay out of the file", () => {
     // The rule this sits next to: a public address is declared, a credential
     // never is.
@@ -61,5 +75,24 @@ describe("render.yaml", () => {
     }
     expect(blueprint).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);
     expect(blueprint).not.toMatch(/re_[A-Za-z0-9_-]{16,}/);
+  });
+});
+
+describe("the database is configured for more than one writer", () => {
+  test("busy_timeout is set", async () => {
+    /*
+     * Measured: bun:sqlite defaults it to 0, so a write that overlaps another
+     * gets SQLITE_BUSY immediately rather than queueing — the request fails
+     * and the founder is told their check-in could not be saved. Writes in
+     * this app are short and they cluster: reminders go out at a fixed hour
+     * and sessions end at a fixed time, so twenty founders arrive in the same
+     * few minutes rather than spread across the day.
+     */
+    const { Database } = await import("bun:sqlite");
+    const { initSchema } = await import("../src/db/schema");
+    const db = new Database(":memory:");
+    initSchema(db);
+    const row = db.query("PRAGMA busy_timeout").get() as { timeout: number };
+    expect(row.timeout).toBeGreaterThanOrEqual(1000);
   });
 });
