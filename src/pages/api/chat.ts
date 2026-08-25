@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../lib/limits";
 import { buildCheckinPrompt } from "../../lib/prompts/checkin";
 import { getLastCheckin, upsertCheckin } from "../../db";
 import { advisorReply, advisorReplyStream } from "../../lib/ai";
@@ -149,7 +150,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     const session = getSessionUser(cookies);
     if (!session) return Response.json({ error: "not authenticated" }, { status: 401 });
 
-    const body = await request.json() as {
+    const read = await readJsonBody<{
       messages: { role: string; content: string }[];
       personality?: string;
       kind?: "checkin";
@@ -157,7 +158,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       founderName?: string;
       founderTz?: string;
       stream?: boolean;
-    };
+    }>(request);
+    if (!read.ok) return Response.json({ error: read.error }, { status: read.status });
+    const body = read.value;
 
     // You may only ever converse as yourself. Organizers used to be exempt,
     // which let a coach hold a conversation inside a founder's account.

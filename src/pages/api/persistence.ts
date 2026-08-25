@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../lib/limits";
 import {
   upsertThread,
   getThreads,
@@ -94,7 +95,7 @@ function helsinkiToday(): string {
 export const POST: APIRoute = async ({ cookies, request }) => {
   try {
     const session = getSessionUser(cookies);
-    const body = await request.json() as {
+    const read = await readJsonBody<{
       action: string;
       user?: string;
       userEmail?: string;
@@ -111,7 +112,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
        */
       workingGeniusResponses?: Record<string, unknown>;
       checkinId?: string;
-    };
+    }>(request);
+    if (!read.ok) return json({ error: read.error }, read.status);
+    const body = read.value;
 
     switch (body.action) {
       case "init-user": {

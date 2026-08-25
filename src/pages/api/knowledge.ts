@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../lib/limits";
 import { archiveKnowledgeBySource, deleteKnowledge, listKnowledge, recordAdminAction, setKnowledgeStatus, upsertKnowledge } from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
@@ -67,12 +68,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     const { session, error } = guard(cookies);
     if (error) return error;
 
-    let body: { action?: string; id?: unknown; persona?: unknown; topic?: unknown; body?: unknown; position?: unknown; source?: unknown; status?: unknown };
-    try {
-      body = (await request.json()) as typeof body;
-    } catch {
-      return json({ error: "Malformed request." }, 400);
-    }
+    const read = await readJsonBody<{ action?: string; id?: unknown; persona?: unknown; topic?: unknown; body?: unknown; position?: unknown; source?: unknown; status?: unknown }>(request);
+    if (!read.ok) return json({ error: read.error }, read.status);
+    const body = read.value;
 
     const persona = typeof body.persona === "string" && PERSONAS.has(body.persona) ? body.persona : PERSONA;
 

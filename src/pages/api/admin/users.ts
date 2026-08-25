@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../../lib/limits";
 import {
   countOrganizers,
   createInvite,
@@ -124,11 +125,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     role?: unknown;
     entries?: unknown;
   };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return Response.json({ error: "Malformed request." }, { status: 400 });
-  }
+  const read = await readJsonBody<typeof body>(request);
+  if (!read.ok) return Response.json({ error: read.error }, { status: read.status });
+  body = read.value;
 
   const email = normalizeEmail(body.email);
   const name = typeof body.name === "string" ? body.name.trim() : "";

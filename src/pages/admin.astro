@@ -1953,7 +1953,13 @@ import QuickActions from "../components/QuickActions";
         }
         programmeList.innerHTML = programmeWeeks
           .map((w) => {
-            const heading = [w.phase, w.title].filter(Boolean).join(" — ");
+            /* Escaped. These two are the only values on this page that were
+               interpolated into innerHTML raw, and they are organizer-written
+               free text — so one organizer could store script that ran in
+               another organizer's session, on the page that holds every
+               destructive control there is. esc() has existed three screens
+               up this file the whole time. */
+            const heading = esc([w.phase, w.title].filter(Boolean).join(" — "));
             const milestones = w.milestones.split("\n").filter((l) => l.trim()).length;
             const sessions = w.sessions.split("\n").filter((l) => l.trim()).length;
             return (

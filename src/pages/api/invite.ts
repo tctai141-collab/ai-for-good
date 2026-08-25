@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../lib/limits";
 import { getInvite, redeemInvite } from "../../db/index";
 import {
   endAllSessions,
@@ -39,12 +40,9 @@ export const GET: APIRoute = async ({ request }) => {
 };
 
 export const POST: APIRoute = async ({ cookies, request }) => {
-  let body: { token?: unknown; password?: unknown };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return Response.json({ error: "Malformed request." }, { status: 400 });
-  }
+  const read = await readJsonBody<{ token?: unknown; password?: unknown }>(request);
+  if (!read.ok) return Response.json({ error: read.error }, { status: read.status });
+  const body = read.value;
 
   const token = typeof body.token === "string" ? body.token : null;
   const password = typeof body.password === "string" ? body.password : "";

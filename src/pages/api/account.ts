@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { readJsonBody } from "../../lib/limits";
 import {
   countOrganizers,
   deleteUser,
@@ -97,12 +98,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     const session = getSessionUser(cookies);
     if (!session) return json({ error: "Not signed in." }, 401);
 
-    let body: { action?: string; confirm?: unknown };
-    try {
-      body = (await request.json()) as typeof body;
-    } catch {
-      return json({ error: "Malformed request." }, 400);
-    }
+    const read = await readJsonBody<{ action?: string; confirm?: unknown }>(request);
+    if (!read.ok) return json({ error: read.error }, read.status);
+    const body = read.value;
 
     if (body.action !== "delete") {
       return json({ error: `Unknown action: ${String(body.action)}` }, 400);
