@@ -145,8 +145,10 @@ describe("the checkbox", () => {
   test("the admin checkboxes use the same mark", () => {
     // Two checkbox designs in one app is the thing this avoids.
     expect(rule(admin, ".check::after")).toContain("M8.53547");
-    // Two in the markup, plus the one the review list builds per draft.
-    expect(admin.match(/<input type="checkbox" class="check"/g)?.length).toBe(3);
+    // Three broadcast audience boxes, plus the one the review list builds per
+    // draft. Counted rather than named so adding one has to be a deliberate
+    // edit here, which is what keeps the class from being forgotten.
+    expect(admin.match(/<input type="checkbox" class="check"/g)?.length).toBe(4);
     expect(admin).not.toMatch(/<input type="checkbox"(?! class="check")/);
   });
 

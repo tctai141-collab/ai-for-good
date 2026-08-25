@@ -399,12 +399,13 @@ export async function createOrganizer(
   email: string,
   name = "Test Organizer",
   password = "organizer-password-1",
+  role: "organizer" | "mentor" = "organizer",
 ): Promise<Session> {
   const db = h.db();
   try {
     db.run(
-      "INSERT INTO users (email, name, role, created_at) VALUES ($email, $name, 'organizer', datetime('now'))",
-      { $email: email, $name: name },
+      `INSERT INTO users (email, name, role, created_at) VALUES ($email, $name, $role, datetime('now'))`,
+      { $email: email, $name: name, $role: role },
     );
     // Invites are stored hashed, exactly as production stores them, so this
     // helper has to hash too. The raw token stays in memory here because that
@@ -423,6 +424,22 @@ export async function createOrganizer(
     db.close();
   }
   return activate(h, email, password);
+}
+
+/**
+ * A mentor: reads the cohort, runs none of it.
+ *
+ * Seeded the same way an organizer is, because there is no API that creates
+ * one without an organizer already existing, and half these tests are about
+ * what a mentor may do to an organizer's cohort.
+ */
+export function createMentor(
+  h: Harness,
+  email: string,
+  name = "Test Mentor",
+  password = "mentor-password-11",
+): Promise<Session> {
+  return createOrganizer(h, email, name, password, "mentor");
 }
 
 /** Creates a founder through the real admin API, then activates them. */

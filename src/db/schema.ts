@@ -91,7 +91,7 @@ export function initSchema(db: Database) {
     CREATE TABLE IF NOT EXISTS users (
       email TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('founder', 'organizer'))
+      role TEXT NOT NULL CHECK(role IN ('founder', 'organizer', 'mentor'))
     )
   `);
 
@@ -584,6 +584,33 @@ export function initSchema(db: Database) {
         PRIMARY KEY (deadline_id, user_email, kind)
       )
     `, ["deadline_id", "user_email", "kind", "sent_at"]);
+  });
+
+  /*
+   * A third role: mentor.
+   *
+   * Mentors read the cohort and the conversations founders hand over. They do
+   * not run it — no adding people, no deadlines, no programme, no knowledge,
+   * no broadcast. Until now the only way to give somebody that view was an
+   * organizer account, which also lets them delete a founder and everything
+   * that founder has written. That is a lot of authority to hand to a guest
+   * who wants to read a dashboard once a week.
+   *
+   * The CHECK has to be rebuilt because SQLite cannot alter one in place, and
+   * every existing row is already 'founder' or 'organizer', so nothing needs
+   * normalising first — unlike migration 1, where the new constraint was
+   * stricter than the data.
+   */
+  migrate(db, 5, () => {
+    rebuild(db, "users", `
+      CREATE TABLE users (
+        email TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('founder', 'organizer', 'mentor')),
+        password_hash TEXT,
+        created_at TEXT
+      )
+    `, ["email", "name", "role", "password_hash", "created_at"]);
   });
 
   db.run(`

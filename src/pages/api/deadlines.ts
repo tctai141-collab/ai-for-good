@@ -14,7 +14,7 @@ import {
   setDeadlineDone,
   updateDeadline,
 } from "../../db/index";
-import { getSessionUser } from "../../lib/auth";
+import { canReadCohort, getSessionUser } from "../../lib/auth";
 import { groupFor, progressFor } from "../../lib/deadlines";
 import { reportError } from "../../lib/errors";
 import { cap } from "../../lib/limits";
@@ -90,9 +90,10 @@ export const GET: APIRoute = async ({ cookies, request }) => {
 
     const url = new URL(request.url);
 
-    // The completion matrix. Organizers only, and task status only.
+    // The completion matrix. Staff only, and task status only — who is behind
+    // on what, never anything they wrote.
     if (url.searchParams.get("view") === "status") {
-      if (session.role !== "organizer") return err("Organizers only.", 403);
+      if (!canReadCohort(session)) return err("Organizers and mentors only.", 403);
 
       const founders = listFounders();
       const counts = deadlineCompletionCounts();

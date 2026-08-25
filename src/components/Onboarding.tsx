@@ -82,10 +82,14 @@ export default function Onboarding({
   onClose,
 }: {
   email: string;
-  role: "founder" | "organizer";
+  role: "founder" | "organizer" | "mentor";
   onClose: () => void;
 }) {
-  const steps = role === "organizer" ? ORGANIZER : FOUNDER;
+  /* A mentor is shown the operating-team walkthrough. It describes what the
+     dashboard is and what is private, which is exactly what they need; the
+     parts about adding people simply do not apply to them, and writing a
+     third set of copy for one person is worse than a paragraph they skip. */
+  const steps = role === "founder" ? FOUNDER : ORGANIZER;
   const [step, setStep] = useState(0);
   const ref = useRef<HTMLDialogElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);

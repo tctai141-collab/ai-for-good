@@ -131,7 +131,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
   const email = normalizeEmail(body.email);
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  const role: Role = body.role === "organizer" ? "organizer" : "founder";
+  const role: Role = body.role === "organizer" ? "organizer" : body.role === "mentor" ? "mentor" : "founder";
 
   // One try/catch around every branch. An unhandled throw here used to return
   // a 500 with an *empty body*, so the admin page's `await res.json()` rejected
@@ -171,7 +171,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         (entry) => {
           const entryEmail = normalizeEmail(entry.email);
           const entryName = typeof entry.name === "string" ? entry.name.trim() : "";
-          const entryRole: Role = entry.role === "organizer" ? "organizer" : "founder";
+          const entryRole: Role = entry.role === "organizer" ? "organizer" : entry.role === "mentor" ? "mentor" : "founder";
           if (!isValidEmail(entryEmail)) return { email: entryEmail, error: "Invalid email address." };
           if (!entryName) return { email: entryEmail, error: "Missing name." };
           if (!createUser(entryEmail, entryName, entryRole)) {
