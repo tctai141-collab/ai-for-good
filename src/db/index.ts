@@ -447,7 +447,7 @@ export function incrementVisits(userEmail: string): number {
   return row.count;
 }
 
-export function ensureUser(email: string, name: string, role: "founder" | "organizer") {
+export function ensureUser(email: string, name: string, role: Role) {
   const db = getDb();
   db.run(
     `INSERT OR IGNORE INTO users (email, name, role) VALUES ($email, $name, $role)`,
@@ -462,7 +462,15 @@ export function ensureUser(email: string, name: string, role: "founder" | "organ
 // accounts. `password_hash` is never returned to any caller.
 // ---------------------------------------------------------------------------
 
-export type Role = "founder" | "organizer";
+/**
+ * Mentors read; organizers run the cohort.
+ *
+ * A mentor sees the dashboard, the team map and the conversations founders
+ * have handed over, and can change none of it. The distinction exists because
+ * the alternative was giving a guest an organizer account, which also lets
+ * them delete a founder and everything that founder has written.
+ */
+export type Role = "founder" | "organizer" | "mentor";
 
 export type UserRow = {
   email: string;

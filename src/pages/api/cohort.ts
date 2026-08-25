@@ -4,7 +4,7 @@ import {
   getOpenDecisionCounts,
   listFounders,
 } from "../../db/index";
-import { getSessionUser } from "../../lib/auth";
+import { canReadCohort, getSessionUser } from "../../lib/auth";
 import { TOTAL_WEEKS, currentSprintWeek, isSprintDated, weekForDate } from "../../lib/sprint-calendar";
 import { listSharedWorkingGenius } from "../../db/index";
 import { WIDGET_ORDER } from "../../lib/workingGenius";
@@ -134,8 +134,10 @@ function workingGeniusMap() {
 export const GET: APIRoute = async ({ cookies }) => {
   const session = getSessionUser(cookies);
   if (!session) return Response.json({ error: "Not signed in." }, { status: 401 });
-  if (session.role !== "organizer") {
-    return Response.json({ error: "Organizers only." }, { status: 403 });
+  /* Mentors read this; it is the dashboard they are here for. Nothing on it
+     can be changed from anywhere. */
+  if (!canReadCohort(session)) {
+    return Response.json({ error: "Organizers and mentors only." }, { status: 403 });
   }
 
   const founders = listFounders();

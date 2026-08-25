@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import type { Role } from "../db/index";
 import { IP_FAILURE_LIMIT } from "./limits";
 import {
   createSessionRow,
@@ -22,8 +23,19 @@ import {
 export type SessionUser = {
   email: string;
   name: string;
-  role: "founder" | "organizer";
+  role: Role;
 };
+
+/**
+ * May this session read the cohort?
+ *
+ * Organizers and mentors, which is the only place the two are alike. Every
+ * other guard in the app stays `role !== "organizer"` on purpose: a mentor
+ * reads, and changes nothing.
+ */
+export function canReadCohort(session: SessionUser | null): boolean {
+  return session?.role === "organizer" || session?.role === "mentor";
+}
 
 export const SESSION_COOKIE = "sb_session";
 

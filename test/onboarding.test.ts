@@ -18,7 +18,12 @@ describe("who sees what", () => {
   test("founders and the operating team get different walkthroughs", () => {
     expect(onb).toContain("const FOUNDER: Step[]");
     expect(onb).toContain("const ORGANIZER: Step[]");
-    expect(code).toContain('role === "organizer" ? ORGANIZER : FOUNDER');
+    /* Founder or not, rather than organizer or not: a mentor is shown the
+       operating-team walkthrough, which describes what the dashboard is and
+       what stays private — the parts about adding people simply do not apply
+       to them, and a third set of copy for one person is worse than a
+       paragraph they skip. */
+    expect(code).toContain('role === "founder" ? FOUNDER : ORGANIZER');
   });
 
   test("it is raised on signing in, not on every visit", () => {

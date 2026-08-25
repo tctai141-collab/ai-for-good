@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { readJsonBody } from "../../../lib/limits";
 import { listSharedThreads, markSharedThreadSeen, recordAdminAction } from "../../../db/index";
-import { getSessionUser } from "../../../lib/auth";
+import { canReadCohort, getSessionUser } from "../../../lib/auth";
 import { reportError } from "../../../lib/errors";
 
 /**
@@ -31,7 +31,9 @@ function json(data: unknown, status = 200) {
 function guard(cookies: Parameters<APIRoute>[0]["cookies"]) {
   const session = getSessionUser(cookies);
   if (!session) return { error: json({ error: "Not signed in." }, 401) };
-  if (session.role !== "organizer") return { error: json({ error: "Organizers only." }, 403) };
+  /* A conversation is here because a founder chose to hand it over, and a
+     mentor is who they mostly meant. Reads stay audited either way. */
+  if (!canReadCohort(session)) return { error: json({ error: "Organizers and mentors only." }, 403) };
   return { session };
 }
 

@@ -9,7 +9,7 @@ import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
 import QuickActions from "./QuickActions";
 
-type Role = "founder" | "organizer";
+type Role = "founder" | "organizer" | "mentor";
 
 /**
  * Who the server says you are. The browser no longer holds any account list or
@@ -302,7 +302,10 @@ export default function App() {
     <Onboarding email={user.email} role={user.role} onClose={() => setOnboarding(false)} />
   ) : null;
 
-  if (user.role === "organizer") {
+  /* Mentors get the same read-only cohort view as organizers. Without this
+     they would land in a founder's chat and be handed a personal coaching
+     account, which is not what they came for. */
+  if (user.role === "organizer" || user.role === "mentor") {
     return (
       <>
         {walkthrough}

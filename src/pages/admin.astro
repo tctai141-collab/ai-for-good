@@ -164,6 +164,9 @@ import QuickActions from "../components/QuickActions";
       .pill.active { color: var(--ok); border-color: rgba(111, 207, 151, 0.4); }
       .pill.pending { color: #e2b93b; border-color: rgba(226, 185, 59, 0.4); }
       .pill.organizer { color: var(--accent); border-color: rgba(94, 106, 210, 0.4); }
+      /* Distinct from organizer, because the difference is the whole point:
+         one of these can delete a founder and the other cannot. */
+      .pill.mentor { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
       .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
       /* A form row directly after the panel's explanatory copy had no gap at
          all: .note ends with margin-bottom 0 and the first field label starts
@@ -820,6 +823,10 @@ import QuickActions from "../components/QuickActions";
               <select id="add-role">
                 <option value="founder">Founder</option>
                 <option value="organizer">Organizer</option>
+                <!-- Reads the cohort and the shared conversations; runs
+                     nothing. For a mentor who wants the dashboard without the
+                     authority to delete a founder. -->
+                <option value="mentor">Mentor (read only)</option>
               </select>
             </label>
             <button type="submit">Add and create link</button>
@@ -1023,6 +1030,10 @@ import QuickActions from "../components/QuickActions";
               <label class="inline">
                 <input type="checkbox" class="check" id="bc-role-organizer" />
                 <span>All organizers</span>
+              </label>
+              <label class="inline">
+                <input type="checkbox" class="check" id="bc-role-mentor" />
+                <span>All mentors</span>
               </label>
             </p>
             <details>
@@ -1388,7 +1399,7 @@ import QuickActions from "../components/QuickActions";
 
           const role = document.createElement("td");
           const rolePill = document.createElement("span");
-          rolePill.className = "pill" + (user.role === "organizer" ? " organizer" : "");
+          rolePill.className = "pill" + (user.role === "organizer" ? " organizer" : user.role === "mentor" ? " mentor" : "");
           rolePill.textContent = user.role;
           role.append(rolePill);
 
@@ -1876,8 +1887,54 @@ import QuickActions from "../components/QuickActions";
         loadDeadlines();
       });
 
+      /*
+       * A mentor gets this page too, with almost none of it.
+       *
+       * The gate used to be "can you read /api/admin/users", which is an
+       * organizer-only endpoint — so a mentor was shown "Organizers only" on
+       * the page built for them. Identity comes from the session now, and the
+       * account list is only fetched by whoever is allowed to see it.
+       */
+      let myRole = null;
+
+      function applyRole(role) {
+        myRole = role;
+        if (role !== "mentor") return;
+        /* Hide what a mentor cannot do rather than let them press it and read
+           a 403. The server refuses either way; this is so the page is not
+           mostly things that do not work. */
+        const allowed = new Set(["mentor", "shared"]);
+        for (const tab of document.querySelectorAll(".tab")) {
+          if (!allowed.has(tab.dataset.tab)) tab.hidden = true;
+        }
+        const quick = document.getElementById("qa");
+        if (quick) quick.remove();
+        if (!allowed.has(localStorage.getItem(TAB_KEY) || "")) showTab("mentor");
+      }
+
       async function load() {
         try {
+          const who = await fetch("/api/session").then((r) => r.json()).catch(() => null);
+          const user = who && who.user;
+          if (!user) {
+            lede.hidden = true;
+            denied.hidden = false;
+            location.href = "/";
+            return;
+          }
+          if (user.role === "mentor") {
+            me = user.email;
+            lede.textContent = "Reading only. Nothing here can be changed from this page.";
+            app.hidden = false;
+            applyRole("mentor");
+            return;
+          }
+          if (user.role !== "organizer") {
+            lede.hidden = true;
+            denied.hidden = false;
+            return;
+          }
+
           const res = await fetch("/api/admin/users");
           if (res.status === 401) {
             lede.hidden = true;
@@ -2626,6 +2683,7 @@ import QuickActions from "../components/QuickActions";
       const bcPeople = document.getElementById("bc-people");
       const bcRoleFounder = document.getElementById("bc-role-founder");
       const bcRoleOrganizer = document.getElementById("bc-role-organizer");
+      const bcRoleMentor = document.getElementById("bc-role-mentor");
       const bcCount = document.getElementById("bc-count");
       const bcConfirm = document.getElementById("bc-confirm");
       const bcGo = document.getElementById("bc-go");
@@ -2647,6 +2705,7 @@ import QuickActions from "../components/QuickActions";
         const roles = [];
         if (bcRoleFounder.checked) roles.push("founder");
         if (bcRoleOrganizer.checked) roles.push("organizer");
+        if (bcRoleMentor.checked) roles.push("mentor");
         // Mirrors the server's union-and-deduplicate, so the number shown here
         // is the number the server will demand as confirmation.
         const set = new Set();
@@ -2735,7 +2794,7 @@ import QuickActions from "../components/QuickActions";
       [bcSubject, bcBody].forEach(function (field) {
         field.addEventListener("input", bcRefresh);
       });
-      [bcRoleFounder, bcRoleOrganizer].forEach(function (box) {
+      [bcRoleFounder, bcRoleOrganizer, bcRoleMentor].forEach(function (box) {
         box.addEventListener("change", bcRefresh);
       });
       bcConfirm.addEventListener("input", bcRefresh);
@@ -2982,13 +3041,20 @@ import QuickActions from "../components/QuickActions";
         box.innerHTML = sections.join("");
       }
 
-      load();
-      loadMentor();
-      loadDeadlines();
-      loadProgramme();
-      loadKnowledge();
-      loadShared();
-      loadBroadcast();
+      /*
+       * A mentor loads two of these. The rest read organizer-only endpoints
+       * and would fill the console with 403s that mean nothing is wrong —
+       * noise that hides a real failure when there is one.
+       */
+      load().then(() => {
+        loadMentor();
+        loadShared();
+        if (myRole === "mentor") return;
+        loadDeadlines();
+        loadProgramme();
+        loadKnowledge();
+        loadBroadcast();
+      });
     </script>
   </body>
 </html>
