@@ -22,10 +22,22 @@ services:
       # Set in the Render dashboard, never committed.
       - key: ANTHROPIC_API_KEY
         sync: false
-      # The public URL, e.g. https://sprint-buddy.onrender.com — setup links
-      # are built from this. Fill it in after the first deploy assigns a URL.
+      # The address the cohort actually uses. Declared here rather than left to
+      # the dashboard, which is what `sync: false` meant and is the wrong
+      # setting for it: this is a public URL, not a secret, and the only thing
+      # dashboard-only bought was the chance of it being unset.
+      #
+      # It matters more than it reads. Invite and password-reset links are
+      # built from this and from nothing else — they used to fall back to the
+      # request's own Host header, which meant the address in an email setting
+      # a founder's password was chosen by whoever sent the request. With no
+      # value here the app now refuses to issue a link at all, which is the
+      # safe failure but still a failure.
+      #
+      # Safe to change: the CSRF check accepts this host *and* whichever host
+      # the browser addressed, so the onrender.com address keeps working.
       - key: PUBLIC_BASE_URL
-        sync: false
+        value: https://aaltofoundersprint.com
       - key: NODE_ENV
         value: production
       - key: DB_PATH
