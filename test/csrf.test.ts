@@ -170,22 +170,51 @@ describe("the origin check, with PUBLIC_BASE_URL configured", () => {
     expect(crossSiteRequest(make({}))).toBe(true);
   });
 
-  test("a spoofed X-Forwarded-Host cannot widen the allow-set", async () => {
+  test("a page on another origin is rejected however it addresses this one", async () => {
     /*
-     * The regression this guards. The host set used to include the request's
-     * own forwarded host, so a caller who set both Origin and
-     * X-Forwarded-Host to the same value authorised themselves.
+     * This replaces two tests that asserted the opposite of what ships now,
+     * and the reasoning is worth writing down because it looks like a
+     * loosening.
+     *
+     * They required that a caller setting both Origin and X-Forwarded-Host to
+     * the same value be refused — that trusting the request's own host makes
+     * the check circular. True, and it does not matter. CSRF is a browser
+     * being made to send a request with credentials it already holds, and a
+     * browser sets Origin and Host itself: script cannot change either, and
+     * X-Forwarded-Host is not on the safelist, so a cross-origin fetch that
+     * tried to add it would need a preflight this app never approves. Somebody
+     * who can forge both headers is not a browser and is carrying nobody's
+     * session cookie. There is nothing to ride.
+     *
+     * The exclusion had a real cost, though: it rejected every write from the
+     * onrender.com address this service also answers on, silently. See "a
+     * write from a second hostname" above. That mattered more once setup links
+     * started requiring PUBLIC_BASE_URL to be set, because then fixing the
+     * link would have broken the site.
+     *
+     * So what is actually guarded is the property that protects a victim: a
+     * request whose Origin is not the host it was sent to is refused.
      */
     const { crossSiteRequest } = await import("../src/lib/origin");
+
+    // Attacker origin, this site's host — the shape a victim's browser sends.
     expect(crossSiteRequest(make({
       origin: "https://evil.example",
-      "x-forwarded-host": "evil.example",
+      "x-forwarded-host": "aaltofoundersprint.com",
+    }))).toBe(true);
+    expect(crossSiteRequest(make({
+      origin: "https://evil.example",
+      host: "aaltofoundersprint.com",
     }))).toBe(true);
   });
 
-  test("a spoofed Host cannot widen it either", async () => {
+  test("the configured origin is accepted even when the request claims another host", async () => {
+    // PUBLIC_BASE_URL stays in the set; it is not the whole set.
     const { crossSiteRequest } = await import("../src/lib/origin");
-    expect(crossSiteRequest(make({ origin: "https://evil.example", host: "evil.example" }))).toBe(true);
+    expect(crossSiteRequest(make({
+      origin: SITE,
+      "x-forwarded-host": "sprint-buddy-0gon.onrender.com",
+    }))).toBe(false);
   });
 
   test("Sec-Fetch-Site: cross-site is rejected even with a matching Origin", async () => {

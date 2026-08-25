@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { APP_URL_UNSET, configuredAppUrl } from "../../../lib/appUrl";
 import { readJsonBody } from "../../../lib/limits";
 import {
   countOrganizers,
@@ -35,30 +36,21 @@ import {
  */
 
 /**
- * Where the app is reachable from the outside.
+ * The setup link.
  *
- * `request.url` is the address the server bound to, not the address the person
- * typed, so behind a proxy it yields links pointing at localhost. Prefer an
- * explicit PUBLIC_BASE_URL, then the forwarded/Host headers, and only fall back
- * to the request URL.
+ * This used to build its origin from PUBLIC_BASE_URL *or*, failing that, the
+ * request's own X-Forwarded-Host / Host. That URL goes into an email carrying a
+ * single-use token that sets a founder's password, and a request header is
+ * chosen by whoever sent the request — so with PUBLIC_BASE_URL unset the app
+ * would mail an activation link pointing wherever it was told. The message is
+ * genuinely from the programme and the token is genuinely valid, which is
+ * exactly what makes it worth phishing with.
+ *
+ * Configured origin or nothing. See lib/appUrl.ts.
  */
-function baseUrl(request: Request): string {
-  const configured = process.env.PUBLIC_BASE_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, "");
-
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  if (host) {
-    const proto =
-      request.headers.get("x-forwarded-proto") ??
-      new URL(request.url).protocol.replace(":", "");
-    return `${proto}://${host}`;
-  }
-
-  return new URL(request.url).origin;
-}
-
-function inviteUrl(request: Request, token: string): string {
-  return `${baseUrl(request)}/setup?token=${token}`;
+function inviteUrl(token: string): string | null {
+  const origin = configuredAppUrl();
+  return origin ? `${origin}/setup?token=${token}` : null;
 }
 
 function isValidEmail(email: string): boolean {
@@ -75,20 +67,28 @@ function isValidEmail(email: string): boolean {
  * they never see the contents of.
  */
 async function issueInvite(
-  request: Request,
   email: string,
   name: string,
   kind: "invite" | "reset",
 ): Promise<void> {
   const token = randomToken();
+  const link = inviteUrl(token);
+  /* Checked before the invite row is written: a token created and never
+     delivered is a live credential sitting in the table for fourteen days. */
+  if (!link) throw new AppUrlUnset();
   createInvite(token, email, inviteExpiry());
-  const link = inviteUrl(request, token);
   if (kind === "invite") await sendInviteEmail(email, name, link);
   else await sendResetEmail(email, name, link);
 }
 
 /** Turns an email failure into a response without leaking provider detail. */
+/** Raised when there is no configured origin to build a setup link from. */
+class AppUrlUnset extends Error {}
+
 function emailFailure(error: unknown) {
+  if (error instanceof AppUrlUnset) {
+    return Response.json({ error: APP_URL_UNSET }, { status: 503 });
+  }
   if (error instanceof EmailNotConfiguredError) {
     return Response.json(
       { error: "Email is not configured, so the setup link cannot be delivered. Set RESEND_API_KEY and RESEND_FROM." },
@@ -152,7 +152,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         return Response.json({ error: `${email} already has an account.` }, { status: 409 });
       }
       try {
-        await issueInvite(request, email, name, "invite");
+        await issueInvite(email, name, "invite");
       } catch (error) {
         recordAdminAction(session.email, "add-user:email-failed", email, role);
         return emailFailure(error);
@@ -189,7 +189,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           continue;
         }
         try {
-          await issueInvite(request, entry.email, entry.name!, "invite");
+          await issueInvite(entry.email, entry.name!, "invite");
           recordAdminAction(session.email, "add-user", entry.email, entry.role);
           delivered.push({ email: entry.email, name: entry.name, emailed: true });
         } catch (error) {
@@ -209,7 +209,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       try {
         // A reset the account holder did not ask for is exactly what they need
         // to hear about, so the email says so explicitly.
-        await issueInvite(request, email, existing.name, existing.password_hash ? "reset" : "invite");
+        await issueInvite(email, existing.name, existing.password_hash ? "reset" : "invite");
       } catch (error) {
         recordAdminAction(session.email, "reinvite:email-failed", email);
         return emailFailure(error);

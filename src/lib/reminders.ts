@@ -6,6 +6,7 @@ import {
 } from "../db/index";
 import { isEmailConfigured, sendDeadlineReminder } from "./email";
 import { reportError } from "./errors";
+import { APP_URL_UNSET, configuredAppUrl } from "./appUrl";
 
 /**
  * Deadline reminders.
@@ -81,8 +82,20 @@ export function dueInstant(dueDate: string, dueTime: string | null): Date {
   return new Date(naive - helsinkiOffsetHours(new Date(naive)) * 60 * 60 * 1000);
 }
 
-function appUrl(): string {
-  return process.env.PUBLIC_BASE_URL?.trim() || "https://aaltofoundersprint.com";
+/*
+ * This never read a request header, which was the right call — the admin
+ * route's version did, and that was a real hole. But the hardcoded fallback is
+ * its own quiet failure: if PUBLIC_BASE_URL is unset and that domain is not
+ * where this deployment actually lives, every reminder in the cohort carries a
+ * link to a page that does not exist, and nothing anywhere says so.
+ *
+ * Configured value or nothing, same as everywhere else. A run with no
+ * configured origin is skipped and reported rather than sent with a bad link:
+ * reminders repeat, so a skipped morning costs one nudge, where a wrong link
+ * costs the cohort's trust in the mail.
+ */
+function appUrl(): string | null {
+  return configuredAppUrl();
 }
 
 /** Nothing date-based goes out before this hour, Helsinki. */
@@ -154,6 +167,12 @@ export async function runReminders(now = new Date()): Promise<ReminderRun> {
   let sent = 0;
   let failed = 0;
 
+  const link = appUrl();
+  if (!link) {
+    reportError(new Error(APP_URL_UNSET), { where: "reminders", level: "warning" });
+    return { sent: 0, failed: 0, skipped: "no configured base url" };
+  }
+
   for (const { kind, row } of jobs) {
     try {
         await sendDeadlineReminder(
@@ -166,7 +185,7 @@ export async function runReminders(now = new Date()): Promise<ReminderRun> {
           dueTime: row.due_time,
         },
         kind,
-        appUrl(),
+        link,
       );
       recordReminder(row.deadline_id, row.email, kind);
       sent += 1;
@@ -202,6 +221,12 @@ export function startReminderScheduler(): void {
   if (process.env.NODE_ENV !== "production") return;
   if (!isEmailConfigured()) {
     console.warn("[reminders] scheduler not started: email is not configured");
+    return;
+  }
+  /* Said once at boot rather than once per skipped run, so a misconfigured
+     deployment is visible in the deploy log instead of at 08:00. */
+  if (!configuredAppUrl()) {
+    console.warn(`[reminders] scheduler not started: ${APP_URL_UNSET}`);
     return;
   }
   scheduled = true;
