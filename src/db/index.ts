@@ -74,6 +74,16 @@ export type WorkingGeniusRow = {
    * knew a primary type.
    */
   result_json?: string | null;
+  /**
+   * When the founder agreed organizers may see their profile, or null.
+   *
+   * Null means no, including on every row written before the consent card
+   * existed: those were taken under a card promising the result was theirs
+   * alone, and nothing retroactive turns that into agreement.
+   */
+  shared_at?: string | null;
+  /** What they agreed to. Only "profile" exists; recorded so it can change. */
+  shared_scope?: string | null;
   instrument_version?: string | null;
   consistency?: number | null;
 };
@@ -348,7 +358,8 @@ export function getWorkingGenius(userEmail: string): WorkingGeniusRow | null {
   const row = db
     .query(
       `SELECT user_email, primary_type, counts_json, completed_at,
-              result_json, instrument_version, consistency
+              result_json, instrument_version, consistency,
+              shared_at, shared_scope
          FROM working_genius WHERE user_email = $email`,
     )
     .get({ $email: userEmail }) as WorkingGeniusRow | null;
@@ -360,11 +371,13 @@ export function upsertWorkingGenius(row: WorkingGeniusRow) {
   db.run(
     `INSERT INTO working_genius (
        user_email, primary_type, counts_json, completed_at,
-       result_json, instrument_version, consistency, updated_at
+       result_json, instrument_version, consistency, updated_at,
+       shared_at, shared_scope
      )
      VALUES (
        $user_email, $primary_type, $counts_json, $completed_at,
-       $result_json, $instrument_version, $consistency, datetime('now')
+       $result_json, $instrument_version, $consistency, datetime('now'),
+       $shared_at, $shared_scope
      )
      ON CONFLICT(user_email) DO UPDATE SET
        primary_type = $primary_type,
@@ -373,7 +386,9 @@ export function upsertWorkingGenius(row: WorkingGeniusRow) {
        result_json = $result_json,
        instrument_version = $instrument_version,
        consistency = $consistency,
-       updated_at = datetime('now')`,
+       updated_at = datetime('now'),
+       shared_at = $shared_at,
+       shared_scope = $shared_scope`,
     {
       $user_email: row.user_email,
       $primary_type: row.primary_type,
@@ -382,8 +397,42 @@ export function upsertWorkingGenius(row: WorkingGeniusRow) {
       $result_json: row.result_json ?? null,
       $instrument_version: row.instrument_version ?? null,
       $consistency: row.consistency ?? null,
+      $shared_at: row.shared_at ?? null,
+      $shared_scope: row.shared_scope ?? null,
     },
   );
+}
+
+/**
+ * Every founder who agreed to be on the cohort map, with their profile.
+ *
+ * Deliberately selects the columns rather than the row: result_json carries all
+ * thirty individual answers and whatever the founder typed in their own words,
+ * and no organizer view is allowed near it. What comes back is the ranking and
+ * the bands, which is what was consented to.
+ */
+export function listSharedWorkingGenius(): Array<{
+  user_email: string;
+  name: string;
+  primary_type: string;
+  counts_json: string;
+  completed_at: string;
+  shared_at: string;
+}> {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT w.user_email, u.name, w.primary_type, w.counts_json,
+              w.completed_at, w.shared_at
+         FROM working_genius w
+         JOIN users u ON u.email = w.user_email
+        WHERE w.shared_at IS NOT NULL
+        ORDER BY u.name COLLATE NOCASE`,
+    )
+    .all() as Array<{
+      user_email: string; name: string; primary_type: string;
+      counts_json: string; completed_at: string; shared_at: string;
+    }>;
 }
 
 export function incrementVisits(userEmail: string): number {

@@ -159,7 +159,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       founderTz?: string;
       stream?: boolean;
     }>(request);
-    if (!read.ok) return Response.json({ error: read.error }, { status: read.status });
+    if (!read.ok) return read.response;
     const body = read.value;
 
     // You may only ever converse as yourself. Organizers used to be exempt,

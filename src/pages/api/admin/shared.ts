@@ -66,7 +66,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (error) return error;
 
     const read = await readJsonBody<{ action?: string; id?: unknown }>(request);
-    if (!read.ok) return json({ error: read.error }, read.status);
+    if (!read.ok) return read.response;
     const body = read.value;
 
     if (body.action === "seen") {

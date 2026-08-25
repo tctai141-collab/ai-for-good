@@ -528,6 +528,22 @@ export function initSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_wg_takes_user ON working_genius_takes(user_email, taken_on);
   `);
 
+  /*
+   * When the founder agreed that organizers may see their profile.
+   *
+   * Stored, not assumed. The consent is the whole basis on which an organizer
+   * is allowed to read this at all, so it has to be evidenced — a checkbox the
+   * browser ticked and then forgot is not a record of anything, and "did they
+   * actually agree" is the first question anyone will ask.
+   *
+   * Nullable, and null means no. Rows written before this existed were taken
+   * under a card that said the result was theirs alone, and nothing retroactive
+   * can turn that into agreement. Those founders are simply not shared until
+   * they take it again under the new wording.
+   */
+  addColumn(db, "working_genius", "shared_at", "TEXT");
+  addColumn(db, "working_genius", "shared_scope", "TEXT");
+
   addColumn(db, "deadlines", "due_time", "TEXT");
 
   // --- Migration 4: more reminder kinds -------------------------------------

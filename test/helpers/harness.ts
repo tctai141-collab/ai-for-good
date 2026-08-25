@@ -245,9 +245,24 @@ async function startServerOnce(
   drain(proc.stdout as ReadableStream<Uint8Array>, output);
   drain(proc.stderr as ReadableStream<Uint8Array>, output);
 
-  const bound = await waitForPort(output);
+  /*
+   * Two ways to lose the port, and both have to retry rather than fail.
+   *
+   * The child prints the port it bound, so a *different* number means
+   * something took ours in between. But the commoner shape is that the child
+   * cannot bind at all and prints nothing — and without this that became a
+   * fifteen-second wait ending in a hard error, which is a flaky suite rather
+   * than a slow one. A short deadline here is right because the port is known
+   * in advance: the child either binds it in a moment or is not going to.
+   */
+  let bound: number;
+  try {
+    bound = await waitForPort(output, 4_000);
+  } catch {
+    proc.kill();
+    throw new PortTaken();
+  }
   if (bound !== port) {
-    // Something else took it between the probe and the spawn.
     proc.kill();
     throw new PortTaken();
   }

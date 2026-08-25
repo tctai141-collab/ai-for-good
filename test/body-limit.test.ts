@@ -86,6 +86,35 @@ describe("ordinary requests are untouched", () => {
     expect(res.status).toBe(200);
   });
 
+  test("and still works on the connection an oversized one was refused on", async () => {
+    /*
+     * The regression this exists for, and it was a real bug rather than a
+     * flaky test.
+     *
+     * Refusing at the cap means not reading the rest of the body, so the
+     * remainder stays in the socket. On a keep-alive connection the next
+     * request is then parsed as those leftover bytes and comes back 400 — an
+     * ordinary GET failing a few milliseconds after somebody else's oversized
+     * POST, which is a denial of service handed out by the thing meant to
+     * prevent one. The oversize reply closes the connection now.
+     *
+     * Ten in a row because the pairing depends on the connection being reused,
+     * which is likely but not guaranteed on any single attempt.
+     */
+    for (let i = 0; i < 10; i++) {
+      const big = await fetch(`${h.url}/api/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", origin: h.url },
+        body: oversizedJson(),
+      });
+      expect(big.status).toBe(413);
+      expect(big.headers.get("connection")).toBe("close");
+
+      const after = await fetch(`${h.url}/api/deadlines`, { headers: { cookie: organizer.cookie } });
+      expect(after.status).toBe(200);
+    }
+  }, 20_000);
+
   test("malformed JSON is still a 400, not a 413", async () => {
     const res = await fetch(`${h.url}/api/session`, {
       method: "POST",

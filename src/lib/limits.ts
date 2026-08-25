@@ -182,9 +182,36 @@ export const IP_FAILURE_LIMIT = 30;
  * So the bytes are counted as they arrive and the read is abandoned the moment
  * it goes over, rather than after the whole thing is in memory.
  */
+/*
+ * The failure carries a finished Response rather than a status and a message.
+ *
+ * Because one of them needs a header, and leaving that to eleven call sites is
+ * how it gets forgotten. The oversize reply must close the connection: the
+ * unread remainder of the body stays in the socket, and on a keep-alive
+ * connection the *next* request is then parsed as leftover body bytes and
+ * comes back 400. That is not theoretical — it is what this file did on its
+ * first version, and the test that caught it was an ordinary GET failing a few
+ * milliseconds after an oversized POST on the same connection.
+ *
+ * Draining instead, the way the middleware does, is not an option here: the
+ * whole point of refusing at this size is not to read the rest of it.
+ */
 export type BodyResult<T> =
   | { ok: true; value: T }
-  | { ok: false; status: 400 | 413; error: string };
+  | { ok: false; response: Response };
+
+function refuse(status: 400 | 413, error: string): { ok: false; response: Response } {
+  return {
+    ok: false,
+    response: new Response(JSON.stringify({ error }), {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        ...(status === 413 ? { Connection: "close" } : {}),
+      },
+    }),
+  };
+}
 
 export async function readJsonBody<T>(request: Request): Promise<BodyResult<T>> {
   const body = request.body;
@@ -195,7 +222,7 @@ export async function readJsonBody<T>(request: Request): Promise<BodyResult<T>> 
     try {
       return { ok: true, value: (await request.json()) as T };
     } catch {
-      return { ok: false, status: 400, error: "Malformed request." };
+      return refuse(400, "Malformed request.");
     }
   }
 
@@ -210,16 +237,17 @@ export async function readJsonBody<T>(request: Request): Promise<BodyResult<T>> 
       if (!value) continue;
       size += value.byteLength;
       if (size > MAX_BODY_BYTES) {
-        /* Stop reading rather than draining: unlike the middleware's path
-           this reply closes the connection, so there is no keep-alive stream
-           left to desynchronise. */
+        /* Stop reading rather than draining — refusing at this size is
+           precisely a decision not to read the rest. The reply closes the
+           connection, which is what keeps the unread remainder from being
+           parsed as the next request. */
         await reader.cancel().catch(() => {});
-        return { ok: false, status: 413, error: "That request is too large." };
+        return refuse(413, "That request is too large.");
       }
       chunks.push(value);
     }
   } catch {
-    return { ok: false, status: 400, error: "Malformed request." };
+    return refuse(400, "Malformed request.");
   }
 
   const joined = new Uint8Array(size);
@@ -232,6 +260,6 @@ export async function readJsonBody<T>(request: Request): Promise<BodyResult<T>> 
   try {
     return { ok: true, value: JSON.parse(new TextDecoder().decode(joined)) as T };
   } catch {
-    return { ok: false, status: 400, error: "Malformed request." };
+    return refuse(400, "Malformed request.");
   }
 }

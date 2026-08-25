@@ -126,7 +126,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     entries?: unknown;
   };
   const read = await readJsonBody<typeof body>(request);
-  if (!read.ok) return Response.json({ error: read.error }, { status: read.status });
+  if (!read.ok) return read.response;
   body = read.value;
 
   const email = normalizeEmail(body.email);

@@ -6,6 +6,8 @@ import {
 } from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { TOTAL_WEEKS, currentSprintWeek, isSprintDated, weekForDate } from "../../lib/sprint-calendar";
+import { listSharedWorkingGenius } from "../../db/index";
+import { WIDGET_ORDER } from "../../lib/workingGenius";
 
 /**
  * The operating team's cohort view.
@@ -95,6 +97,38 @@ function openWith(
   }
 
   return parts.length ? parts.join(" ") : "Steady. Nothing flagged this week.";
+}
+
+/**
+ * Bands per shared founder, and nothing else.
+ *
+ * A band is derived from the ranking: the top two are gifts, the next two
+ * competencies, the last two drains. That is the same split the founder is
+ * shown, so an organizer and a founder are reading the same thing.
+ */
+function workingGeniusMap() {
+  return listSharedWorkingGenius().flatMap((row) => {
+    let counts: Record<string, number>;
+    try {
+      counts = JSON.parse(row.counts_json) as Record<string, number>;
+    } catch {
+      // A row this cannot parse is left off the map rather than failing the
+      // whole dashboard for everybody else.
+      return [];
+    }
+    const ranking = WIDGET_ORDER
+      .filter((id) => id in counts)
+      .sort((a, b) => (counts[b] ?? 0) - (counts[a] ?? 0));
+    if (ranking.length < 6) return [];
+    return [{
+      email: row.user_email,
+      name: row.name,
+      gifts: ranking.slice(0, 2),
+      competencies: ranking.slice(2, 4),
+      drains: ranking.slice(4),
+      takenOn: row.completed_at,
+    }];
+  });
 }
 
 export const GET: APIRoute = async ({ cookies }) => {
@@ -218,5 +252,21 @@ export const GET: APIRoute = async ({ cookies }) => {
     // False means SPRINT_START_DATE is unset, so check-ins cannot be placed
     // into weeks and the grid would be misleading rather than merely empty.
     startDateConfigured: isSprintDated(),
+    /*
+     * The team map: who is gifted at what, for founders who agreed to it.
+     *
+     * Built from counts_json, which is wins per type, and reduced to bands
+     * here rather than in the browser so nothing richer than a band ever
+     * crosses the wire. There is deliberately no result_json, no per-item
+     * answer and no free text on this shape: what a founder agreed to is the
+     * profile, and the shortest way to keep that true is for the other thing
+     * to have no route out of the server.
+     *
+     * Everyone else is counted, not listed. "Three founders have not shared"
+     * is a fact an organizer needs; naming them turns a voluntary thing into
+     * a visible omission, which is not consent.
+     */
+    map: workingGeniusMap(),
+    mapWithheld: founders.length - workingGeniusMap().length,
   });
 };
