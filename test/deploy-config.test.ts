@@ -51,6 +51,20 @@ describe("render.yaml", () => {
     }
   });
 
+  test("declares every variable the code reads that has no safe default", () => {
+    /*
+     * BACKUP_ENCRYPTION_KEY was read by src/lib/backup.ts and by the restore
+     * script, and declared nowhere. Undeclared means a blueprint rebuild never
+     * prompts for it, and unset the backup is written in the clear — the whole
+     * database, password hashes and thirty days of private conversations, into
+     * object storage whose credentials *are* declared two lines above.
+     */
+    const env = envVars();
+    for (const key of ["BACKUP_ENCRYPTION_KEY", "R2_BUCKET", "RESEND_API_KEY", "ANTHROPIC_API_KEY"]) {
+      expect(env.has(key)).toBe(true);
+    }
+  });
+
   test("real secrets stay out of the file", () => {
     // The rule this sits next to: a public address is declared, a credential
     // never is.

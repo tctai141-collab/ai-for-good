@@ -67,6 +67,16 @@ services:
         sync: false
       - key: R2_ENDPOINT
         sync: false
+      # Encrypts the snapshot before it leaves the box. Read by the code and
+      # by scripts/restore-db.ts, but it was not declared here at all — so a
+      # blueprint rebuild never prompts for it, and unset, the default is to
+      # ship the whole database to object storage in the clear: Argon2id
+      # hashes and thirty days of the cohort's private conversations.
+      #
+      # Losing this key loses every backup, which is a real way to destroy the
+      # data it protects. Keep it somewhere other than the same dashboard.
+      - key: BACKUP_ENCRYPTION_KEY
+        sync: false
       - key: BACKUP_RETENTION_DAYS
         value: "30"
       # --- Invite/reset email: Resend, EU region

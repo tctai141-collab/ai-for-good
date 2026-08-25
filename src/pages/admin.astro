@@ -513,6 +513,22 @@ import QuickActions from "../components/QuickActions";
         main { padding-bottom: 96px; }
       }
 
+      /* The mentor page's lists: a name, and why it is on the list. The
+         second half is the whole value — a column of names is a grid with
+         extra steps. */
+      .mentor-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+      .mentor-list li {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9375rem;
+      }
+      .mentor-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+      .mentor-list span { color: var(--muted); font-size: 0.875rem; }
+
       /* Long lists scroll inside their own box rather than growing the page. */
       .scroller {
         max-height: 52vh;
@@ -747,6 +763,7 @@ import QuickActions from "../components/QuickActions";
           <!-- One pill, moved and resized by script, sitting under the
                labels. No tab carries a background of its own. -->
           <span class="tab-cursor" id="tab-cursor" aria-hidden="true"></span>
+          <button type="button" class="tab" data-tab="mentor">This week</button>
           <button type="button" class="tab" data-tab="people">People</button>
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
           <button type="button" class="tab" data-tab="programme">Programme</button>
@@ -755,6 +772,24 @@ import QuickActions from "../components/QuickActions";
           <button type="button" class="tab" data-tab="knowledge">Knowledge</button>
           <button type="button" class="tab" data-tab="transcript">Transcript</button>
         </nav>
+
+        <!--
+          The mentor's page.
+
+          Everything else on this screen is for running the cohort: adding
+          people, setting deadlines, sending mail. A mentor does none of that,
+          and a mentor who opens an operating console finds nothing addressed
+          to them and does not come back.
+
+          So this is the first tab, and it answers one question — who should I
+          talk to, and about what. It reads the same endpoints the rest of the
+          page already uses and writes nothing at all.
+        -->
+        <div class="tabpanel" id="tab-mentor" hidden>
+          <div id="mentor-view">
+            <p class="note" style="margin-top:0">Reading the week…</p>
+          </div>
+        </div>
 
         <div class="tabpanel" id="tab-people" hidden>
         <section class="panel">
@@ -1214,8 +1249,10 @@ import QuickActions from "../components/QuickActions";
         new ResizeObserver(() => moveCursor(selectedTab())).observe(tabBar);
       }
 
-      let storedTab = "people";
-      try { storedTab = localStorage.getItem(TAB_KEY) || "people"; } catch { /* private mode */ }
+      /* First visit lands on the mentor page rather than the account list.
+         Somebody who has used this page before comes back where they left. */
+      let storedTab = "mentor";
+      try { storedTab = localStorage.getItem(TAB_KEY) || "mentor"; } catch { /* private mode */ }
       showTab(storedTab);
 
       // ---- Quick actions ------------------------------------------------
@@ -2794,7 +2831,159 @@ import QuickActions from "../components/QuickActions";
         bcRefresh();
       }
 
+      /* ── This week ──────────────────────────────────────────────────────
+         The mentor's page. Reads what the other tabs already read; writes
+         nothing.
+
+         Ordered by what would make somebody open it again. A grid of twenty
+         founders is not that — it is a thing you scan once and never return
+         to, because it never says anything. Three names with a reason is.
+
+         Everything here is derived from signals a founder either published on
+         purpose (a shared conversation) or that the cohort dashboard already
+         showed (a check-in score, a missed deadline). No new access. */
+      async function loadMentor() {
+        const box = document.getElementById("mentor-view");
+        if (!box) return;
+
+        let cohort = null, shared = [], deadlines = null, programme = null;
+        try {
+          const [c, sh, d, pr] = await Promise.all([
+            fetch("/api/cohort").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+            fetch("/api/admin/shared").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+            fetch("/api/deadlines?view=status").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+            fetch("/api/programme").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          ]);
+          cohort = c; shared = (sh && sh.threads) || []; deadlines = d; programme = pr;
+        } catch {
+          box.innerHTML = '<p class="note">Could not reach the server.</p>';
+          return;
+        }
+        if (!cohort) {
+          box.innerHTML = '<p class="note">Could not read the cohort.</p>';
+          return;
+        }
+
+        const teams = cohort.teams || [];
+        const week = cohort.week || 1;
+        const settled = Math.max(1, week - 1);
+        const scoreOf = (t) => (t.temp && t.temp[settled - 1]) || 0;
+
+        /* Who to talk to. Ranked, then cut to three — a mentor has one evening,
+           not twenty. The reason is the point: a name with no reason beside it
+           is another grid. */
+        /* Silence is only a reason once a week has actually finished.
+           In week one every founder has "no check-in in week 1", which is
+           three names with the same non-reason on the page a mentor is meeting
+           for the first time — and a page that cries wolf on day one is one
+           they stop opening. The cohort dashboard already refuses to count a
+           missing check-in before the week is over; this has to as well. */
+        const weekSettled = week > 1;
+        const reasons = [];
+        for (const t of teams) {
+          const v = scoreOf(t);
+          if (v >= 3) reasons.push({ name: t.name, why: "showing strain in week " + settled, rank: 0 });
+          else if (v === 2) reasons.push({ name: t.name, why: "worth a look, week " + settled, rank: 1 });
+          else if (v === 0 && weekSettled) reasons.push({ name: t.name, why: "no check-in in week " + settled, rank: 2 });
+        }
+        /* Somebody who handed over a conversation asked to be read, which
+           outranks anything inferred from a score. */
+        const unseen = shared.filter((t) => !t.seenAt);
+        for (const t of unseen) {
+          const already = reasons.find((r) => r.name === t.founderName);
+          if (already) { already.why = "shared a conversation, and " + already.why; already.rank = -1; }
+          else reasons.push({ name: t.founderName, why: "shared a conversation with you", rank: -1 });
+        }
+        reasons.sort((a, b) => a.rank - b.rank);
+        const top = reasons.slice(0, 3);
+
+        const sections = [];
+
+        sections.push(
+          '<section class="panel"><h2>Week ' + week + '</h2>' +
+          (programme && programme.phase
+            ? '<p class="note" style="margin-top:0">The cohort is on <strong>' + esc(programme.phase) + '</strong>' +
+              (programme.title ? ' — ' + esc(programme.title) : "") + ".</p>"
+            : '<p class="note" style="margin-top:0">No programme set for this week yet.</p>') +
+          "</section>");
+
+        if (top.length) {
+          sections.push(
+            '<section class="panel"><h2>Worth a conversation</h2>' +
+            '<ul class="mentor-list">' +
+            top.map((r) => '<li><strong>' + esc(r.name) + "</strong><span>" + esc(r.why) + "</span></li>").join("") +
+            "</ul></section>");
+        }
+
+        if (shared.length) {
+          sections.push(
+            '<section class="panel"><h2>Handed to you</h2>' +
+            '<p class="note" style="margin-top:0">' + shared.length +
+            (shared.length === 1 ? " conversation" : " conversations") +
+            (unseen.length ? " · " + unseen.length + " you have not opened" : " · all opened") +
+            ". Read them under <strong>Shared</strong>.</p>" +
+            '<ul class="mentor-list">' +
+            shared.slice(0, 5).map((t) =>
+              "<li><strong>" + esc(t.founderName || t.founderEmail) + "</strong><span>" +
+              esc(t.title || "Untitled") + (t.seenAt ? "" : " · new") + "</span></li>").join("") +
+            "</ul></section>");
+        }
+
+        /* The team map's one useful sentence, which is invisible one profile
+           at a time: what nobody in the room is good at. */
+        const map = cohort.map || [];
+        if (map.length) {
+          const TYPES = [["wonder","Wonder"],["invention","Invention"],["discernment","Discernment"],
+                         ["galvanizing","Galvanizing"],["enablement","Enablement"],["tenacity","Tenacity"]];
+          const gaps = TYPES.filter(([id]) => !map.some((r) => (r.gifts || []).includes(id)));
+          sections.push(
+            '<section class="panel"><h2>What this cohort is short of</h2>' +
+            "<p class=\"note\" style=\"margin-top:0\">" +
+            (gaps.length
+              ? "Nobody who has shared a working-style profile is gifted at <strong>" +
+                gaps.map(([, label]) => label).join(" or ") +
+                "</strong>. That is the work they will avoid without noticing."
+              : "Every kind of work has somebody gifted at it.") +
+            " Based on " + map.length + " of " + teams.length + " founders." +
+            "</p></section>");
+        }
+
+        const behind = deadlines && deadlines.deadlines
+          ? deadlines.deadlines.filter((d) => d.status !== "archived" && (d.behind || []).length)
+          : [];
+        if (behind.length) {
+          sections.push(
+            '<section class="panel"><h2>Not done yet</h2><ul class="mentor-list">' +
+            behind.slice(0, 4).map((d) =>
+              "<li><strong>" + esc(d.title) + "</strong><span>" + d.behind.length +
+              (d.behind.length === 1 ? " founder" : " founders") + " · due " + esc(d.dueDate) + "</span></li>").join("") +
+            "</ul></section>");
+        }
+
+        /* The empty state is the one a mentor is most likely to meet, because
+           on day one none of the above exists. Saying what will appear is more
+           use than an empty page that looks broken.
+
+           Decided on whether there is any signal at all, not on how many boxes
+           happened to get built — an earlier version counted sections, and a
+           list of "nobody has checked in yet" was enough to suppress it. */
+        const anySignal = top.length || shared.length || map.length || behind.length;
+        if (!anySignal) {
+          sections.push(
+            '<section class="panel"><h2>Nothing to read yet</h2>' +
+            '<p class="note" style="margin-top:0">' +
+            "This page fills in as the cohort uses the app: founders who check in appear " +
+            "when their week looks hard, conversations appear when somebody hands one over, " +
+            "and the working-style map appears once people have taken the assessment. " +
+            "Nothing here is anything a founder has not chosen to share." +
+            "</p></section>");
+        }
+
+        box.innerHTML = sections.join("");
+      }
+
       load();
+      loadMentor();
       loadDeadlines();
       loadProgramme();
       loadKnowledge();
