@@ -708,6 +708,28 @@ export function initSchema(db: Database) {
     `, ["email", "name", "role", "password_hash", "created_at"]);
   });
 
+  /*
+   * Takes the loaded F26 schedule back out.
+   *
+   * Forty-one entries were loaded from a button on /admin that has since been
+   * removed at Tai's request, and the rows they wrote are not something anybody
+   * should have to clear by pressing Remove forty-one times, or by opening a
+   * shell to undo something a button did.
+   *
+   * Every one of them carries an id beginning "f26-", which the loader
+   * generated from the date and title; nothing typed into the form gets that
+   * prefix, because the form uses a random uuid. So the prefix is a safe
+   * handle on exactly the rows that were loaded and none of the ones anybody
+   * wrote by hand.
+   *
+   * One-time, tracked in user_version, which is the part that matters: if the
+   * schedule is ever wanted back it can be typed, imported or restored and
+   * this will not reach for it again on the next boot.
+   */
+  migrate(db, 6, () => {
+    db.run("DELETE FROM programme_events WHERE id LIKE 'f26-%'");
+  });
+
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_deadlines_status_due ON deadlines(status, due_date);
   `);
