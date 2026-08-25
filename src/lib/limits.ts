@@ -196,6 +196,32 @@ export const IP_FAILURE_LIMIT = 30;
  * Draining instead, the way the middleware does, is not an option here: the
  * whole point of refusing at this size is not to read the rest of it.
  */
+/**
+ * How much of an over-sized body is read and thrown away before giving up.
+ *
+ * Generous enough to cover an accident — a founder pasting a very long
+ * transcript — and far too small to be worth using as an attack.
+ */
+const DRAIN_LIMIT = 4 * 1024 * 1024;
+
+/** Reads and discards up to `limit` more bytes. Never throws. */
+async function drain(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  limit: number,
+): Promise<void> {
+  let seen = 0;
+  try {
+    while (seen < limit) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      seen += value?.byteLength ?? 0;
+    }
+  } catch {
+    // The peer went away mid-drain, which is the outcome we wanted anyway.
+  }
+  await reader.cancel().catch(() => {});
+}
+
 export type BodyResult<T> =
   | { ok: true; value: T }
   | { ok: false; response: Response };
@@ -237,11 +263,20 @@ export async function readJsonBody<T>(request: Request): Promise<BodyResult<T>> 
       if (!value) continue;
       size += value.byteLength;
       if (size > MAX_BODY_BYTES) {
-        /* Stop reading rather than draining — refusing at this size is
-           precisely a decision not to read the rest. The reply closes the
-           connection, which is what keeps the unread remainder from being
-           parsed as the next request. */
-        await reader.cancel().catch(() => {});
+        /*
+         * Drain what is left, but only so much of it.
+         *
+         * Cancelling outright and closing the connection is correct in
+         * principle and still raced in practice: measured at roughly one
+         * request in eighty, the next ordinary GET on that connection came
+         * back 400, because the server reached the leftover bytes before the
+         * close completed. An unbounded drain would hand back the denial of
+         * service this cap exists to prevent, so it is bounded — a body a
+         * little over the line is consumed to a clean boundary, and one that
+         * is wildly over is abandoned, which is the case where dropping the
+         * connection is the right answer anyway.
+         */
+        await drain(reader, DRAIN_LIMIT);
         return refuse(413, "That request is too large.");
       }
       chunks.push(value);

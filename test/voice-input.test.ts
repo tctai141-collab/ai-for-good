@@ -183,3 +183,16 @@ describe("where the transcript sits", () => {
     expect(block).not.toContain("top: calc(100% + 7px)");
   });
 });
+
+describe("stopping is always possible", () => {
+  test("the button is not disabled while the microphone is open", () => {
+    /*
+     * Regression. The host passes disabled={busy}, true for as long as the
+     * model is answering — ten seconds and more. Dictate, press Send, and the
+     * button went dead with the microphone still running: no way to stop it,
+     * and the browser's recording indicator lit the whole time.
+     */
+    expect(source).toContain("disabled={disabled && !listening}");
+    expect(source).not.toContain("disabled={disabled}\n");
+  });
+});

@@ -73,6 +73,29 @@ describe("sprint weeks", () => {
     expect(sprintWeekOf("2026-09-08", null, 15)).toBeNull();
   });
 
+  test("a clock change does not move a week boundary", () => {
+    /*
+     * Regression. The subtraction used local midnights, which are 23 or 25
+     * hours apart across a DST change; one hour short of a whole number of
+     * weeks floors to the week before. A cohort spanning the March change had
+     * every session after it filed one week early, all the way to the end.
+     *
+     * Autumn hid it — an extra hour never crosses a boundary — so the F26
+     * dates looked right and a spring cohort would not have.
+     */
+    const SPRING = "2026-02-02"; // clocks go forward on 29 March
+    expect(sprintWeekOf("2026-03-29", SPRING, 15)).toBe(8);
+    expect(sprintWeekOf("2026-03-30", SPRING, 15)).toBe(9);
+    expect(sprintWeekOf("2026-04-06", SPRING, 15)).toBe(10);
+
+    // And every boundary lands on the right day, either side of the change.
+    for (let week = 1; week <= 15; week++) {
+      const first = new Date(Date.UTC(2026, 1, 2) + (week - 1) * 7 * 86400000)
+        .toISOString().slice(0, 10);
+      expect(sprintWeekOf(first, SPRING, 15)).toBe(week);
+    }
+  });
+
   test("the heading takes the week's own span, not the events' span", () => {
     /*
      * Regression. The week heading used to be built from the first and last
