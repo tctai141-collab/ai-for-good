@@ -108,7 +108,10 @@ describe("it reads, and does not reach further than the rest of the page", () =>
 });
 
 describe("where it sits", () => {
-  test("it is the first tab, and where a first visit lands", () => {
+  test("Programme leads the tabs, and This week is still where a first visit lands", () => {
+    // Programme is the tab an organizer opens most; the mentor summary is
+    // still the better thing to land on, so position and default differ.
+    expect(admin.indexOf('data-tab="programme"')).toBeLessThan(admin.indexOf('data-tab="mentor"'));
     expect(admin.indexOf('data-tab="mentor"')).toBeLessThan(admin.indexOf('data-tab="people"'));
     expect(admin).toContain('let storedTab = "mentor";');
   });
@@ -116,8 +119,22 @@ describe("where it sits", () => {
   test("names and titles are escaped on the way into the DOM", () => {
     // Same rule as every other list on this page.
     expect(script).toContain("esc(r.name)");
-    expect(script).toContain("esc(t.founderName");
+    expect(script).toContain("esc(r.why)");
     expect(script).toContain("esc(d.title)");
+  });
+
+  test("it no longer repeats the Shared tab back at you", () => {
+    /*
+     * "Handed to you" listed the same conversations as the Shared tab, one tab
+     * away, on a page meant to be the short answer to "who should I talk to".
+     * A founder who has just shared still appears in "Worth a conversation",
+     * ranked ahead of anything inferred from a score.
+     */
+    /* Comments stripped first: the note explaining why the section is gone
+       names it, and this file has failed on its own prose before. */
+    const code = script.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    expect(code).not.toContain("Handed to you");
+    expect(code).toContain("shared a conversation with you");
   });
 });
 

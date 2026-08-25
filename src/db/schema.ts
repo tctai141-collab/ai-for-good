@@ -264,6 +264,20 @@ export function initSchema(db: Database) {
   // hearing nothing back is worse than not sharing, so the founder is told it
   // landed. Null means nobody has read it yet.
   addColumn(db, "threads", "shared_seen_at", "TEXT");
+  /*
+   * How the operating team has filed a shared conversation.
+   *
+   * Their side of it, not the founder's: the founder's own share flag is
+   * shared_with_coach and none of this touches it. Somebody who handed a
+   * conversation over still sees that they did, whatever the team then does
+   * with its own list — and archiving or removing here never deletes a word of
+   * the founder's conversation, which is theirs.
+   *
+   * No CHECK, because that would mean rebuilding a table that holds every
+   * conversation in the cohort to add a constraint the one writer already
+   * enforces.
+   */
+  addColumn(db, "threads", "shared_state", "TEXT NOT NULL DEFAULT 'active'");
 
   // The working-style assessment grew from six items returning one "primary"
   // type to thirty returning a full ranking in three bands. primary_type and
