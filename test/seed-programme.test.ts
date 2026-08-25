@@ -10,7 +10,10 @@ import { sprintWeekOf } from "../src/components/ProgrammeTimeline";
  * into the wrong week is not a crash, it is twenty people in the wrong room.
  */
 
-const script = readFileSync("scripts/seed-programme.ts", "utf-8");
+/* The entries live in lib now: two things load them — this script and the
+   button on /admin — and one copy is what stops the two drifting. */
+const script = readFileSync("src/lib/f26-schedule.ts", "utf-8");
+const runner = readFileSync("scripts/seed-programme.ts", "utf-8");
 const START = "2026-09-08";
 
 /** Every `date: "YYYY-MM-DD"` in the seed list, in order. */
@@ -77,17 +80,22 @@ describe("what it does and does not claim", () => {
     for (const flag of ["29 Oct", "20 Oct", "Oct 17", "Oct 9"]) {
       expect(script).toContain(flag);
     }
-    expect(script).toContain("Read these before trusting the dates");
+    expect(runner).toContain("Read these before trusting the dates");
   });
 
   test("re-running it updates rather than duplicates", () => {
     // Ids are derived from date and title, so they are the same every run.
     expect(script).toContain("function idFor");
-    expect(script).toContain("upsertProgrammeEvent");
+    expect(runner).toContain("upsertProgrammeEvent");
   });
 
-  test("it writes nothing unless told to", () => {
-    expect(script).toContain('const write = process.argv.includes("--write")');
-    expect(script).toContain("Nothing written.");
+  test("the shell runner writes nothing unless told to", () => {
+    expect(runner).toContain('const write = process.argv.includes("--write")');
+    expect(runner).toContain("Nothing written.");
+  });
+
+  test("the runner and the button read the same entries", () => {
+    // One copy, or the two routes into the database drift apart.
+    expect(runner).toContain('from "../src/lib/f26-schedule"');
   });
 });
