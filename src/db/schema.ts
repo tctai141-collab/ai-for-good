@@ -69,6 +69,24 @@ export function initSchema(db: Database) {
   db.run("PRAGMA journal_mode=WAL");
   db.run("PRAGMA foreign_keys=ON");
 
+  /*
+   * Wait for a busy database instead of failing on it.
+   *
+   * WAL allows one writer and many readers, so two writes that overlap have to
+   * queue. bun:sqlite's default busy_timeout is 0 — measured, not assumed —
+   * which means the second writer does not queue at all: it gets SQLITE_BUSY
+   * straight away, the request fails, and the founder is told their check-in
+   * could not be saved.
+   *
+   * Writes here are short and they cluster, which is the combination that
+   * makes this worth setting. Reminders go out at a fixed hour and a session
+   * ends at a fixed time, so twenty founders do not arrive uniformly across
+   * the day; they arrive in the same few minutes. Five seconds is far longer
+   * than any write in this app takes and still short enough to surface a real
+   * deadlock rather than hang a request forever.
+   */
+  db.run("PRAGMA busy_timeout=5000");
+
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       email TEXT PRIMARY KEY,

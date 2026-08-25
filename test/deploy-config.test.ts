@@ -77,3 +77,22 @@ describe("render.yaml", () => {
     expect(blueprint).not.toMatch(/re_[A-Za-z0-9_-]{16,}/);
   });
 });
+
+describe("the database is configured for more than one writer", () => {
+  test("busy_timeout is set", async () => {
+    /*
+     * Measured: bun:sqlite defaults it to 0, so a write that overlaps another
+     * gets SQLITE_BUSY immediately rather than queueing — the request fails
+     * and the founder is told their check-in could not be saved. Writes in
+     * this app are short and they cluster: reminders go out at a fixed hour
+     * and sessions end at a fixed time, so twenty founders arrive in the same
+     * few minutes rather than spread across the day.
+     */
+    const { Database } = await import("bun:sqlite");
+    const { initSchema } = await import("../src/db/schema");
+    const db = new Database(":memory:");
+    initSchema(db);
+    const row = db.query("PRAGMA busy_timeout").get() as { timeout: number };
+    expect(row.timeout).toBeGreaterThanOrEqual(1000);
+  });
+});
