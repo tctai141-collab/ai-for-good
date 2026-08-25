@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { readJsonBody } from "../../../lib/limits";
-import { listSharedThreads, markSharedThreadSeen, recordAdminAction } from "../../../db/index";
+import { listSharedThreads, markSharedThreadSeen, recordAdminAction, setSharedThreadState, type SharedState } from "../../../db/index";
 import { canReadCohort, getSessionUser } from "../../../lib/auth";
 import { reportError } from "../../../lib/errors";
 
@@ -52,6 +52,9 @@ export const GET: APIRoute = async ({ cookies }) => {
       lastAt: t.last_at,
       updatedAt: t.updated_at,
       seenAt: t.shared_seen_at ?? null,
+      /* Not `state` — that is the conversation's own, and it is the founder's.
+         This is where the operating team has filed it. */
+      filing: t.sharedState,
       messages: t.messages,
     }));
 
@@ -77,6 +80,32 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       // stamp a private conversation.
       if (!markSharedThreadSeen(body.id)) return json({ error: "Not a shared conversation." }, 404);
       recordAdminAction(session!.email, "shared:read", null, body.id.slice(0, 120));
+      return json({ ok: true });
+    }
+
+    /*
+     * Filing it on the team's side: archive, put back, or take off the list.
+     *
+     * Organizers only, unlike reading. The list is one list — a mentor
+     * archiving something would hide it from the people running the programme,
+     * and a mentor is here to read what was handed to them, not to manage
+     * anybody's queue.
+     *
+     * None of these touch the founder's conversation. "remove" means off this
+     * list; the messages, and the founder's own record that they shared it,
+     * are untouched and stay theirs.
+     */
+    const FILING: Record<string, SharedState> = {
+      archive: "archived",
+      restore: "active",
+      remove: "removed",
+    };
+    const state = FILING[String(body.action)];
+    if (state) {
+      if (session!.role !== "organizer") return json({ error: "Organizers only." }, 403);
+      if (typeof body.id !== "string" || !body.id) return json({ error: "id required." }, 400);
+      if (!setSharedThreadState(body.id, state)) return json({ error: "Not a shared conversation." }, 404);
+      recordAdminAction(session!.email, `shared:${body.action}`, null, body.id.slice(0, 120));
       return json({ ok: true });
     }
 

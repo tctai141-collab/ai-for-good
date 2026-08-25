@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createFounder, createOrganizer, get, post, startServer, type Harness, type Session } from "./helpers/harness";
+import { createFounder, createMentor, createOrganizer, get, post, startServer, type Harness, type Session } from "./helpers/harness";
 
 /**
  * Conversations a founder hands to the operating team.
@@ -13,6 +13,7 @@ import { createFounder, createOrganizer, get, post, startServer, type Harness, t
 
 let h: Harness;
 let organizer: Session;
+let mentor: Session;
 let alice: Session;
 let bob: Session;
 
@@ -44,6 +45,7 @@ async function sharedList(session: Session) {
 beforeAll(async () => {
   h = await startServer();
   organizer = await createOrganizer(h, "organizer@example.test");
+  mentor = await createMentor(h, "mentor@example.test", "Mentor");
   alice = await createFounder(h, organizer, "alice@example.test", "Alice", "alice-password-11");
   bob = await createFounder(h, organizer, "bob@example.test", "Bob", "bob-password-1122");
 });
@@ -157,5 +159,85 @@ describe("the founder's own view", () => {
   test("one founder still cannot read another's threads", async () => {
     const res = await get(h, `/api/persistence?resource=threads&user=${encodeURIComponent(bob.email)}`, alice.cookie);
     expect(res.status).toBe(403);
+  });
+});
+
+describe("filing what has been handed over", () => {
+  const file = (action: string, id: string, who: Session) =>
+    post(h, "/api/admin/shared", { action, id }, who.cookie);
+
+  const ids = (body: { threads?: { id: string }[] }) => (body.threads ?? []).map((t) => t.id);
+
+  test("archiving keeps it on the list, marked", async () => {
+    await makeThread(alice, "t-archive", "Pricing", "We keep guessing.");
+    await share(alice, "t-archive", true);
+
+    expect((await file("archive", "t-archive", organizer)).status).toBe(200);
+    const { body } = await sharedList(organizer);
+    const row = (body.threads ?? []).find((t) => t.id === "t-archive") as { filing?: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row?.filing).toBe("archived");
+  });
+
+  test("putting it back undoes that", async () => {
+    expect((await file("restore", "t-archive", organizer)).status).toBe(200);
+    const { body } = await sharedList(organizer);
+    const row = (body.threads ?? []).find((t) => t.id === "t-archive") as { filing?: string } | undefined;
+    expect(row?.filing).toBe("active");
+  });
+
+  test("removing takes it off the list", async () => {
+    expect((await file("remove", "t-archive", organizer)).status).toBe(200);
+    const { body } = await sharedList(organizer);
+    expect(ids(body)).not.toContain("t-archive");
+  });
+
+  test("and leaves the founder's conversation exactly where it was", async () => {
+    /*
+     * The line that matters. "Remove" means off the operating team's list. The
+     * messages are the founder's, and so is their own record that they chose
+     * to share it — an organizer tidying a queue must not quietly reverse a
+     * founder's decision or delete a word of what they wrote.
+     */
+    const res = await get(h, `/api/persistence?resource=threads&user=${encodeURIComponent(alice.email)}`, alice.cookie);
+    const data = (await res.json()) as {
+      threads: { id: string; shared_with_coach?: number; shared_state?: string; messages: unknown[] }[];
+    };
+    const own = data.threads.find((t) => t.id === "t-archive");
+    expect(own).toBeDefined();
+    expect(own?.messages.length).toBe(2);
+    expect(own?.shared_with_coach).toBe(1);
+
+    /* And the team's filing does not travel to the founder. Being told it was
+       read is the point of sharing; "they took it off their list" is a
+       different sentence and not one to put in front of anybody. */
+    expect(own?.shared_state).toBeUndefined();
+  });
+
+  test("a mentor reads the list but does not file it", async () => {
+    /* One list. A mentor archiving something would hide it from the people
+       running the programme. */
+    await makeThread(bob, "t-mentor-file", "Cofounder", "It is not working.");
+    await share(bob, "t-mentor-file", true);
+
+    expect((await get(h, "/api/admin/shared", mentor.cookie)).status).toBe(200);
+    for (const action of ["archive", "restore", "remove"]) {
+      expect((await file(action, "t-mentor-file", mentor)).status).toBe(403);
+    }
+  });
+
+  test("a founder cannot file anything at all", async () => {
+    for (const action of ["archive", "remove"]) {
+      expect((await file(action, "t-mentor-file", alice)).status).toBe(403);
+    }
+  });
+
+  test("a stray id cannot file a conversation nobody shared", async () => {
+    await makeThread(bob, "t-private-file", "Private", "PRIVATE-FILE-XYZ");
+    expect((await file("archive", "t-private-file", organizer)).status).toBe(404);
+    expect((await file("remove", "nonexistent", organizer)).status).toBe(404);
+
+    const { body } = await sharedList(organizer);
+    expect(JSON.stringify(body)).not.toContain("PRIVATE-FILE-XYZ");
   });
 });

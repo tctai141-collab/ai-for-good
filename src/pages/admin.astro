@@ -847,11 +847,11 @@ import QuickActions from "../components/QuickActions";
           <!-- One pill, moved and resized by script, sitting under the
                labels. No tab carries a background of its own. -->
           <span class="tab-cursor" id="tab-cursor" aria-hidden="true"></span>
+          <button type="button" class="tab" data-tab="programme">Programme</button>
           <button type="button" class="tab" data-tab="mentor">This week</button>
           <button type="button" class="tab" data-tab="wishes">Wishes<span id="wish-badge" class="tab-badge" hidden></span></button>
           <button type="button" class="tab" data-tab="people">People</button>
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
-          <button type="button" class="tab" data-tab="programme">Programme</button>
           <button type="button" class="tab" data-tab="shared">Shared</button>
           <button type="button" class="tab" data-tab="broadcast">Broadcast</button>
           <button type="button" class="tab" data-tab="knowledge">Knowledge</button>
@@ -1140,6 +1140,12 @@ import QuickActions from "../components/QuickActions";
               shown how often, and re-reading changes nothing — sharing
               something difficult and hearing nothing back is worse than not
               sharing at all.
+            </p>
+            <p class="note" style="margin-top:0">
+              <strong>Archive</strong> shortens this list and keeps the conversation;
+              <strong>Remove</strong> takes it off the list for good. Neither touches
+              the founder&rsquo;s copy — the conversation, and their own record that
+              they shared it, stay theirs. Organisers only.
             </p>
             <p class="message" id="shared-message" hidden></p>
             <div id="shared-list"></div>
@@ -3042,36 +3048,90 @@ import QuickActions from "../components/QuickActions";
             '<p class="note">Nothing shared yet. A founder has to hand a conversation over from their own sidebar.</p>';
           return;
         }
+
+        /* Archived ones drop to the bottom rather than out of sight. The point
+           of archiving is a shorter list, not a hidden one. */
+        const active = sharedThreads.filter((t) => t.filing !== "archived");
+        const archived = sharedThreads.filter((t) => t.filing === "archived");
+
+        const row = (t) => {
+          const open = sharedOpen.has(t.id);
+          const isArchived = t.filing === "archived";
+          const transcript = (t.messages || [])
+            .map((m) =>
+              '<p style="margin:0 0 10px"><strong style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em">' +
+              (m.role === "user" ? esc(t.founderName || "Founder") : "Sprint Buddy") +
+              "</strong><br />" + esc(m.content).replace(/\n/g, "<br />") + "</p>")
+            .join("");
+          return (
+            '<div class="rowline' + (isArchived ? " is-archived" : "") + '">' +
+            '<span class="grow"><strong>' + esc(t.founderName || t.founderEmail) + "</strong>" +
+            ' <span class="note" style="margin:0">· ' + esc(t.title || "Untitled") + "</span>" +
+            (t.seenAt || isArchived ? "" : ' <span style="color:var(--accent);font-size:0.75rem">· new</span>') +
+            "</span>" +
+            '<span class="note" style="margin:0">' + esc(relativeDay(t.updatedAt)) + "</span>" +
+            '<button type="button" class="disclose" data-shared="' + esc(t.id) + '">' +
+            (open ? "Close" : "Read") + "</button>" +
+            '<button type="button" class="disclose" data-file="' + (isArchived ? "restore" : "archive") + '" data-id="' + esc(t.id) + '">' +
+            (isArchived ? "Put back" : "Archive") + "</button>" +
+            '<button type="button" class="disclose danger" data-file="remove" data-id="' + esc(t.id) + '">Remove</button>' +
+            "</div>" +
+            (open
+              ? '<div class="expanded" style="max-width:62ch">' + transcript + "</div>"
+              : "")
+          );
+        };
+
         sharedList.innerHTML =
-          '<p class="note" style="margin:0 0 10px">' + sharedThreads.length +
-          " conversation" + (sharedThreads.length === 1 ? "" : "s") + " shared.</p>" +
+          '<p class="note" style="margin:0 0 10px">' + active.length +
+          " conversation" + (active.length === 1 ? "" : "s") + " to read" +
+          (archived.length ? " · " + archived.length + " archived" : "") + ".</p>" +
           '<div class="scroller">' +
-          sharedThreads
-            .map((t) => {
-              const open = sharedOpen.has(t.id);
-              const transcript = (t.messages || [])
-                .map((m) =>
-                  '<p style="margin:0 0 10px"><strong style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em">' +
-                  (m.role === "user" ? esc(t.founderName || "Founder") : "Sprint Buddy") +
-                  "</strong><br />" + esc(m.content).replace(/\n/g, "<br />") + "</p>")
-                .join("");
-              return (
-                '<div class="rowline">' +
-                '<span class="grow"><strong>' + esc(t.founderName || t.founderEmail) + "</strong>" +
-                ' <span class="note" style="margin:0">· ' + esc(t.title || "Untitled") + "</span>" +
-                (t.seenAt ? "" : ' <span style="color:var(--accent);font-size:0.75rem">· new</span>') +
-                "</span>" +
-                '<span class="note" style="margin:0">' + esc(relativeDay(t.updatedAt)) + "</span>" +
-                '<button type="button" class="disclose" data-shared="' + t.id + '">' +
-                (open ? "Close" : "Read") + "</button>" +
-                "</div>" +
-                (open
-                  ? '<div class="expanded" style="max-width:62ch">' + transcript + "</div>"
-                  : "")
-              );
-            })
-            .join("") +
+          active.map(row).join("") +
+          (archived.length
+            ? '<p class="note" style="margin:14px 0 6px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;font-size:0.6875rem">Archived</p>' +
+              archived.map(row).join("")
+            : "") +
           "</div>";
+
+        sharedList.querySelectorAll("button[data-file]").forEach((b) => {
+          b.addEventListener("click", async () => {
+            const action = b.dataset.file;
+            const id = b.dataset.id;
+
+            /* Removing asks, the way the rest of this page asks: two steps
+               rather than a modal. Archiving does not — it is one click back. */
+            if (action === "remove" && b.dataset.armed !== "yes") {
+              b.dataset.armed = "yes";
+              b.textContent = "Take it off the list?";
+              setTimeout(() => {
+                if (!b.isConnected) return;
+                b.dataset.armed = "";
+                b.textContent = "Remove";
+              }, 4000);
+              return;
+            }
+
+            let res;
+            try {
+              res = await fetch("/api/admin/shared", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action, id }),
+              });
+            } catch {
+              return say(sharedMessage, "Could not reach the server.", true);
+            }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) return say(sharedMessage, data.error || "That did not work.", true);
+            say(sharedMessage,
+              action === "archive" ? "Archived."
+                : action === "restore" ? "Back on the list."
+                : "Taken off the list. The founder still has their conversation.",
+              false);
+            loadShared();
+          });
+        });
 
         sharedList.querySelectorAll("button[data-shared]").forEach((b) => {
           b.addEventListener("click", async () => {
@@ -3417,19 +3477,15 @@ import QuickActions from "../components/QuickActions";
             "</ul></section>");
         }
 
-        if (shared.length) {
-          sections.push(
-            '<section class="panel"><h2>Handed to you</h2>' +
-            '<p class="note" style="margin-top:0">' + shared.length +
-            (shared.length === 1 ? " conversation" : " conversations") +
-            (unseen.length ? " · " + unseen.length + " you have not opened" : " · all opened") +
-            ". Read them under <strong>Shared</strong>.</p>" +
-            '<ul class="mentor-list">' +
-            shared.slice(0, 5).map((t) =>
-              "<li><strong>" + esc(t.founderName || t.founderEmail) + "</strong><span>" +
-              esc(t.title || "Untitled") + (t.seenAt ? "" : " · new") + "</span></li>").join("") +
-            "</ul></section>");
-        }
+        /*
+         * No "Handed to you" section here.
+         *
+         * It listed the same conversations as the Shared tab, one tab away,
+         * and this page is meant to be the short answer to "who should I talk
+         * to". A founder who has just handed something over still shows up in
+         * "Worth a conversation" above, ranked ahead of anything inferred from
+         * a score, which is the part that belongs on a landing screen.
+         */
 
         /* The team map's one useful sentence, which is invisible one profile
            at a time: what nobody in the room is good at. */

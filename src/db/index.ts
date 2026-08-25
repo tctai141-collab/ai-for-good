@@ -182,7 +182,17 @@ export function getThreads(userEmail: string) {
 
   return threads.map((t) => {
     const msgs = getMsgs.all({ $tid: t.id }) as MessageRow[];
-    return { ...t, messages: msgs.map((m) => ({ role: m.role, content: m.content })) };
+    /*
+     * shared_state stays behind.
+     *
+     * It is where the operating team filed a conversation on their own list,
+     * and it is not the founder's business that somebody archived what they
+     * handed over. shared_seen_at does travel — being told it was read is the
+     * point of sharing — but "the team took this off their list" is a
+     * different sentence, and not one this app should put in front of anybody.
+     */
+    const { shared_state: _teamFiling, ...row } = t as ThreadRow & { shared_state?: string };
+    return { ...row, messages: msgs.map((m) => ({ role: m.role, content: m.content })) };
   });
 }
 
@@ -831,8 +841,12 @@ export function setThreadShared(threadId: string, userEmail: string, shared: boo
  * founder chose to hand it over. Everything else stays unreadable to
  * organizers, which is the line the whole persistence layer is built around.
  */
+/** The states the operating team can file a shared conversation under. */
+export type SharedState = "active" | "archived" | "removed";
+
 export function listSharedThreads(): (ThreadRow & {
   founderName: string;
+  sharedState: SharedState;
   messages: { role: string; content: string }[];
 })[] {
   const db = getDb();
@@ -842,9 +856,10 @@ export function listSharedThreads(): (ThreadRow & {
          FROM threads t
          JOIN users u ON u.email = t.user_email
         WHERE t.shared_with_coach = 1
+          AND COALESCE(t.shared_state, 'active') <> 'removed'
         ORDER BY t.updated_at DESC`,
     )
-    .all() as (ThreadRow & { founder_name: string })[];
+    .all() as (ThreadRow & { founder_name: string; shared_state: string | null })[];
 
   const getMsgs = db.prepare(
     "SELECT role, content FROM messages WHERE thread_id = $tid ORDER BY id ASC",
@@ -853,8 +868,32 @@ export function listSharedThreads(): (ThreadRow & {
   return threads.map((t) => ({
     ...t,
     founderName: t.founder_name,
+    /* Rows written before the column existed have no value; they are active. */
+    sharedState: (t.shared_state ?? "active") as SharedState,
     messages: getMsgs.all({ $tid: t.id }) as { role: string; content: string }[],
   }));
+}
+
+/**
+ * Files a shared conversation on the team's side.
+ *
+ * Deliberately narrow. It writes one column on the thread and touches nothing
+ * else: not the messages, not the founder's share flag, not updated_at. An
+ * organizer tidying their own list must not be able to alter, hide or destroy
+ * a founder's conversation, and "remove" here means "off our list", never "off
+ * their account".
+ *
+ * Returns false for a thread nobody shared, so a stray id cannot file a
+ * private conversation.
+ */
+export function setSharedThreadState(threadId: string, state: SharedState): boolean {
+  const db = getDb();
+  const row = db
+    .query("SELECT shared_with_coach FROM threads WHERE id = $id")
+    .get({ $id: threadId }) as { shared_with_coach: number } | null;
+  if (!row || !row.shared_with_coach) return false;
+  db.run("UPDATE threads SET shared_state = $state WHERE id = $id", { $id: threadId, $state: state });
+  return true;
 }
 
 /**
