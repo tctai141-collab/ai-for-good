@@ -359,6 +359,21 @@ import Root from "../components/Root";
   .login-mascot-anchor {
     pointer-events: none;
   }
+  /*
+   * How much of the top-right corner the docked mascot owns.
+   *
+   * It is fixed to the viewport and floats above everything, so any page
+   * heading with something right-aligned in it will slide underneath. That
+   * only started mattering when the pages grew to the full width of the
+   * column: at 720px their right edge was nowhere near the corner.
+   *
+   * Derived from the mascot's own size and offset rather than guessed, so it
+   * keeps clearing it as both scale with the window.
+   */
+  :root {
+    --mascot-gutter: calc(clamp(3rem, 6vw, 5rem) + clamp(0.9rem, 2vw, 1.35rem) + 0.75rem);
+  }
+
   .persistent-buddy {
     position: fixed;
     z-index: 40;

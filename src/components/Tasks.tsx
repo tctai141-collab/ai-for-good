@@ -81,7 +81,7 @@ function daysLate(dueDate: string): number {
  * answers "how long have I got" without arithmetic. Further out the weekday
  * stops being useful and the calendar date takes over.
  */
-function statusLabel(item: DeadlineItem): string {
+export function statusLabel(item: DeadlineItem): string {
   if (item.done) return "Done";
   if (item.group === "overdue") {
     const late = daysLate(item.dueDate);
@@ -367,3 +367,122 @@ export default function Tasks({ state }: { state: DeadlinesState }) {
     </section>
   );
 }
+
+/**
+ * Deadlines as a page of their own.
+ *
+ * The sidebar block this replaces had to be a summary: three rows, a count, and
+ * a "+4 more" that hid the rest. Deadlines are the one thing in the programme
+ * with a date and a consequence, and reading them should not mean expanding a
+ * strip in a navigation column.
+ *
+ * The rows, the toggle and the busy state are the same ones the sidebar used,
+ * so ticking something off here behaves exactly as it did there. Only the
+ * arrangement is new: everything visible at once, grouped by when it is due.
+ */
+export function DeadlinesPage({ state }: { state: DeadlinesState }) {
+  const { data, toggle, busyId } = state;
+
+  if (!data) {
+    return (
+      <div className="dl-page">
+        <style>{DEADLINES_CSS}</style>
+        <h1 className="dl-title">Deadlines</h1>
+        <p className="dl-empty">These did not load. Refreshing usually sorts it.</p>
+      </div>
+    );
+  }
+
+  const items = data.deadlines;
+  const { completed, total } = data.progress ?? { completed: 0, total: 0 };
+
+  /* Grouped by when, in the order somebody cares about them. Done last and
+     quiet: it is a record, not a task. */
+  const groups: { key: DeadlineGroup; label: string; urgent?: boolean }[] = [
+    { key: "overdue", label: "Overdue", urgent: true },
+    { key: "thisWeek", label: "This week" },
+    { key: "upcoming", label: "Later" },
+    { key: "done", label: "Done" },
+  ];
+
+  return (
+    <div className="dl-page">
+      <style>{DEADLINES_CSS}</style>
+
+      <header className="dl-head">
+        <h1 className="dl-title">Deadlines</h1>
+        {total > 0 && (
+          <p className="dl-count">
+            <strong>{completed}</strong> of {total} done
+          </p>
+        )}
+      </header>
+
+      {items.length === 0 ? (
+        <p className="dl-empty">
+          Nothing set yet. Deadlines appear here as the team plans the sprint.
+        </p>
+      ) : (
+        groups.map((group) => {
+          const rows = items.filter((d) => d.group === group.key);
+          if (!rows.length) return null;
+          return (
+            <section key={group.key} className={`dl-group${group.key === "done" ? " is-done" : ""}`}>
+              <h2 className={`dl-grouphead${group.urgent ? " is-urgent" : ""}`}>
+                {group.label} <span>{rows.length}</span>
+              </h2>
+              <ul className="dl-list">
+                {rows.map((item) => (
+                  <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
+                ))}
+              </ul>
+            </section>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+export const DEADLINES_CSS = `
+.dl-page { max-width: min(1280px, 100%); margin: 0 auto; padding: 40px 32px 80px; }
+
+.dl-head {
+  /* Clear of the docked mascot, which floats over this corner. */
+  padding-right: var(--mascot-gutter, 0px);
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap; margin-bottom: 28px;
+}
+.dl-title {
+  margin: 0; font-size: 1.75rem; font-weight: 700;
+  letter-spacing: -0.022em; color: var(--ink);
+}
+.dl-count { margin: 0; font-size: 0.9375rem; color: var(--ink-sub, #8a8f98); }
+.dl-count strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.dl-empty {
+  margin: 0; max-width: 46ch;
+  font-size: 0.9375rem; line-height: 1.55; color: var(--ink-sub, #8a8f98);
+}
+
+.dl-group { margin-bottom: 30px; }
+.dl-group.is-done { opacity: 0.55; }
+.dl-group.is-done:hover { opacity: 0.85; }
+
+.dl-grouphead {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 8px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8125rem; font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink-sub, #8a8f98);
+}
+.dl-grouphead.is-urgent { color: var(--brand-red, #e5484d); border-bottom-color: rgba(229,72,77,0.4); }
+.dl-grouphead span { font-weight: 600; opacity: 0.7; font-variant-numeric: tabular-nums; }
+
+.dl-list { margin: 0; padding: 0; list-style: none; }
+
+@media (max-width: 720px) {
+  .dl-page { padding: 24px 16px 64px; }
+}
+`;

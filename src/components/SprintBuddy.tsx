@@ -1,9 +1,9 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
-import ProgrammeTimeline, { isoDay, type ProgrammeEvent } from "./ProgrammeTimeline";
+import ProgrammeTimeline from "./ProgrammeTimeline";
 import Wishes from "./Wishes";
 import Assistant from "./Assistant";
 import AaltoMark from "./AaltoMark";
-import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
+import { DeadlinesPage, useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
   INSTRUMENT_PREAMBLE,
@@ -389,7 +389,7 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections" | "programme" | "wishes" | "assistant";
+type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines";
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
@@ -582,6 +582,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         onReflections={() => setView("reflections")}
         onProgramme={() => setView("programme")}
         onWishes={() => setView("wishes")}
+        onDeadlines={() => setView("deadlines")}
         onAssistant={() => setView("assistant")}
         canAssist={canAssist}
         onSignOut={onSignOut}
@@ -625,6 +626,9 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         {view === "wishes" && persona === "founder" && (
           <Scroll><Wishes /></Scroll>
         )}
+        {view === "deadlines" && persona === "founder" && (
+          <Scroll><DeadlinesPage state={deadlines} /></Scroll>
+        )}
         {persona === "founder" && view === "reflections" && (
           <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} /></Scroll>
         )}
@@ -663,6 +667,7 @@ type SidebarProps = {
   onReflections: () => void;
   onProgramme: () => void;
   onWishes: () => void;
+  onDeadlines: () => void;
   onAssistant: () => void;
   canAssist: boolean;
   onSignOut?: () => void;
@@ -670,7 +675,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onDeadlines, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -778,9 +783,6 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             pushes the footer out exactly as before.
           */}
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", margin: "0 -4px", padding: "0 4px" }}>
-          <Tasks state={deadlines} />
-
-          <ProgrammeRail onOpen={onProgramme} />
 
           {/*
             Conversations sit above the check-in.
@@ -884,6 +886,20 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             <p style={{ ...navLabel, marginTop: 6 }}>Elsewhere</p>
             {/* Above Reflections because it is the cohort's schedule and gets
                 opened far more often than a founder's own archive. */}
+            {/* First, and the only one that can shout. The count is what the
+                sidebar block used to be for; the page is where the detail
+                went. */}
+            <button onClick={onDeadlines} className="navitem" style={{ ...navItem, background: view === "deadlines" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+              <Glyph>◱</Glyph> <span style={{ flex: 1 }}>Deadlines</span>
+              {deadlines.overdueCount > 0 && (
+                <span
+                  aria-label={`${deadlines.overdueCount} overdue`}
+                  style={{ padding: "1px 7px", borderRadius: 999, background: C.red, color: "oklch(98% 0 0)", fontSize: 11, fontWeight: 800, lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}
+                >
+                  {deadlines.overdueCount}
+                </span>
+              )}
+            </button>
             <button onClick={onProgramme} className="navitem" style={{ ...navItem, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>▤</Glyph> <span>Programme</span>
             </button>
@@ -989,6 +1005,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
       {open ? panel : (
         <SidebarRail
           width={railWidth}
+          onDeadlines={onDeadlines}
           canAssist={canAssist}
           onAssistant={onAssistant}
           persona={persona}
@@ -1095,11 +1112,12 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
  */
 function SidebarRail({
   persona, view, coachTeam, deadlines, checkinDone, width, canAssist,
-  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onReflections, onAssistant, onPickTeam, onSignOut,
+  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onDeadlines, onReflections, onAssistant, onPickTeam, onSignOut,
 }: {
   width: number;
   canAssist: boolean;
   onAssistant: () => void;
+  onDeadlines: () => void;
   persona: Persona;
   view: View;
   coachTeam: Team | null;
@@ -1120,6 +1138,7 @@ function SidebarRail({
     ? [
         { key: "chat", glyph: "✉", label: "Conversations", on: view === "chat", run: onNew },
         { key: "checkin", glyph: "◉", label: checkinDone ? "Today's check-in — done" : "Today's check-in", on: false, dot: !checkinDone, run: onStartCheckin },
+        { key: "deadlines", glyph: "◱", label: "Deadlines", on: view === "deadlines", run: onDeadlines },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
         { key: "wishes", glyph: "✦", label: "Ask for something", on: view === "wishes", run: onWishes },
         { key: "reflections", glyph: "◷", label: "Reflections", on: view === "reflections", run: onReflections },
@@ -1146,7 +1165,7 @@ function SidebarRail({
 
       {persona === "founder" && deadlines.overdueCount > 0 && (
         <button
-          onClick={onExpand}
+          onClick={onDeadlines}
           aria-label={`${deadlines.overdueCount} deadline${deadlines.overdueCount === 1 ? "" : "s"} overdue`}
           title={`${deadlines.overdueCount} overdue`}
           className="navitem"
@@ -2188,7 +2207,9 @@ function Reflections({
        below is auto-fit, so the extra width goes straight into more tiles per
        row rather than into wider tiles. */
     <div className="rise" style={{ maxWidth: "min(1280px, 100%)", margin: "0 auto", padding: "60px 32px 90px" }}>
-      <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", margin: "0 0 28px" }}>
+      {/* paddingRight clears the docked mascot, which is fixed over this
+          corner and only started overlapping once the page went full width. */}
+      <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", margin: "0 0 28px", paddingRight: "var(--mascot-gutter, 0px)" }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.75rem, 3.4vw, 2rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", margin: 0, color: C.ink }}>Your week.</h1>
         {/* Was down beside "Your record" at the foot of the page, which is a
             long way to scroll for the page's only export. */}
@@ -3042,188 +3063,6 @@ function Arc({ checkins }: { checkins: Checkin[] }) {
         )}
       </div>
     </div>
-  );
-}
-
-type ProgrammeWeek = { week: number; phase: string; title: string; milestones: string; sessions: string };
-
-/**
- * What is on, in the left rail.
- *
- * Lives in the navigation rather than on Reflections because it answers a
- * question a founder has in passing, not one they sit down for. It is the
- * cohort's own schedule and it was, until now, the one thing the product
- * would not tell them.
- *
- * Shows this week by default and opens to the next two, and says what it is
- * waiting for when the programme has no weeks in it yet. Founders should be
- * able to learn that the schedule lives here before there is a schedule.
- */
-/** "Tue 8 Sep", or "Tomorrow" when it is. */
-function shortWhen(day: string): string {
-  const date = new Date(`${day}T00:00:00`);
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (day === isoDay(tomorrow)) return "Tomorrow";
-  return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-}
-
-function ProgrammeRail({ onOpen }: { onOpen: () => void }) {
-  const [weeks, setWeeks] = useState<ProgrammeWeek[] | null>(null);
-  const [events, setEvents] = useState<ProgrammeEvent[]>([]);
-  const [now, setNow] = useState(1);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    fetch("/api/programme")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!live || !d) return;
-        setWeeks((d.weeks as ProgrammeWeek[]) ?? []);
-        setNow((d.currentWeek as number) ?? 1);
-      })
-      .catch(() => {});
-    /*
-     * The dated events, which are what this section is actually about.
-     *
-     * It used to read only the week themes, and once the programme had dates in
-     * it the sidebar said "Nothing scheduled yet" while the Programme page
-     * listed seven things. Two views of one schedule contradicting each other
-     * is worse than either of them being empty.
-     */
-    fetch("/api/programme-events")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (live && d) setEvents((d.events as ProgrammeEvent[]) ?? []); })
-      .catch(() => {});
-    return () => { live = false; };
-  }, []);
-
-  /* The next three things with a date on them. A founder looking at this
-     corner wants to know what is on, not what the week is themed around. */
-  const today = isoDay(new Date());
-  const upcoming = useMemo(
-    () => events.filter((e) => e.startsOn >= today).slice(0, 3),
-    [events, today],
-  );
-
-  const ahead = useMemo(() => {
-    if (!weeks) return [];
-    return weeks
-      .filter((w) => w.week >= now && (w.title || w.milestones || w.sessions))
-      .slice(0, 3);
-  }, [weeks, now]);
-
-  const [current, ...rest] = ahead;
-  const shown = open ? ahead : current ? [current] : [];
-
-  return (
-    <section aria-label="Programme" style={{ marginBottom: 16 }}>
-      <p style={{ ...navLabel, margin: "0 0 6px", padding: "0 4px" }}>What&rsquo;s on</p>
-
-      {/*
-        The empty state is shown, not hidden.
-
-        I hid this when the programme had no weeks in it, reasoning that an
-        empty box in permanent navigation teaches people to ignore that corner.
-        That was the wrong call here: a founder who cannot see the section at
-        all has no way to learn the schedule will appear there, and it read as
-        the feature having gone missing. A section that says what it is waiting
-        for is not an empty box.
-      */}
-      {!shown.length && !upcoming.length && (
-        <p style={{ margin: 0, padding: "0 4px", fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>
-          Nothing scheduled yet. The team fills this in as the sprint is planned.
-        </p>
-      )}
-
-      {upcoming.length > 0 && (
-        <div style={{ display: "grid", gap: 9, marginBottom: shown.length ? 12 : 0 }}>
-          {upcoming.map((event) => (
-            <button
-              key={event.id}
-              type="button"
-              onClick={onOpen}
-              className="navitem"
-              style={{
-                display: "block", width: "100%", textAlign: "left",
-                padding: "0 4px", background: "transparent", border: "none",
-                cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              <span style={{
-                display: "block", fontSize: 10.5, fontWeight: 800, letterSpacing: 1.1,
-                textTransform: "uppercase",
-                color: event.startsOn === today ? C.accent : C.faint,
-              }}>
-                {event.startsOn === today ? "Today" : shortWhen(event.startsOn)}
-                {event.startTime ? ` · ${event.startTime}` : ""}
-              </span>
-              <span style={{ display: "block", margin: "2px 0 0", fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>
-                {event.title}
-              </span>
-              {event.location && (
-                <span style={{ display: "block", margin: "1px 0 0", fontSize: 11.5, color: C.faint, lineHeight: 1.4 }}>
-                  {event.location}
-                </span>
-              )}
-            </button>
-          ))}
-          {/* The way into the full thing, next to the thing it expands. The
-              footer item is the stable address; this is the one you find
-              while already looking at the schedule. */}
-          <button
-            type="button"
-            onClick={onOpen}
-            className="navitem"
-            style={{
-              display: "block", width: "100%", textAlign: "left",
-              background: "transparent", border: "none", color: C.faint,
-              cursor: "pointer", font: "600 11.5px/1 inherit", padding: "2px 4px",
-            }}
-          >
-            See the whole programme →
-          </button>
-        </div>
-      )}
-
-      <div style={{ display: "grid", gap: 10 }}>
-        {shown.map((w) => (
-          <div key={w.week} style={{ padding: "0 4px" }}>
-            <p style={{
-              margin: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.2,
-              textTransform: "uppercase", color: w.week === now ? C.accent : C.faint,
-            }}>
-              {w.week === now ? "This week" : `Week ${w.week}`}
-            </p>
-            {w.title && (
-              <p style={{ margin: "2px 0 0", fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{w.title}</p>
-            )}
-            {w.sessions && (
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: C.sub, lineHeight: 1.45 }}>{w.sessions}</p>
-            )}
-            {open && w.milestones && (
-              <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.faint, lineHeight: 1.45 }}>{w.milestones}</p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {rest.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="navitem"
-          style={{
-            display: "block", width: "100%", textAlign: "left", marginTop: 6,
-            background: "transparent", border: "none", color: C.faint,
-            cursor: "pointer", font: "600 11.5px/1 inherit", padding: "6px 4px",
-          }}
-        >
-          {open ? "Show less" : `What's coming (${rest.length})`}
-        </button>
-      )}
-    </section>
   );
 }
 
