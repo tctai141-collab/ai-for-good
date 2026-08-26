@@ -121,6 +121,36 @@ export class RateLimiter {
 
 export const chatLimiter = new RateLimiter(CHAT_RATE_LIMIT, CHAT_RATE_WINDOW_MS);
 
+/**
+ * Writes by the operating team.
+ *
+ * Not because organizers are suspected — because an organizer session is the
+ * most valuable thing an attacker can take here, and until now it was the one
+ * that could act without limit. Two things were reachable in a loop with no
+ * ceiling: creating accounts, which sends an invite email each time and can
+ * burn a sending reputation and a quota from one stolen cookie, and writing
+ * rows, which fills a 1 GB disk that the database also lives on.
+ *
+ * Sixty a minute is far above the pace of a person filling in a form and far
+ * below the pace of a script. Broadcast is not covered by it and does not need
+ * to be: it already refuses to send anything the sender has not first received
+ * themselves.
+ */
+export const ADMIN_WRITE_LIMIT = 60;
+export const ADMIN_WRITE_WINDOW_MS = 60_000;
+export const adminWriteLimiter = new RateLimiter(ADMIN_WRITE_LIMIT, ADMIN_WRITE_WINDOW_MS);
+
+/** The 429 every limiter hands back, so the wording cannot drift. */
+export function tooMany(retryAfterSeconds: number): Response {
+  return new Response(
+    JSON.stringify({ error: "That is a lot of requests very quickly. Give it a moment." }),
+    {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(retryAfterSeconds) },
+    },
+  );
+}
+
 /** Trims a string to a cap, preserving the front. */
 export function cap(value: unknown, max: number): string {
   return typeof value === "string" ? value.slice(0, max) : "";
