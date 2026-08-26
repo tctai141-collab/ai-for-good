@@ -1,0 +1,70 @@
+---
+/**
+ * The Aalto mark, bottom right, on every screen.
+ *
+ * One component used by both pages so the two cannot drift: index.astro covers
+ * the sign-in screen and the whole app, since the app is a React island inside
+ * that same page, and admin.astro covers the operating team's side.
+ *
+ * It removes itself if the file is not there. The mark is a trademarked asset
+ * that has to be the approved file rather than something reconstructed, so
+ * this ships with the slot and no artwork: drop the SVG at public/aalto-logo.svg
+ * and it appears. Until then a broken-image icon in the corner of a login
+ * screen would be worse than nothing, hence the guard.
+ *
+ * Not a link. It sits over a check-in that somebody may be halfway through
+ * writing, and a corner of the screen that navigates away from unsaved words
+ * is a corner nobody should have put there.
+ */
+---
+
+<div class="aalto-mark" data-aalto-mark hidden>
+  <img src="/aalto-logo.svg" alt="Aalto University" width="72" height="26" />
+</div>
+
+<script is:inline>
+  (function () {
+    var box = document.querySelector("[data-aalto-mark]");
+    if (!box) return;
+    var img = box.querySelector("img");
+    img.addEventListener("load", function () { box.hidden = false; });
+    img.addEventListener("error", function () { box.remove(); });
+    // A cached image can finish before the listener is attached.
+    if (img.complete && img.naturalWidth > 0) box.hidden = false;
+    else if (img.complete) box.remove();
+  })();
+</script>
+
+<style is:global>
+  .aalto-mark {
+    position: fixed;
+    right: 26px;
+    bottom: 26px;
+    z-index: 30;
+    /* Below the quick-actions button, which lifts itself clear of this. */
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    opacity: 0.5;
+    transition: opacity 200ms ease;
+  }
+  /* Legible without competing with the wordmark it sits under. */
+  .aalto-mark:hover { opacity: 0.8; }
+  .aalto-mark img {
+    display: block;
+    height: 26px;
+    width: auto;
+    max-width: 140px;
+  }
+
+  @media (max-width: 700px) {
+    .aalto-mark { right: 16px; bottom: 16px; }
+    .aalto-mark img { height: 20px; }
+  }
+
+  /* The founder composer runs the full width of the column at the bottom of
+     the screen; the mark sits beside it rather than over the send button. */
+  @media (max-width: 900px) {
+    .aalto-mark { opacity: 0.35; }
+  }
+</style>
