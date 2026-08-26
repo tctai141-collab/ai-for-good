@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import AaltoMark from "./AaltoMark";
 import SprintBuddyCube from "./SprintBuddyCube";
 import LiquidGlassButton from "./LiquidGlassButton";
 import ScrambleText from "./ScrambleText";
@@ -306,6 +307,17 @@ export default function App() {
               {/* The wordmark, above the fields rather than across the top of
                   the page. Each of the programme's three names scrambles in;
                   the readable copy for assistive tech is the heading below. */}
+              {/*
+                Above the wordmark rather than beside it.
+
+                The line below scrambles through three names of different
+                lengths, so anything sitting next to it would shuffle sideways
+                every second. Above, left-aligned to the same edge, it holds
+                still and still reads as one lockup.
+              */}
+              <div style={{ marginBottom: 14 }}>
+                <AaltoMark height={26} />
+              </div>
               <ScrambleText texts={PROGRAMME_NAMES} />
               {/* The heading stays as text so the page keeps an h1 and the
                   panel keeps something to be labelled by: the morphing line

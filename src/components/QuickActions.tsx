@@ -210,8 +210,7 @@ const CSS = `
 .qa {
   position: fixed;
   right: 26px;
-  /* Clear of the Aalto mark, which sits in this corner on every screen. */
-  bottom: 68px;
+  bottom: 26px;
   z-index: 40;
   width: 56px;
   height: 56px;
@@ -338,7 +337,7 @@ const CSS = `
 /* On a narrow screen the arc runs off the left edge. Stack it instead, and pin
    the labels open, since there is no hover on a phone. */
 @media (max-width: 760px) {
-  .qa { right: 16px; bottom: 52px; }
+  .qa { right: 16px; bottom: 16px; }
   .qa.is-open .qa-item:nth-child(1) { transform: translate(0, -60px) scale(1); }
   .qa.is-open .qa-item:nth-child(2) { transform: translate(0, -116px) scale(1); }
   .qa.is-open .qa-item:nth-child(3) { transform: translate(0, -172px) scale(1); }
