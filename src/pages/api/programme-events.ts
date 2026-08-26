@@ -8,7 +8,7 @@ import {
 } from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
-import { cap, readJsonBody } from "../../lib/limits";
+import { adminWriteLimiter, cap, readJsonBody, tooMany } from "../../lib/limits";
 import { validDate, validTime } from "../../lib/programme-dates";
 
 /**
@@ -22,6 +22,17 @@ import { validDate, validTime } from "../../lib/programme-dates";
 const MAX_TITLE = 200;
 const MAX_LOCATION = 200;
 const MAX_DESCRIPTION = 2_000;
+
+/*
+ * A ceiling on how many can exist, not just how fast they arrive.
+ *
+ * The rate limit above slows a loop down; this stops it. Deadlines already
+ * carried a cap for the same reason — the database is a file on a 1 GB disk,
+ * and unbounded rows from a stolen organizer session is the cheapest way to
+ * take the whole thing down. A fifteen-week programme with four things a day
+ * would not reach a quarter of this.
+ */
+const MAX_EVENTS = 2_000;
 
 /** The kinds an event can be. Anything else is rejected rather than coerced. */
 const KINDS = ["session", "milestone", "checkpoint", "social", "trip"] as const;
@@ -51,6 +62,10 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (!session) return json({ error: "Not signed in." }, 401);
     if (session.role !== "organizer") return json({ error: "Organizers only." }, 403);
 
+    /* Rows on a 1 GB disk the database also lives on. */
+    const limited = adminWriteLimiter.check(session.email);
+    if (limited) return tooMany(limited.retryAfterSeconds);
+
     const read = await readJsonBody<Record<string, unknown>>(request);
     if (!read.ok) return read.response;
     const body = read.value;
@@ -65,6 +80,13 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
     const title = cap(body.title, MAX_TITLE).trim();
     if (!title) return json({ error: "An event needs a title." }, 400);
+
+    /* Checked only for new entries, so editing one of them stays possible at
+       the ceiling rather than locking the schedule. */
+    const isNew = !(typeof body.id === "string" && body.id);
+    if (isNew && listProgrammeEvents().length >= MAX_EVENTS) {
+      return json({ error: "There are already too many entries in the programme." }, 413);
+    }
 
     if (!validDate(body.startsOn)) return json({ error: "Pick a date." }, 400);
 

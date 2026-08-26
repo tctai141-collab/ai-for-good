@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { readJsonBody } from "../../lib/limits";
+import { adminWriteLimiter, tooMany, readJsonBody } from "../../lib/limits";
 import {
   completedDeadlineIds,
   createDeadline,
@@ -165,8 +165,19 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (!read.ok) return read.response;
     body = read.value;
 
-    const organizerOnly = () =>
-      session.role === "organizer" ? null : err("Organizers only.", 403);
+    /*
+     * Role and pace in one gate.
+     *
+     * Every organizer-only action here writes a row, and they all go through
+     * this, so putting the ceiling here covers them together and cannot be
+     * forgotten when a new action is added below. MAX_DEADLINES already bounds
+     * how many can exist; this bounds how fast a stolen session can get there.
+     */
+    const organizerOnly = () => {
+      if (session.role !== "organizer") return err("Organizers only.", 403);
+      const limited = adminWriteLimiter.check(session.email);
+      return limited ? tooMany(limited.retryAfterSeconds) : null;
+    };
 
     switch (body.action) {
       case "create": {

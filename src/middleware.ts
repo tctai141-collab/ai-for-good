@@ -117,11 +117,22 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Don't let a browser second-guess a declared content type.
   response.headers.set("X-Content-Type-Options", "nosniff");
 
-  // Nothing here uses any of these, so none of them should be reachable — by
-  // this page or by anything that manages to run inside it.
+  /*
+   * Everything denied except the microphone, which this origin may ask for.
+   *
+   * It was denied outright, and that was correct until dictation shipped —
+   * the comment here said "nothing uses any of these" and quietly stopped
+   * being true. The effect was a feature that could never work in production:
+   * getUserMedia is refused by the browser before the permission prompt, and
+   * the founder is told to check their browser settings, which would not have
+   * helped.
+   *
+   * self, not *. An embedded third party still cannot reach it, and framing is
+   * refused anyway.
+   */
   response.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+    "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()",
   );
 
   // Nothing here is meant to be embedded; refusing framing removes a

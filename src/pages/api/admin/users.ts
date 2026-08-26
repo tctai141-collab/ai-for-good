@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { APP_URL_UNSET, configuredAppUrl } from "../../../lib/appUrl";
-import { readJsonBody } from "../../../lib/limits";
+import { adminWriteLimiter, readJsonBody, tooMany } from "../../../lib/limits";
 import {
   countOrganizers,
   createInvite,
@@ -125,6 +125,11 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     role?: unknown;
     entries?: unknown;
   };
+  /* An organizer session is the most valuable thing to steal here, and until
+     now it could create accounts — each one an email — in a loop. */
+  const limited = adminWriteLimiter.check(session.email);
+  if (limited) return tooMany(limited.retryAfterSeconds);
+
   const read = await readJsonBody<typeof body>(request);
   if (!read.ok) return read.response;
   body = read.value;
