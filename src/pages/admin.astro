@@ -742,38 +742,7 @@ import QuickActions from "../components/QuickActions";
       }
       .dp-today:hover { border-color: rgba(255, 255, 255, 0.24); }
 
-      /* ── Assistant ── */
-  .asst-log {
-    display: flex; flex-direction: column; gap: 14px;
-    max-height: 46vh; min-height: 120px; overflow-y: auto;
-    margin: 16px 0 12px; padding: 4px 2px;
-  }
-  .asst-log:empty { display: none; }
-  .asst-turn { display: flex; flex-direction: column; gap: 3px; }
-  .asst-who {
-    font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.07em;
-    text-transform: uppercase; color: var(--muted);
-  }
-  .asst-turn.is-user .asst-who { color: var(--accent); }
-  .asst-text {
-    max-width: 70ch; font-size: 0.9375rem; line-height: 1.6;
-    white-space: pre-wrap;
-  }
-  .asst-turn.is-user .asst-text { color: var(--sub); }
-
-  .asst-form { display: flex; gap: 10px; align-items: flex-end; }
-  .asst-form textarea { flex: 1 1 auto; min-width: 0; resize: vertical; }
-  .asst-form button { flex: 0 0 auto; }
-
-  .asst-eg {
-    border: 1px solid var(--border-strong); border-radius: 999px;
-    background: transparent; color: var(--sub);
-    padding: 3px 10px; margin: 0 4px 4px 0;
-    font: inherit; font-size: 0.75rem; cursor: pointer;
-  }
-  .asst-eg:hover { color: var(--text); border-color: var(--accent); }
-
-  /* ── Wishes ── */
+      /* ── Wishes ── */
   .tab-badge {
     display: inline-block; margin-left: 6px; padding: 0 6px;
     border-radius: 999px; background: var(--brand-accent); color: #fff;
@@ -885,7 +854,6 @@ import QuickActions from "../components/QuickActions";
                labels. No tab carries a background of its own. -->
           <span class="tab-cursor" id="tab-cursor" aria-hidden="true"></span>
           <button type="button" class="tab" data-tab="programme">Programme</button>
-          <button type="button" class="tab" data-tab="assistant">Assistant</button>
           <button type="button" class="tab" data-tab="mentor">This week</button>
           <button type="button" class="tab" data-tab="wishes">Wishes<span id="wish-badge" class="tab-badge" hidden></span></button>
           <button type="button" class="tab" data-tab="people">People</button>
@@ -1145,38 +1113,6 @@ import QuickActions from "../components/QuickActions";
 
           <div id="programme-list"></div>
         </section>
-        </div>
-
-        <div class="tabpanel" id="tab-assistant" hidden>
-          <section class="panel">
-            <h2>Ask about the cohort</h2>
-            <p class="note" style="margin-top:0">
-              It reads the same things you can: attention scores and themes, deadlines
-              and who is behind, the programme, what the cohort has asked for, and the
-              titles of conversations handed over. Ask it who to talk to this week, what
-              is due, or what people keep bringing up.
-            </p>
-            <p class="note" style="margin-top:0">
-              It cannot read founders&rsquo; conversations, the words of their check-ins,
-              or their working-style answers. Those are private to each founder and the
-              team has never had them. It will say so rather than guess.
-            </p>
-
-            <div id="asst-log" class="asst-log" aria-live="polite"></div>
-
-            <form id="asst-form" class="asst-form">
-              <textarea id="asst-input" rows="2" maxlength="2000"
-                        placeholder="Who should I talk to this week?"></textarea>
-              <button type="submit" id="asst-send">Ask</button>
-            </form>
-            <p class="note" style="margin:8px 0 0" id="asst-hint">
-              Try: <button type="button" class="asst-eg">Who should I talk to this week?</button>
-              <button type="button" class="asst-eg">What is due in the next fortnight?</button>
-              <button type="button" class="asst-eg">What has the cohort asked us for?</button>
-              <button type="button" class="asst-eg" id="asst-briefing">Show me exactly what you can see</button>
-            </p>
-            <p class="message" id="asst-message" hidden></p>
-          </section>
         </div>
 
         <div class="tabpanel" id="tab-wishes" hidden>
@@ -2398,132 +2334,6 @@ import QuickActions from "../components/QuickActions";
           !prMilestones.value.trim() && !prSessions.value.trim();
         say(prMessage, blank ? "Week " + prWeek.value + " cleared." : "Week " + prWeek.value + " saved.", false);
         loadProgramme();
-      });
-
-      // ---- Assistant ------------------------------------------------------
-
-      const asstLog = document.getElementById("asst-log");
-      const asstInput = document.getElementById("asst-input");
-      const asstSend = document.getElementById("asst-send");
-      const asstMessage = document.getElementById("asst-message");
-      const asstHint = document.getElementById("asst-hint");
-
-      /* The whole conversation, sent back each turn. The briefing is rebuilt
-         server-side every time, so history here is only the dialogue. */
-      let asstTurns = [];
-      let asstBusy = false;
-
-      function asstBubble(role, text) {
-        const el = document.createElement("div");
-        el.className = "asst-turn is-" + role;
-        el.innerHTML = '<span class="asst-who">' + (role === "user" ? "You" : "Assistant") +
-          '</span><div class="asst-text"></div>';
-        el.querySelector(".asst-text").textContent = text;
-        asstLog.append(el);
-        asstLog.scrollTop = asstLog.scrollHeight;
-        return el.querySelector(".asst-text");
-      }
-
-      async function asstAsk(question) {
-        if (asstBusy || !question.trim()) return;
-        asstBusy = true;
-        asstSend.disabled = true;
-        asstInput.value = "";
-        asstMessage.hidden = true;
-        if (asstHint) asstHint.hidden = true;
-
-        asstBubble("user", question);
-        asstTurns.push({ role: "user", content: question });
-        const target = asstBubble("assistant", "\u2026");
-
-        let res;
-        try {
-          res = await fetch("/api/admin/assistant", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: asstTurns }),
-          });
-        } catch {
-          target.textContent = "Could not reach the server.";
-          asstBusy = false; asstSend.disabled = false;
-          return;
-        }
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          target.textContent = data.error || "That did not work.";
-          asstBusy = false; asstSend.disabled = false;
-          return;
-        }
-
-        /* The stream is OpenAI-style SSE, the same shape the founder chat
-           consumes, so the parsing is the same three lines. */
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let answer = "";
-        target.textContent = "";
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop() || "";
-          for (const part of parts) {
-            const line = part.trim();
-            if (!line.startsWith("data:")) continue;
-            const payload = line.slice(5).trim();
-            if (payload === "[DONE]") continue;
-            try {
-              const chunk = JSON.parse(payload);
-              const bit = chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content;
-              if (bit) { answer += bit; target.textContent = answer; asstLog.scrollTop = asstLog.scrollHeight; }
-            } catch { /* a partial frame; the next read completes it */ }
-          }
-        }
-
-        asstTurns.push({ role: "assistant", content: answer });
-        asstBusy = false;
-        asstSend.disabled = false;
-        asstInput.focus();
-      }
-
-      document.getElementById("asst-form").addEventListener("submit", function (event) {
-        event.preventDefault();
-        asstAsk(asstInput.value);
-      });
-
-      asstInput.addEventListener("keydown", function (event) {
-        // Enter sends, shift+enter is a newline, the same as the founder side.
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          asstAsk(asstInput.value);
-        }
-      });
-
-      document.querySelectorAll(".asst-eg").forEach(function (b) {
-        if (b.id === "asst-briefing") return;
-        b.addEventListener("click", function () { asstAsk(b.textContent); });
-      });
-
-      /* Not a question for the model — it prints the briefing verbatim. An
-         assistant that claims a privacy boundary should let somebody read the
-         thing it is actually given rather than take the claim on faith. */
-      document.getElementById("asst-briefing").addEventListener("click", async function () {
-        let res;
-        try {
-          res = await fetch("/api/admin/assistant", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ briefing: true }),
-          });
-        } catch {
-          return say(asstMessage, "Could not reach the server.", true);
-        }
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) return say(asstMessage, data.error || "That did not work.", true);
-        if (asstHint) asstHint.hidden = true;
-        asstBubble("assistant", "This is everything I am given, word for word:\n\n" + data.text);
       });
 
       // ---- Wishes ---------------------------------------------------------

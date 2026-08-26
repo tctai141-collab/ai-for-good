@@ -396,7 +396,7 @@ export default function App() {
     return (
       <>
         {walkthrough}
-        <SprintBuddy persona="coach" userEmail={user.email} onSignOut={handleSignOut} />
+        <SprintBuddy persona="coach" canAssist={user.role === "organizer"} userEmail={user.email} onSignOut={handleSignOut} />
         <button
           type="button"
           onClick={() => enterPreview()}
