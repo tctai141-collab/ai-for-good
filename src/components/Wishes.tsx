@@ -107,6 +107,7 @@ export default function Wishes() {
         </p>
       </header>
 
+      <div className="wi-columns">
       <section className="wi-form">
         <label className="wi-label" htmlFor="wi-audience">Who is this for</label>
         <select
@@ -175,12 +176,31 @@ export default function Wishes() {
           ))
         )}
       </section>
+      </div>
     </div>
   );
 }
 
 export const WISHES_CSS = `
-.wi-wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+.wi-wrap { max-width: min(1280px, 100%); margin: 0 auto; padding: 40px 32px 80px; }
+
+/*
+ * Two columns once there is room for two.
+ *
+ * Widening the container alone would have left the same narrow column sitting
+ * in a wider box, which is the complaint rather than the fix. The form and the
+ * history are different jobs and neither needs the full width, so on a large
+ * screen they sit side by side and the page is actually full.
+ */
+@media (min-width: 1040px) {
+  .wi-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+    gap: 40px;
+    align-items: start;
+  }
+  .wi-list { margin-top: 0; }
+}
 .wi-head { margin-bottom: 24px; }
 .wi-title {
   margin: 0; font-size: 1.75rem; font-weight: 700;

@@ -453,7 +453,10 @@ function CalendarMonth({ events, today, openId, setOpenId }: ViewProps) {
 }
 
 export const PROGRAMME_CSS = `
-.pt-wrap { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+/* The page uses the window it is given. A fixed column left a third of a
+   laptop screen empty beside a calendar that is better the wider it is; the
+   things inside that should not run long keep their own measure in ch. */
+.pt-wrap { max-width: min(1280px, 100%); margin: 0 auto; padding: 40px 32px 80px; }
 
 .pt-head {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -514,7 +517,7 @@ export const PROGRAMME_CSS = `
 
 .pt-item {
   position: relative; display: grid;
-  grid-template-columns: 190px 1fr; gap: 4px 20px;
+  grid-template-columns: 220px 1fr; gap: 4px 28px;
   padding: 14px 0;
 }
 .pt-item + .pt-item { border-top: 1px solid rgba(255,255,255,0.05); }

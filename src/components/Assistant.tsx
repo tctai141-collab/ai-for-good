@@ -209,7 +209,9 @@ export default function Assistant() {
 }
 
 export const ASSISTANT_CSS = `
-.as-wrap { max-width: 780px; margin: 0 auto; padding: 40px 24px 80px; }
+/* Wider than it was, but the transcript keeps its measure below: a chat read
+   at 140 characters a line is worse, not fuller. */
+.as-wrap { max-width: min(1100px, 100%); margin: 0 auto; padding: 40px 32px 80px; }
 
 .as-head { margin-bottom: 22px; }
 .as-title {
