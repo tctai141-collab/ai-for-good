@@ -218,6 +218,66 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       return Response.json({ ok: true, email, emailed: true });
     }
 
+    case "signout-all": {
+      /*
+       * Ends every live session for an account. No email, no waiting.
+       *
+       * The gap this fills: sessions only died when a reset link was redeemed,
+       * so somebody signed in on a machine they no longer control had to wait
+       * on an email to get out of it. Revoking access should never depend on
+       * mail delivery.
+       *
+       * It grants nothing. Ending sessions cannot read anything, and the next
+       * sign-in still needs the password.
+       */
+      const existing = getUserRow(email);
+      if (!existing) return Response.json({ error: "No such account." }, { status: 404 });
+
+      endAllSessions(email);
+      recordAdminAction(session.email, "signout-all", email);
+      /* Their own session is one of the ones just ended, so the page has to
+         know to stop pretending they are signed in. */
+      return Response.json({ ok: true, email, self: email === session.email });
+    }
+
+    case "reset-link": {
+      /*
+       * Issues a reset and hands back the link instead of emailing it.
+       *
+       * Your own account only, and that restriction is the whole point rather
+       * than caution. The link used to come back in the response for anybody,
+       * which meant an organizer could press "Reset password" on a founder,
+       * redeem it themselves, set a password and sign in as them — reading the
+       * conversations this app promises are private. That was closed once and
+       * must not be reopened by a convenience.
+       *
+       * For your own account it grants nothing you do not already have, and it
+       * is the difference between a slow mail queue being an inconvenience and
+       * being a lock-out.
+       */
+      if (email !== session.email) {
+        return Response.json(
+          {
+            error:
+              "A link can only be shown for your own account. For anybody else it goes to them by email, " +
+              "because a link on this screen is a way to sign in as them.",
+          },
+          { status: 403 },
+        );
+      }
+
+      const existing = getUserRow(email);
+      if (!existing) return Response.json({ error: "No such account." }, { status: 404 });
+
+      const token = randomToken();
+      const link = inviteUrl(token);
+      if (!link) return Response.json({ error: APP_URL_UNSET }, { status: 503 });
+      createInvite(token, email, inviteExpiry());
+
+      recordAdminAction(session.email, "reset-link:self", email);
+      return Response.json({ ok: true, email, link });
+    }
+
     case "update": {
       const existing = getUserRow(email);
       if (!existing) return Response.json({ error: "No such account." }, { status: 404 });
