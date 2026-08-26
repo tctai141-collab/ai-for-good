@@ -2184,7 +2184,10 @@ function Reflections({
 
 
   return (
-    <div className="rise" style={{ maxWidth: 720, margin: "0 auto", padding: "60px 28px 90px" }}>
+    /* The window it is given, not a column in the middle of it. The tile grid
+       below is auto-fit, so the extra width goes straight into more tiles per
+       row rather than into wider tiles. */
+    <div className="rise" style={{ maxWidth: "min(1280px, 100%)", margin: "0 auto", padding: "60px 32px 90px" }}>
       <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", margin: "0 0 28px" }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.75rem, 3.4vw, 2rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", margin: 0, color: C.ink }}>Your week.</h1>
         {/* Was down beside "Your record" at the foot of the page, which is a
@@ -3415,7 +3418,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
 
   if (loading) {
     return (
-      <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
+      <div className="rise" style={{ maxWidth: "min(1280px, 100%)", margin: "0 auto", padding: "60px 32px 90px" }}>
         <p style={kicker}>The cohort, this week</p>
         <p style={{ margin: "18px 0 0", color: C.sub, fontSize: 15 }}>Loading the cohort…</p>
       </div>
@@ -3426,7 +3429,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
   // founders, which reads as real data to anyone who wasn't told otherwise.
   if (!teams.length) {
     return (
-      <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
+      <div className="rise" style={{ maxWidth: "min(1280px, 100%)", margin: "0 auto", padding: "60px 32px 90px" }}>
         <p style={kicker}>The cohort, this week</p>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.625rem, 3.2vw, 1.875rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", margin: "10px 0 16px", color: C.ink }}>No founders yet.</h1>
         <p style={{ margin: "0 0 26px", fontSize: 14.5, lineHeight: 1.6, color: C.sub, letterSpacing: "var(--track-body)" }}>
@@ -3437,7 +3440,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
   }
 
   return (
-    <div className="rise" style={{ maxWidth: 920, margin: "0 auto", padding: "60px 28px 90px" }}>
+    <div className="rise" style={{ maxWidth: "min(1280px, 100%)", margin: "0 auto", padding: "60px 32px 90px" }}>
       <p style={kicker}>The cohort, week {week}</p>
       <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "clamp(1.625rem, 3.2vw, 1.875rem)", lineHeight: 1.15, letterSpacing: "var(--track-display)", margin: "10px 0 16px", color: C.ink }}>Where to put your attention.</h1>
       <p style={{ margin: "0 0 32px", fontSize: 14.5, lineHeight: 1.6, color: C.sub, letterSpacing: "var(--track-body)" }}>
@@ -3596,7 +3599,7 @@ function FounderCard({ team, onBack }: { team: Team; onBack: () => void }) {
   const arrowColor = ({ tenser: C.red, calmer: C.accent, steady: C.sub, quiet: C.faint } as const)[team.trend] || C.sub;
 
   return (
-    <div className="rise" style={{ maxWidth: 640, margin: "0 auto", padding: "26px 28px 90px" }}>
+    <div className="rise" style={{ maxWidth: "min(1100px, 100%)", margin: "0 auto", padding: "26px 32px 90px" }}>
       <button
         onClick={onBack}
         className="btn-glass"
