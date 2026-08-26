@@ -91,10 +91,36 @@ describe("peeking does not move the page", () => {
 });
 
 describe("the expanded panel is grouped", () => {
-  test("today's obligations sit together, above the schedule", () => {
-    const panel = app.slice(app.indexOf("const panel = ("), app.indexOf("<ProgrammeRail"));
-    // Deadlines, then the check-in; "What's on" is reference and follows.
-    expect(panel.indexOf("<Tasks state={deadlines} />")).toBeLessThan(panel.indexOf("Today's check-in"));
+  test("conversations sit above the check-in", () => {
+    /*
+     * Talking to Sprint Buddy is what a founder opens the app to do, so the
+     * thing they came for is not under two things they are being asked for.
+     * Deadlines and the schedule stay above as the state of the world.
+     */
+    const panel = app.slice(app.indexOf("const panel = ("));
+    const order = ["<Tasks state={deadlines} />", "<ProgrammeRail", "New conversation", "Pick up where you left off", "Today's check-in"];
+    let at = -1;
+    for (const marker of order) {
+      const found = panel.indexOf(marker);
+      expect(found).toBeGreaterThan(at);
+      at = found;
+    }
+  });
+
+  test("the check-in cannot scroll away behind the conversations", () => {
+    /*
+     * Found by rendering it with twelve conversations: the list is bounded and
+     * scrolls, but the region holding it scrolls too, so the check-in and
+     * "What's on" both fell off the bottom of a sidebar that looked complete.
+     * The check-in is pinned outside that region now.
+     */
+    expect(app).toContain("Pinned, not scrolled");
+    const pinned = app.slice(app.indexOf("Pinned, not scrolled"));
+    // It is outside the scrolling region, and the footer follows it.
+    expect(pinned.indexOf("Today's check-in")).toBeLessThan(pinned.indexOf("Elsewhere"));
+    // And the list itself is capped rather than floored.
+    expect(app).toContain("maxHeight: 300");
+    expect(app).not.toContain("minHeight: 96");
   });
 
   test("the navigation group is labelled rather than orphaned under a rule", () => {

@@ -772,43 +772,38 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", margin: "0 -4px", padding: "0 4px" }}>
           <Tasks state={deadlines} />
 
-{/* Directly under the overdue list: these two are what a founder owes
-              today. "What's on" below them is reference, not an obligation. */}
-          {checkinDone ? (
-            <div className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14, color: C.faint, marginBottom: 14, cursor: "default" }}>
-              <span style={{ width: 7, height: 7, borderRadius: 9, background: "#7CB893", flexShrink: 0 }} />
-              <span style={{ flex: 1, textAlign: "left", textDecoration: "line-through", textDecorationColor: "rgba(124, 184, 147, 0.6)" }}>Today's check-in</span>
-              <span aria-hidden="true" style={{ color: "#7CB893", fontSize: 14, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>✓</span>
-            </div>
-          ) : (
-            /*
-             * Prominent, not alarming, and one dot rather than two.
-             *
-             * This was a red-tinted panel with red text. Once the accent became
-             * signal red it read as a warning rather than an invitation, and it
-             * sat a shade away from the overdue deadline directly above it. A
-             * routine daily action should not look like something has gone
-             * wrong. The dot on the right still carries "not done yet", which
-             * was always the actual signal; the bullet on the left was
-             * decorative and became a second red dot saying nothing.
-             */
-            <button onClick={onStartCheckin} className="btn-glass" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "12px 16px", fontWeight: 700, fontSize: 14, marginBottom: 14 }}>
-              <span style={{ flex: 1, textAlign: "left" }}>Today's check-in</span>
-              <span style={{ width: 8, height: 8, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
-            </button>
-          )}
-
           <ProgrammeRail onOpen={onProgramme} />
 
+          {/*
+            Conversations sit above the check-in.
 
+            The order used to run deadlines, check-in, schedule, conversations,
+            on the reasoning that the two daily obligations belong together at
+            the top. In use it is the wrong order: talking to Sprint Buddy is
+            what a founder opens the app to do, and the thing you came for
+            should not be under two things you are being asked for.
+
+            The check-in is still directly below and still carries its dot, so
+            it is one glance away rather than one scroll away.
+          */}
           <button onClick={onNew} className="newbtn btn-metal" style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "14px 18px", fontWeight: 800, fontSize: 14.5, letterSpacing: "0.01em" }}>
             <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 900, marginRight: 2 }}>+</span> New conversation
           </button>
 
           <p style={{ ...navLabel, marginTop: 26 }}>Pick up where you left off</p>
-          {/* Plain flow now. It used to be the only scroller and carried a
-              96px floor, which is what pushed the footer off a short screen. */}
-          <div style={{ flexShrink: 0 }}>
+          {/*
+            Bounded, and scrolls inside itself.
+
+            Plain flow was right when this sat at the bottom with nothing under
+            it. Above the check-in it is the wrong shape: twenty conversations
+            would push the one daily action a founder is asked for off the
+            screen, which is the opposite of why it was moved up. A maximum
+            height keeps the list generous and keeps what follows in view.
+
+            Not a minimum, which is what pushed the footer off a short screen
+            the last time this list carried its own bounds.
+          */}
+          <div style={{ flexShrink: 0, maxHeight: 300, overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
             {threads.map((t) => {
               const on = view === "chat" && active.id === t.id;
               return (
@@ -832,6 +827,48 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               );
             })}
           </div>
+
+
+
+
+          </div>
+
+          {/*
+            Pinned, not scrolled.
+
+            Conversations sit above it, as asked. But the list can run to twenty
+            and the region above the footer scrolls, so inside it the one daily
+            action a founder is actually asked for slid off the bottom behind
+            the conversations, taking "What's on" with it — which is how this
+            was found. Out here it is always the last thing above the footer,
+            whatever the list does.
+          */}
+          <div style={{ flexShrink: 0, marginTop: 14 }}>
+          {/* Still one glance from the conversations above it, and still above
+              "What's on", which is reference rather than an obligation. */}
+          {checkinDone ? (
+            <div className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14, color: C.faint, marginBottom: 14, cursor: "default" }}>
+              <span style={{ width: 7, height: 7, borderRadius: 9, background: "#7CB893", flexShrink: 0 }} />
+              <span style={{ flex: 1, textAlign: "left", textDecoration: "line-through", textDecorationColor: "rgba(124, 184, 147, 0.6)" }}>Today's check-in</span>
+              <span aria-hidden="true" style={{ color: "#7CB893", fontSize: 14, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>✓</span>
+            </div>
+          ) : (
+            /*
+             * Prominent, not alarming, and one dot rather than two.
+             *
+             * This was a red-tinted panel with red text. Once the accent became
+             * signal red it read as a warning rather than an invitation, and it
+             * sat a shade away from the overdue deadline directly above it. A
+             * routine daily action should not look like something has gone
+             * wrong. The dot on the right still carries "not done yet", which
+             * was always the actual signal; the bullet on the left was
+             * decorative and became a second red dot saying nothing.
+             */
+            <button onClick={onStartCheckin} className="btn-glass" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "12px 16px", fontWeight: 700, fontSize: 14, marginBottom: 14 }}>
+              <span style={{ flex: 1, textAlign: "left" }}>Today's check-in</span>
+              <span style={{ width: 8, height: 8, borderRadius: 9, background: C.accent, flexShrink: 0 }} />
+            </button>
+          )}
 
           </div>
 
