@@ -256,15 +256,18 @@ describe("the API", () => {
 });
 
 describe("the sidebar and the page agree", () => {
-  test("the rail reads the dated events, not only the week themes", () => {
+  test("there is one schedule, and it is this page", () => {
     /*
-     * Regression. The rail read /api/programme alone, so once the programme
-     * had dates in it the sidebar said "Nothing scheduled yet" beside a page
-     * listing seven things.
+     * The sidebar used to carry a "What's on" rail summarising the next few
+     * sessions. Two views of one schedule is two things to keep in step — it
+     * had already drifted once, saying "Nothing scheduled yet" beside a page
+     * listing seven things — and Tai found the summary messy besides. The
+     * Programme entry in the sidebar is one click from the whole thing.
      */
     const app = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
-    const rail = app.slice(app.indexOf("function ProgrammeRail"), app.indexOf("function ProgrammeRail") + 3000);
-    expect(rail).toContain("/api/programme-events");
+    expect(app).not.toContain("ProgrammeRail");
+    expect(app).not.toContain("What&rsquo;s on");
+    expect(app).toContain("<ProgrammeTimeline />");
   });
 
   test("both personas can reach the programme", () => {

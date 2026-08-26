@@ -459,6 +459,8 @@ export const PROGRAMME_CSS = `
 .pt-wrap { max-width: min(1280px, 100%); margin: 0 auto; padding: 40px 32px 80px; }
 
 .pt-head {
+  /* Clear of the docked mascot, which floats over this corner. */
+  padding-right: var(--mascot-gutter, 0px);
   display: flex; align-items: flex-end; justify-content: space-between;
   gap: 20px; flex-wrap: wrap; margin-bottom: 28px;
 }

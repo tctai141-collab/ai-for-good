@@ -98,7 +98,10 @@ describe("the expanded panel is grouped", () => {
      * Deadlines and the schedule stay above as the state of the world.
      */
     const panel = app.slice(app.indexOf("const panel = ("));
-    const order = ["<Tasks state={deadlines} />", "<ProgrammeRail", "New conversation", "Pick up where you left off", "Today's check-in"];
+    /* The deadline summary and the "What's on" rail have both left the
+       sidebar: one is a page of its own now, the other was a second copy of
+       the Programme page. What is left is what a founder came to do. */
+    const order = ["New conversation", "Pick up where you left off", "Today's check-in"];
     let at = -1;
     for (const marker of order) {
       const found = panel.indexOf(marker);
@@ -251,5 +254,60 @@ describe("the rail is exactly as wide as it says", () => {
     }
     expect(aside).toContain("flexShrink: 0");
     expect(aside).toContain("flexGrow: 0");
+  });
+});
+
+describe("deadlines got a page", () => {
+  const tasks = readFileSync("src/components/Tasks.tsx", "utf-8");
+
+  test("out of the sidebar and into a view of its own", () => {
+    /*
+     * The sidebar block had to be a summary: three rows, a count and a "+4
+     * more" that hid the rest. Deadlines are the one thing in the programme
+     * with a date and a consequence, so reading them should not mean expanding
+     * a strip in a navigation column.
+     */
+    expect(app).not.toContain("<Tasks state={deadlines} />");
+    expect(app).toContain("<DeadlinesPage state={deadlines} />");
+  });
+
+  test("the same rows and the same toggle, so ticking off behaves as it did", () => {
+    // Reused rather than rewritten; a second implementation is a second set of
+    // bugs and a chance for the two to disagree about what "done" means.
+    const page = tasks.slice(tasks.indexOf("export function DeadlinesPage"));
+    expect(page).toContain("<Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />");
+  });
+
+  test("grouped by when, with done last and quiet", () => {
+    const page = tasks.slice(tasks.indexOf("export function DeadlinesPage"));
+    for (const key of ["overdue", "thisWeek", "upcoming", "done"]) {
+      expect(page).toContain(`key: "${key}"`);
+    }
+    expect(page.indexOf('key: "overdue"')).toBeLessThan(page.indexOf('key: "done"'));
+    expect(tasks).toContain(".dl-group.is-done { opacity: 0.55; }");
+  });
+
+  test("the overdue count still shouts, from the nav entry", () => {
+    // That was the sidebar block's one job worth keeping at a glance.
+    const at = app.indexOf("onClick={onDeadlines}");
+    expect(at).toBeGreaterThan(-1);
+    const entry = app.slice(at, at + 700);
+    expect(entry).toContain("deadlines.overdueCount > 0");
+    expect(entry).toContain("background: C.red");
+  });
+
+  test("and the collapsed rail opens the page rather than the sidebar", () => {
+    const rail = app.slice(app.indexOf("function SidebarRail"));
+    expect(rail).toContain('{ key: "deadlines", glyph: "◱", label: "Deadlines"');
+    // The overdue chip used to expand the sidebar, which showed a summary.
+    expect(rail).toContain("onClick={onDeadlines}");
+  });
+
+  test("it does not fall over when the deadlines fail to load", () => {
+    /* The sidebar block returned null and vanished. A page cannot vanish, so
+       it says what happened. */
+    const page = tasks.slice(tasks.indexOf("export function DeadlinesPage"));
+    expect(page).toContain("if (!data) {");
+    expect(page).toContain("These did not load");
   });
 });

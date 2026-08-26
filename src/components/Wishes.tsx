@@ -201,7 +201,9 @@ export const WISHES_CSS = `
   }
   .wi-list { margin-top: 0; }
 }
-.wi-head { margin-bottom: 24px; }
+.wi-head {
+  /* Clear of the docked mascot, which floats over this corner. */
+  padding-right: var(--mascot-gutter, 0px); margin-bottom: 24px; }
 .wi-title {
   margin: 0; font-size: 1.75rem; font-weight: 700;
   letter-spacing: -0.022em; color: var(--ink);

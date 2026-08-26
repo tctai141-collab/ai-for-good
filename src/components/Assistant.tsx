@@ -213,7 +213,9 @@ export const ASSISTANT_CSS = `
    at 140 characters a line is worse, not fuller. */
 .as-wrap { max-width: min(1100px, 100%); margin: 0 auto; padding: 40px 32px 80px; }
 
-.as-head { margin-bottom: 22px; }
+.as-head {
+  /* Clear of the docked mascot, which floats over this corner. */
+  padding-right: var(--mascot-gutter, 0px); margin-bottom: 22px; }
 .as-title {
   margin: 0; font-size: 1.75rem; font-weight: 700;
   letter-spacing: -0.022em; color: var(--ink);
