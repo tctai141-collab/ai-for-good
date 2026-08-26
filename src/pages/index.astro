@@ -1,6 +1,5 @@
 ---
 import Root from "../components/Root";
-import AaltoMark from "../components/AaltoMark.astro";
 ---
 
 <!doctype html>
@@ -23,7 +22,6 @@ import AaltoMark from "../components/AaltoMark.astro";
          nested ones: nesting client:only islands gives each its own React
          tree, so the boundary never sees the app throw. -->
     <Root client:only="react" />
-    <AaltoMark />
   </body>
 </html>
 

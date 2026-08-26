@@ -2,6 +2,7 @@ import React, { useCallback, useState, useMemo, useRef, useEffect } from "react"
 import ProgrammeTimeline, { isoDay, type ProgrammeEvent } from "./ProgrammeTimeline";
 import Wishes from "./Wishes";
 import Assistant from "./Assistant";
+import AaltoMark from "./AaltoMark";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
@@ -736,9 +737,16 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             label nobody clicks. Both words are one element now, so the fill is
             clipped across the whole mark at once rather than per line.
           */}
-          <span className="wordmark-liquid" aria-label="Sprint Buddy">
-            Sprint<br />Buddy
-          </span>
+          {/* The product's mark and the university's, side by side. The rule
+              between them is what makes it a lockup rather than two logos that
+              happen to be near each other. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <span className="wordmark-liquid" aria-label="Sprint Buddy">
+              Sprint<br />Buddy
+            </span>
+            <span aria-hidden="true" style={{ width: 1, alignSelf: "stretch", margin: "4px 0", background: "var(--line-strong)", flexShrink: 0 }} />
+            <AaltoMark height={20} />
+          </div>
           <button
             onClick={onToggle}
             /* This same panel is what the collapsed rail shows on hover, where

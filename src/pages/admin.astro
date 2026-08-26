@@ -386,6 +386,16 @@ import AaltoMark from "../components/AaltoMark.astro";
       .bc-sent .when { color: var(--muted); font-size: 0.75rem; }
       [hidden] { display: none !important; }
       a { color: var(--accent); }
+      /* The page's own title stands in for the wordmark here, so the lockup
+         is built against it. */
+      .title-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+      .title-row h1 { margin: 0; }
+      .title-rule {
+        width: 1px; height: 26px;
+        background: var(--border-strong);
+        flex-shrink: 0;
+      }
+
       .back-link {
         display: inline-flex;
         align-items: center;
@@ -832,7 +842,11 @@ import AaltoMark from "../components/AaltoMark.astro";
       <a class="back-link" href="/">
         <span aria-hidden="true">&#8592;</span> Back to Sprint Buddy
       </a>
-      <h1>Cohort admin</h1>
+      <div class="title-row">
+        <h1>Cohort admin</h1>
+        <span aria-hidden="true" class="title-rule"></span>
+        <AaltoMark />
+      </div>
       <p class="lede" id="lede">Loading…</p>
 
       <div id="denied" hidden>
@@ -3619,6 +3633,5 @@ import AaltoMark from "../components/AaltoMark.astro";
         loadBroadcast();
       });
     </script>
-    <AaltoMark />
   </body>
 </html>
