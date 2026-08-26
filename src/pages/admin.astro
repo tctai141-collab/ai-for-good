@@ -1577,6 +1577,53 @@ import AaltoMark from "../components/AaltoMark.astro";
         linksBox.prepend(item);
       }
 
+      /*
+       * Shows a reset link on screen, for your own account only.
+       *
+       * The server refuses this for anybody else, and that is the point: a
+       * link here for another person is a way to set their password and sign
+       * in as them. For your own it is the difference between a slow mail
+       * queue being an inconvenience and being a lock-out.
+       */
+      function addSelfLink(link) {
+        linksPanel.hidden = false;
+        const item = document.createElement("div");
+        item.className = "link-item";
+
+        const who = document.createElement("strong");
+        who.textContent = "Your reset link";
+        who.style.flex = "0 0 auto";
+
+        const field = document.createElement("input");
+        field.readOnly = true;
+        field.value = link;
+        field.style.flex = "1 1 260px";
+        field.style.minWidth = "0";
+        field.addEventListener("focus", () => field.select());
+
+        const copy = document.createElement("button");
+        copy.className = "ghost";
+        copy.textContent = "Copy";
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(link);
+            copy.textContent = "Copied";
+          } catch {
+            // Clipboard blocked; the field is selectable either way.
+            field.focus();
+            copy.textContent = "Select it";
+          }
+          setTimeout(() => { if (copy.isConnected) copy.textContent = "Copy"; }, 2500);
+        });
+
+        const note = document.createElement("span");
+        note.textContent = "Single use. Setting the password signs you out everywhere.";
+        note.style.cssText = "flex:1 1 100%;color:var(--muted);font-size:12.5px";
+
+        item.append(who, field, copy, note);
+        linksBox.prepend(item);
+      }
+
       /* First and last initial. Code points rather than charAt, so a name
          starting outside the basic plane is one glyph and not half of one. */
       function initials(name) {
@@ -1642,6 +1689,64 @@ import AaltoMark from "../components/AaltoMark.astro";
             linksPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
           });
           actions.append(reinvite);
+
+          /*
+           * Your own account only, and the server enforces that rather than
+           * this button. A link on this screen for somebody else is a way to
+           * set their password and sign in as them, which is what the email
+           * detour exists to prevent.
+           */
+          if (user.email === me) {
+            const showLink = document.createElement("button");
+            showLink.className = "ghost";
+            showLink.textContent = "Show link";
+            showLink.style.marginLeft = "8px";
+            showLink.title = "Issue a reset link and show it here, instead of waiting for the email";
+            showLink.addEventListener("click", async () => {
+              showLink.disabled = true;
+              const { ok, data } = await api({ action: "reset-link", email: user.email });
+              showLink.disabled = false;
+              if (!ok) return alert(data.error || "Could not make a link.");
+              addSelfLink(data.link);
+              linksPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            });
+            actions.append(showLink);
+          }
+
+          /* No email, no waiting. Revoking access should never depend on mail
+             delivery, which is the gap this fills. */
+          const signOut = document.createElement("button");
+          signOut.className = "ghost";
+          signOut.textContent = "Sign out everywhere";
+          signOut.style.marginLeft = "8px";
+          signOut.addEventListener("click", async () => {
+            if (signOut.dataset.armed !== "yes") {
+              signOut.dataset.armed = "yes";
+              signOut.textContent = user.email === me
+                ? "This signs you out here too. Sure?"
+                : "Sure?";
+              setTimeout(() => {
+                if (!signOut.isConnected) return;
+                signOut.dataset.armed = "";
+                signOut.textContent = "Sign out everywhere";
+              }, 6000);
+              return;
+            }
+            signOut.dataset.armed = "";
+            signOut.disabled = true;
+            const { ok, data } = await api({ action: "signout-all", email: user.email });
+            signOut.disabled = false;
+            signOut.textContent = "Sign out everywhere";
+            if (!ok) return alert(data.error || "Could not sign them out.");
+            if (data.self) {
+              // Their own session is one of the ones just ended, so staying on
+              // this page would be pretending otherwise.
+              location.href = "/";
+              return;
+            }
+            say(document.getElementById("add-message"), user.name + " is signed out on every device. Their password still works.", false);
+          });
+          actions.append(signOut);
 
           if (user.email !== me) {
             const remove = document.createElement("button");
