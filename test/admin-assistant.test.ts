@@ -163,18 +163,38 @@ describe("what it is told about itself", () => {
   });
 });
 
-describe("the tab bar still shows every tab", () => {
-  test("the overflow is made visible rather than left invisible", () => {
+describe("where it lives", () => {
+  const app = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
+  const admin = readFileSync("src/pages/admin.astro", "utf-8");
+
+  test("in the dashboard, beside the cohort heatmap", () => {
     /*
-     * Adding a tenth tab pushed the last one past the edge of a bar that
-     * scrolls — correct behaviour, invisible affordance: Transcript was simply
-     * not there and nothing said it could be reached. A fade appears only when
-     * something is past the edge, and selecting a tab scrolls it into view.
+     * /admin is where you go to change something. Asking who to talk to this
+     * week is not administration — it is what you do before deciding anything,
+     * and it belongs next to the heatmap where the question already lives.
      */
-    const admin = readFileSync("src/pages/admin.astro", "utf-8");
+    expect(app).toContain("<Assistant />");
+    expect(app.indexOf("Cohort heatmap")).toBeLessThan(app.indexOf("<span>Assistant</span>"));
+  });
+
+  test("and not on /admin any more", () => {
+    expect(admin).not.toContain('data-tab="assistant"');
+    expect(admin).not.toContain("asst-");
+  });
+
+  test("a mentor is not offered it at all", () => {
+    // Absent rather than shown and refused: the briefing behind it is the whole
+    // cohort's state, and a mentor's view of this app is narrower on purpose.
+    expect(app).toContain("{canAssist && (");
+    expect(app).toContain('view === "assistant" && canAssist');
+    const appTsx = readFileSync("src/components/App.tsx", "utf-8");
+    expect(appTsx).toContain('canAssist={user.role === "organizer"}');
+  });
+
+  test("the tab bar keeps its overflow handling", () => {
+    // Nine tabs fit today; the fade measures rather than assumes, so it simply
+    // does not appear. Worth keeping — the next tab added will need it.
     expect(admin).toContain("is-scrollable");
     expect(admin).toContain("bar.scrollWidth > bar.clientWidth + 1");
-    expect(admin).toContain('scrollIntoView({ inline: "nearest"');
-    expect(admin).toContain('window.addEventListener("resize"');
   });
 });

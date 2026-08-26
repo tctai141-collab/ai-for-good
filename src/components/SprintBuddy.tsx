@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import ProgrammeTimeline, { isoDay, type ProgrammeEvent } from "./ProgrammeTimeline";
 import Wishes from "./Wishes";
+import Assistant from "./Assistant";
 import Tasks, { useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
@@ -387,19 +388,22 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections" | "programme" | "wishes";
+type View = "chat" | "reflections" | "programme" | "wishes" | "assistant";
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
 type SprintBuddyProps = {
   persona: Persona;
+  /* Organizers only. A mentor's view of this app is deliberately narrower than
+     the briefing behind it, so the entry is absent rather than refused. */
+  canAssist?: boolean;
   userEmail?: string;
   initialData?: UserData;
   onSignOut?: () => void;
   signOutLabel?: string;
 };
 
-export default function SprintBuddy({ persona, userEmail, initialData, onSignOut, signOutLabel = "Sign out" }: SprintBuddyProps) {
+export default function SprintBuddy({ persona, canAssist = false, userEmail, initialData, onSignOut, signOutLabel = "Sign out" }: SprintBuddyProps) {
   const [view, setView] = useState<View>("chat");
   const [active, setActive] = useState<ActiveTarget>({ fresh: true });
   const [coachTeam, setCoachTeam] = useState<Team | null>(null);
@@ -577,6 +581,8 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         onReflections={() => setView("reflections")}
         onProgramme={() => setView("programme")}
         onWishes={() => setView("wishes")}
+        onAssistant={() => setView("assistant")}
+        canAssist={canAssist}
         onSignOut={onSignOut}
         signOutLabel={signOutLabel}
         onPickTeam={(team) => {
@@ -612,13 +618,16 @@ export default function SprintBuddy({ persona, userEmail, initialData, onSignOut
         {view === "programme" && (
           <Scroll><ProgrammeTimeline /></Scroll>
         )}
+        {view === "assistant" && canAssist && (
+          <Scroll><Assistant /></Scroll>
+        )}
         {view === "wishes" && persona === "founder" && (
           <Scroll><Wishes /></Scroll>
         )}
         {persona === "founder" && view === "reflections" && (
           <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} /></Scroll>
         )}
-        {persona === "coach" && view !== "programme" && view !== "wishes" && (
+        {persona === "coach" && view !== "programme" && view !== "wishes" && view !== "assistant" && (
           <Scroll>
             {coachTeam
               ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} />
@@ -653,12 +662,14 @@ type SidebarProps = {
   onReflections: () => void;
   onProgramme: () => void;
   onWishes: () => void;
+  onAssistant: () => void;
+  canAssist: boolean;
   onSignOut?: () => void;
   signOutLabel: string;
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -863,12 +874,18 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           {/* Both of these are cohort-wide views, so they sit together above
               the list of individual founders rather than one of them being
               exiled to the footer. */}
-          <button onClick={() => onPickTeam(null)} className="navitem" style={{ ...navItem, background: view !== "programme" && !coachTeam ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+          <button onClick={() => onPickTeam(null)} className="navitem" style={{ ...navItem, background: view !== "programme" && view !== "assistant" && !coachTeam ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
             <Glyph>▦</Glyph> <span>Cohort heatmap</span>
           </button>
-          <button onClick={onProgramme} className="navitem" style={{ ...navItem, marginBottom: 12, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+          <button onClick={onProgramme} className="navitem" style={{ ...navItem, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
             <Glyph>▤</Glyph> <span>Programme</span>
           </button>
+          {canAssist && (
+            <button onClick={onAssistant} className="navitem" style={{ ...navItem, background: view === "assistant" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+              <Glyph>✳</Glyph> <span>Assistant</span>
+            </button>
+          )}
+          <div style={{ marginBottom: 12 }} />
           <p style={{ ...navLabel, marginTop: 0 }}>Your cohort</p>
           <div style={{ flexShrink: 0 }}>
             {teams.length === 0 && (
@@ -927,6 +944,8 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
       {open ? panel : (
         <SidebarRail
           width={railWidth}
+          canAssist={canAssist}
+          onAssistant={onAssistant}
           persona={persona}
           view={view}
           coachTeam={coachTeam}
@@ -1030,10 +1049,12 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
  * thing you have to expand the sidebar to discover.
  */
 function SidebarRail({
-  persona, view, coachTeam, deadlines, checkinDone, width,
-  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onReflections, onPickTeam, onSignOut,
+  persona, view, coachTeam, deadlines, checkinDone, width, canAssist,
+  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onReflections, onAssistant, onPickTeam, onSignOut,
 }: {
   width: number;
+  canAssist: boolean;
+  onAssistant: () => void;
   persona: Persona;
   view: View;
   coachTeam: Team | null;
@@ -1059,8 +1080,11 @@ function SidebarRail({
         { key: "reflections", glyph: "◷", label: "Reflections", on: view === "reflections", run: onReflections },
       ]
     : [
-        { key: "cohort", glyph: "▦", label: "Cohort heatmap", on: view !== "programme" && !coachTeam, run: () => onPickTeam(null) },
+        { key: "cohort", glyph: "▦", label: "Cohort heatmap", on: view !== "programme" && view !== "assistant" && !coachTeam, run: () => onPickTeam(null) },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
+        ...(canAssist
+          ? [{ key: "assistant", glyph: "✳", label: "Assistant", on: view === "assistant", run: onAssistant }]
+          : []),
       ];
 
   return (
