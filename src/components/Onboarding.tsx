@@ -24,14 +24,19 @@ const FOUNDER: Step[] = [
       "Think out loud here. Sprint Buddy is software, not a person, and it carries what this programme's mentors teach. Nothing you write is read by the team unless you deliberately share a conversation.",
   },
   {
-    title: "Check in when it is quick",
+    title: "Check in when you have a minute",
     body:
-      "One tap for how the day is going, or a longer check-in when there is more to say. Over the sprint these become the record of what actually happened, which is worth more in December than any of it feels in September.",
+      "Three questions, once a day. Over the sprint they become the record of what actually happened, which is worth more in December than any of it feels in September.",
   },
   {
     title: "Deadlines find you",
     body:
-      "What the cohort owes and when is in the left panel. You get an email three days out, two days out, ten hours out, and once the morning after. Tick something off and all of them stop.",
+      "Deadlines in the left panel shows what is due and what is late. You also get an email three days out, two days out, ten hours out, and once the morning after. Tick something off and all of them stop.",
+  },
+  {
+    title: "The programme, and asking for things",
+    body:
+      "Programme is the whole schedule, as a timeline or a calendar. Ask for something goes to the organisers or the mentors by name, and their reply comes back in the same place.",
   },
   {
     title: "Share a conversation on purpose",
@@ -42,24 +47,24 @@ const FOUNDER: Step[] = [
 
 const ORGANIZER: Step[] = [
   {
-    title: "You run the cohort from here",
+    title: "Two places, and they do different jobs",
     body:
-      "Cohort admin holds the people, the deadlines, the programme week by week, and the knowledge Sprint Buddy answers from. Everything the founders see comes from there.",
+      "This dashboard is for reading the cohort: the heatmap, the programme, and an assistant you can ask who to talk to this week. Cohort admin is for changing things: people, deadlines, the schedule, and what Sprint Buddy knows.",
   },
   {
     title: "What you can read, and what you cannot",
     body:
-      "Founders' conversations are private. You see themes and trends, never raw transcripts, unless a founder shares a specific conversation with you. Opening a shared one tells them it was read, once.",
+      "Founders' conversations are private, and so are the words of their check-ins. You see attention scores, themes and trends, never what anybody wrote, unless they hand a conversation over. Opening one of those tells them it was read, once. The assistant sees exactly the same and nothing more.",
   },
   {
-    title: "Set deadlines and the week's shape",
+    title: "Set deadlines and the schedule",
     body:
-      "A deadline emails itself to whoever has not ticked it off. The programme panel fills in what is on each week, which is what founders see under What's on.",
+      "A deadline emails itself to whoever has not ticked it off. The Programme tab holds everything with a date on it, sessions and milestones and the trip, and that is what the cohort sees under Programme.",
   },
   {
     title: "Talk to the whole cohort",
     body:
-      "Broadcast sends one message to everyone registered, addressed to each founder by name. Use it for the things that would otherwise be twenty separate emails.",
+      "Broadcast sends one message to everyone registered, addressed to each founder by name. It will not send until you have received that exact wording yourself. Use it for the things that would otherwise be twenty separate emails.",
   },
 ];
 

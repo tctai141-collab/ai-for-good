@@ -116,8 +116,8 @@ export default function Wishes() {
           value={audience}
           onChange={(event) => setAudience(event.target.value as Wish["audience"])}
         >
-          <option value="organizers">The organisers — how the programme runs</option>
-          <option value="mentors">The mentors — advice and expertise</option>
+          <option value="organizers">The organisers (how the programme runs)</option>
+          <option value="mentors">The mentors (advice and expertise)</option>
         </select>
 
         <label className="wi-label" htmlFor="wi-body">What would you like</label>

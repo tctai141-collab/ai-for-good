@@ -391,7 +391,7 @@ export default function App() {
           */}
           <div className="preview-bar">
             <span>
-              Cohort view — <strong>your own account</strong>, not a
+              Cohort view. <strong>Your own account</strong>, not a
               founder&rsquo;s. Deadlines and the programme are what they see;
               conversations and check-ins are yours.
             </span>

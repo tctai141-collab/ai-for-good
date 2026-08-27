@@ -61,9 +61,28 @@ describe("the promises it makes", () => {
   });
 
   test("the organizer is told the same thing from the other side", () => {
-    expect(onb).toContain("Founders' conversations are private.");
-    expect(onb).toContain("never raw transcripts");
+    /* The promise, not its punctuation: the sentence grew to cover check-in
+       text and the assistant, and pinning the full stop failed on an
+       improvement. */
+    expect(onb).toContain("Founders' conversations are private");
+    expect(onb).toContain("never what anybody wrote");
     expect(onb).toContain("tells them it was read, once");
+    // The assistant reads the same briefing and no more; say so here too.
+    expect(onb).toContain("The assistant sees exactly the same and nothing more.");
+  });
+
+  test("it describes features that exist", () => {
+    /*
+     * Onboarding is the first thing twenty founders read, and it had drifted:
+     * it promised a one-tap check-in that was removed, and a "What's on" panel
+     * that no longer exists. Copy about a screen nobody can find is worse than
+     * no copy.
+     */
+    expect(onb).not.toContain("One tap");
+    expect(onb).not.toContain("What's on");
+    for (const real of ["Deadlines in the left panel", "Programme is the whole schedule", "Ask for something"]) {
+      expect(onb).toContain(real);
+    }
   });
 
   test("the deadline schedule matches what the mailer actually sends", () => {

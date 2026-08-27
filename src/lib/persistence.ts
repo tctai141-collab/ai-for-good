@@ -135,6 +135,7 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
   const rawDecisions = (dData.decisions || []) as Array<{
     id: string; summary: string; door: string; status: string;
     theme: string; outcome: string | null; at: string; thread_id: string | null;
+    created_at?: string;
   }>;
 
   const rawCheckins = (cData.checkins || []) as Array<{
@@ -165,6 +166,11 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       theme: d.theme,
       outcome: d.outcome || undefined,
       at: d.at,
+      /* The real timestamp. `at` is a sentinel the browser writes as the
+         literal string "today" and the schema defaults to the same, so the
+         journal told a founder every decision they had ever made was made
+         today. created_at has been on the row since the table existed. */
+      createdAt: d.created_at,
       threadId: d.thread_id || undefined,
     })),
     checkins: rawCheckins.map((c) => ({
@@ -172,7 +178,9 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
       refDecisionId: c.ref_decision_id,
       theme: c.theme || undefined,
       prompt: c.prompt,
-      mood: c.mood || undefined,
+      /* ?? not ||: a mood of 0 is a real answer, and || threw it away, so
+         the worst day a founder recorded was the one missing from the trend. */
+      mood: c.mood ?? undefined,
       createdAt: c.created_at,
     })),
     themes: (thData.themes as ThemeArc[]) || [],

@@ -171,24 +171,25 @@ function Row({
 }) {
   const overdue = item.group === "overdue" && !item.done;
 
+  /*
+   * Built for the page, which is the only place this is used now.
+   *
+   * It was drawn for a 264px sidebar: 13px, one line, truncated with the rest
+   * on hover. On a full-width page that reads as a spreadsheet of nothing —
+   * a short title, then eight hundred pixels of dark, then a date the eye has
+   * lost the thread of by the time it arrives. The description was stored and
+   * never shown, which is the part somebody actually needs to know what the
+   * deadline asks of them.
+   *
+   * So: real type, the description on its own line, and a measure. A checklist
+   * does not get better by being stretched to the width of a monitor, and the
+   * page around it is still full width.
+   */
   return (
     <li style={{ listStyle: "none" }}>
       <label
-        className="navitem"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr auto",
-          alignItems: "center",
-          gap: 9,
-          // 38px with a full-width target. Denser than a nav row on purpose —
-          // these are status, not navigation — but still comfortably tappable.
-          minHeight: 38,
-          padding: "8px 8px",
-          borderRadius: 8,
-          cursor: busy ? "wait" : "pointer",
-          opacity: busy ? 0.5 : 1,
-          background: "transparent",
-        }}
+        className="navitem dl-row"
+        style={{ cursor: busy ? "wait" : "pointer", opacity: busy ? 0.5 : 1 }}
       >
         <input
           type="checkbox"
@@ -197,32 +198,24 @@ function Row({
           disabled={busy}
           onChange={() => onToggle(item)}
         />
-        <span
-          // The full text is one hover away; truncation is the price of the
-          // column, not a reason to wrap to three lines.
-          title={item.description ? `${item.title} — ${item.description}` : item.title}
-          style={{
-            fontSize: 13,
-            lineHeight: 1.3,
-            color: item.done ? C.faint : C.ink,
-            textDecoration: item.done ? "line-through" : "none",
-            textDecorationColor: "rgba(255,255,255,0.35)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
-          }}
-        >
-          {item.title}
+        <span className="dl-text">
+          <span
+            className="dl-row-title"
+            style={{
+              color: item.done ? C.faint : C.ink,
+              textDecoration: item.done ? "line-through" : "none",
+              textDecorationColor: "rgba(255,255,255,0.35)",
+            }}
+          >
+            {item.title}
+          </span>
+          {item.description && <span className="dl-row-desc">{item.description}</span>}
         </span>
         <span
+          className="dl-row-meta"
           style={{
-            fontSize: 11,
             fontWeight: overdue ? 800 : 600,
             color: overdue ? C.red : C.faint,
-            fontVariantNumeric: "tabular-nums",
-            whiteSpace: "nowrap",
-            flexShrink: 0,
           }}
         >
           {statusLabel(item)}
@@ -233,7 +226,6 @@ function Row({
 }
 
 /** How many rows show before "N more". Three keeps the thread list alive. */
-const COLLAPSED_ROWS = 3;
 
 /**
  * The one deadline worth a founder's attention right now, and how many others
@@ -256,117 +248,6 @@ export function nextUp(state: DeadlinesState): { item: DeadlineItem; label: stri
   return { item, label: statusLabel(item), more: sorted.length - 1 };
 }
 
-export default function Tasks({ state }: { state: DeadlinesState }) {
-  const { data, toggle, busyId, pinned } = state;
-  const [expanded, setExpanded] = useState(false);
-
-  if (!data || data.deadlines.length === 0) return null;
-
-  const items = data.deadlines;
-  const isLive = (d: DeadlineItem) =>
-    d.group === "overdue" || d.group === "thisWeek" || pinned.has(d.id);
-
-  const live = items.filter(isLive);
-  const upcoming = items.filter((d) => d.group === "upcoming" && !pinned.has(d.id));
-  const done = items.filter((d) => d.group === "done" && !pinned.has(d.id));
-
-  const overdueCount = items.filter((d) => d.group === "overdue").length;
-  const thisWeekCount = items.filter((d) => d.group === "thisWeek").length;
-
-  /* The heading carries urgency so the rows don't have to shout it twice. */
-  const title =
-    overdueCount > 0 ? "Needs attention" : thisWeekCount > 0 ? "This week" : "Deadlines";
-
-  const visible = expanded ? live : live.slice(0, COLLAPSED_ROWS);
-  /* When nothing is live, the "Next:" line below already names the first
-     upcoming deadline — counting it again here reads as one more than there
-     is. */
-  const namesNext = live.length === 0 && upcoming.length > 0;
-  const hidden = expanded
-    ? 0
-    : live.length - visible.length + upcoming.length + done.length - (namesNext ? 1 : 0);
-
-  /* Defaulted, not destructured straight off the payload. A 200 whose body
-     happens to lack this key threw here, and with no boundary above it that
-     took out the entire app — reproduced, black screen, no message. The
-     boundary now catches it; this stops it happening at all. */
-  const { completed, total } = data.progress ?? { completed: 0, total: 0 };
-
-  return (
-    <section aria-label="Your deadlines" style={{ marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, padding: "0 8px 6px" }}>
-        <p style={{ ...heading, color: overdueCount > 0 ? C.red : C.faint }}>{title}</p>
-        {total > 0 && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.faint, fontVariantNumeric: "tabular-nums" }}>
-            {completed}/{total}
-          </span>
-        )}
-      </div>
-
-      {/* Nothing due yet still says so in one line. An empty box in permanent
-          navigation is worse than no box, but silently disappearing teaches
-          founders the feature is unreliable. */}
-      {live.length === 0 && !expanded ? (
-        <p style={{ margin: 0, padding: "0 8px 4px", fontSize: 12.5, color: C.faint, lineHeight: 1.4 }}>
-          {upcoming.length > 0 ? (
-            <>
-              Next: <span style={{ color: C.sub }}>{upcoming[0]!.title}</span> · {statusLabel(upcoming[0]!)}
-            </>
-          ) : (
-            "All clear."
-          )}
-        </p>
-      ) : (
-        <ul
-          style={{
-            margin: 0,
-            padding: 0,
-            // Only the opened state scrolls, and only if it has to. The thread
-            // list below keeps a floor so it can never be squeezed to nothing.
-            ...(expanded ? { maxHeight: "38vh", overflowY: "auto" as const } : {}),
-          }}
-        >
-          {visible.map((item) => (
-            <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
-          ))}
-          {expanded &&
-            upcoming.map((item) => (
-              <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
-            ))}
-          {expanded &&
-            done.map((item) => (
-              <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
-            ))}
-        </ul>
-      )}
-
-      {(hidden > 0 || expanded) && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="navitem"
-          style={{
-            display: "block",
-            width: "100%",
-            textAlign: "left",
-            background: "transparent",
-            border: "none",
-            color: C.faint,
-            cursor: "pointer",
-            fontSize: 11.5,
-            fontWeight: 700,
-            fontFamily: "inherit",
-            padding: "8px 8px",
-            minHeight: 34,
-            borderRadius: 8,
-          }}
-        >
-          {expanded ? "Show less" : `${hidden} more`}
-        </button>
-      )}
-    </section>
-  );
-}
 
 /**
  * Deadlines as a page of their own.
@@ -447,11 +328,25 @@ export function DeadlinesPage({ state }: { state: DeadlinesState }) {
 export const DEADLINES_CSS = `
 .dl-page { max-width: min(1280px, 100%); margin: 0 auto; padding: 40px 32px 80px; }
 
+/*
+ * One measure for the whole page.
+ *
+ * The rows are capped because a title and its date three hundred pixels apart
+ * are two facts rather than one line. Everything else has to be capped to the
+ * same number, or the group rules and the "1 of 5 done" overshoot the rows
+ * they belong to and the page loses its right edge.
+ */
+.dl-page { --dl-measure: 900px; }
+
 .dl-head {
-  /* Clear of the docked mascot, which floats over this corner. */
-  padding-right: var(--mascot-gutter, 0px);
+  max-width: var(--dl-measure);
   display: flex; align-items: baseline; justify-content: space-between;
-  gap: 20px; flex-wrap: wrap; margin-bottom: 28px;
+  gap: 20px; flex-wrap: wrap; padding: 0 10px;
+  /* The docked mascot floats over this corner, and this row sits in exactly
+     its band. As a margin rather than padding: once the measure binds, the
+     count is already well clear and the gutter costs nothing; below that the
+     row gives up the width instead of putting "1 of 5 done" under a face. */
+  margin: 0 var(--mascot-gutter, 0px) 28px 0;
 }
 .dl-title {
   margin: 0; font-size: 1.75rem; font-weight: 700;
@@ -465,13 +360,13 @@ export const DEADLINES_CSS = `
   font-size: 0.9375rem; line-height: 1.55; color: var(--ink-sub, #8a8f98);
 }
 
-.dl-group { margin-bottom: 30px; }
+.dl-group { margin-bottom: 30px; max-width: var(--dl-measure); }
 .dl-group.is-done { opacity: 0.55; }
 .dl-group.is-done:hover { opacity: 0.85; }
 
 .dl-grouphead {
   display: flex; align-items: baseline; gap: 8px;
-  margin: 0 0 8px; padding-bottom: 8px;
+  margin: 0 0 8px; padding: 0 10px 8px;
   border-bottom: 1px solid var(--line);
   font-size: 0.8125rem; font-weight: 700;
   letter-spacing: 0.07em; text-transform: uppercase;
@@ -481,6 +376,31 @@ export const DEADLINES_CSS = `
 .dl-grouphead span { font-weight: 600; opacity: 0.7; font-variant-numeric: tabular-nums; }
 
 .dl-list { margin: 0; padding: 0; list-style: none; }
+
+/* A measure. The page is full width; a checklist inside it is not, or the
+   date ends up a screen away from the thing it belongs to. */
+.dl-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 14px;
+  min-height: 44px;
+  padding: 10px 10px;
+  border-radius: 9px;
+  background: transparent;
+}
+.dl-row .deadline-check { align-self: center; }
+.dl-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dl-row-title { font-size: 0.9375rem; line-height: 1.4; }
+.dl-row-desc {
+  font-size: 0.8125rem; line-height: 1.5;
+  color: var(--ink-sub, #8a8f98);
+}
+.dl-row-meta {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 @media (max-width: 720px) {
   .dl-page { padding: 24px 16px 64px; }

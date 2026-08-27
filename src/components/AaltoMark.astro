@@ -13,30 +13,40 @@
  *
  * It removes itself if the file is not there. A broken-image icon beside a
  * page title is worse than no logo at all.
+ *
+ * The rule before it is part of this component rather than the page. It used
+ * to be a span in admin.astro, so when the mark removed itself the page was
+ * left showing "Cohort admin" followed by a divider with nothing on the far
+ * side of it. Both halves live or die together now.
  */
 ---
 
-<img
-  class="aalto-mark"
-  data-aalto-mark
-  src="/aalto-logo.svg"
-  alt="Aalto University"
-  hidden
-/>
+<span class="aalto-lockup" data-aalto-mark hidden>
+  <span aria-hidden="true" class="aalto-rule"></span>
+  <img class="aalto-mark" src="/aalto-logo.svg" alt="Aalto University" />
+</span>
 
 <script is:inline>
   (function () {
-    var img = document.querySelector("[data-aalto-mark]");
+    var box = document.querySelector("[data-aalto-mark]");
+    if (!box) return;
+    var img = box.querySelector("img");
     if (!img) return;
-    img.addEventListener("load", function () { img.hidden = false; });
-    img.addEventListener("error", function () { img.remove(); });
+    img.addEventListener("load", function () { box.hidden = false; });
+    img.addEventListener("error", function () { box.remove(); });
     // A cached image can finish before the listener is attached.
-    if (img.complete && img.naturalWidth > 0) img.hidden = false;
-    else if (img.complete) img.remove();
+    if (img.complete && img.naturalWidth > 0) box.hidden = false;
+    else if (img.complete) box.remove();
   })();
 </script>
 
 <style is:global>
+  .aalto-lockup { display: inline-flex; align-items: center; gap: 14px; }
+  .aalto-rule {
+    width: 1px; height: 26px;
+    background: var(--border-strong);
+    flex-shrink: 0;
+  }
   .aalto-mark {
     display: block;
     height: 22px;

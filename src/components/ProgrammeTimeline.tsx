@@ -219,7 +219,9 @@ type ViewProps = {
   setOpenId: (id: string | null) => void;
 };
 
-function Timeline({ events, today, startDate, totalWeeks, openId, setOpenId }: ViewProps) {
+/* No openId: the timeline shows every description, so it has nothing to
+   disclose. The calendar still needs it for the detail panel. */
+function Timeline({ events, today, startDate, totalWeeks }: ViewProps) {
   /*
    * Grouped by sprint week when there is a start date, by month when there is
    * not. A programme is lived in weeks — "week 4" is how everybody in the room
@@ -303,7 +305,7 @@ function Timeline({ events, today, startDate, totalWeeks, openId, setOpenId }: V
                     <span className="pt-day">{longDate(event.startsOn, fromIsoDay(today).getFullYear())}</span>
                     <span className="pt-time">{timeLabel(event)}</span>
                   </div>
-                  <EventBody event={event} open={openId === event.id} onToggle={() => setOpenId(openId === event.id ? null : event.id)} />
+                  <EventBody event={event} />
                 </div>
               );
             })}
@@ -314,25 +316,31 @@ function Timeline({ events, today, startDate, totalWeeks, openId, setOpenId }: V
   );
 }
 
-function EventBody({ event, open, onToggle }: { event: ProgrammeEvent; open: boolean; onToggle: () => void }) {
+function EventBody({ event }: { event: ProgrammeEvent }) {
   const kind = KINDS[event.kind];
-  const hasMore = Boolean(event.description);
+  /*
+   * The description is shown, not hidden behind "More".
+   *
+   * It was a disclosure because the row was 860px and the text had nowhere to
+   * go. On a full-width page it had somewhere to go and was still being
+   * hidden: a one-sentence note folded away while five hundred pixels of the
+   * same row sat empty. A control that costs a click to reveal what would fit
+   * anyway is a control that should not exist.
+   *
+   * It takes its own column on a wide screen and falls under the title on a
+   * narrow one, so nothing is lost on a phone either.
+   */
   return (
-    <div className="pt-body">
-      <div className="pt-bodyhead">
-        <h3 className="pt-eventtitle">{event.title}</h3>
-        <span className={`pt-kind${kind.major ? " is-major" : ""}`}>{kind.label}</span>
+    <>
+      <div className="pt-body">
+        <div className="pt-bodyhead">
+          <h3 className="pt-eventtitle">{event.title}</h3>
+          <span className={`pt-kind${kind.major ? " is-major" : ""}`}>{kind.label}</span>
+        </div>
+        {event.location && <p className="pt-loc">{event.location}</p>}
       </div>
-      {event.location && <p className="pt-loc">{event.location}</p>}
-      {hasMore && (
-        <>
-          <button type="button" className="pt-more" aria-expanded={open} onClick={onToggle}>
-            {open ? "Less" : "More"}
-          </button>
-          {open && <p className="pt-desc">{event.description}</p>}
-        </>
-      )}
-    </div>
+      {event.description ? <p className="pt-desc">{event.description}</p> : <span />}
+    </>
   );
 }
 
@@ -482,7 +490,24 @@ export const PROGRAMME_CSS = `
   transition: background-color 140ms ease, color 140ms ease;
 }
 .pt-mode:hover { color: var(--ink); }
-.pt-mode.is-on { background: rgba(255,255,255,0.09); color: var(--ink); }
+/*
+ * The selected half has to look selected.
+ *
+ * It was rgba(255,255,255,0.09) sitting on the track's own 0.02 over a
+ * near-black page: the two halves composited to 5.5% and 3.5% white, a
+ * difference of two percent. Measured side by side on screen the control
+ * looked like it was showing the timeline while the calendar was on. A
+ * segmented control whose state cannot be read is worse than no control,
+ * because the reader trusts it.
+ *
+ * A raised surface with a lit top edge and a shadow under it, so the selected
+ * half reads as a physical chip and not a slightly paler rectangle.
+ */
+.pt-mode.is-on {
+  background: rgba(255,255,255,0.16);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.10);
+}
 .pt-mode:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 1px; }
 
 .pt-empty {
@@ -519,7 +544,10 @@ export const PROGRAMME_CSS = `
 
 .pt-item {
   position: relative; display: grid;
-  grid-template-columns: 220px 1fr; gap: 4px 28px;
+  /* Date, what it is, and what to know about it. The third column is what the
+     width is for; without it the row was half content and half dark. */
+  grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 4px 28px;
   padding: 14px 0;
 }
 .pt-item + .pt-item { border-top: 1px solid rgba(255,255,255,0.05); }
@@ -561,16 +589,10 @@ export const PROGRAMME_CSS = `
 .pt-kind.is-major { border-color: rgba(94,106,210,0.5); color: #a5adf0; }
 .pt-loc { margin: 5px 0 0; font-size: 0.8125rem; color: var(--ink-sub, #8a8f98); }
 .pt-desc {
-  margin: 8px 0 0; max-width: 62ch;
+  margin: 0; max-width: 60ch; align-self: start;
   font-size: 0.875rem; line-height: 1.55; color: var(--ink-sub, #8a8f98);
   white-space: pre-wrap;
 }
-.pt-more {
-  margin-top: 6px; padding: 0; border: 0; background: none;
-  color: var(--brand-accent); font: 600 0.8125rem inherit; cursor: pointer;
-}
-.pt-more:hover { text-decoration: underline; }
-.pt-more:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 3px; }
 
 /* ── Calendar ── */
 .pt-calhead { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
@@ -654,7 +676,9 @@ export const PROGRAMME_CSS = `
   .pt-wrap { padding: 24px 16px 64px; }
   /* The date column stops being a column: at this width 190px of it leaves the
      title about twelve characters, and every event wraps to four lines. */
+  /* One column: the date row, the title, then the note under it. */
   .pt-item { grid-template-columns: 1fr; gap: 4px; }
+  .pt-desc { margin-top: 4px; }
   .pt-when { flex-direction: row; align-items: baseline; gap: 8px; }
   .pt-cell { min-height: 58px; padding: 3px; }
 
