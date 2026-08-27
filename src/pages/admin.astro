@@ -52,10 +52,24 @@ import AaltoMark from "../components/AaltoMark.astro";
         color: var(--text);
         padding: 40px 24px 80px;
       }
-      main { max-width: 900px; margin: 0 auto; }
+      /*
+         The same width as the founder pages.
+         *
+         * It was 900px, which left roughly 400 pixels of empty screen down
+         * each side and clipped the last tab, "Transcript", off the end of a
+         * nav that was already 5px too narrow for its own contents. The
+         * founder views were widened to min(1280px, 100%); this is the page
+         * the operating team spends the most time on and it was the narrowest.
+         *
+         * Width goes to the things that use it: the tab bar, the people table,
+         * the deadline and knowledge lists. Not to the forms, which are capped
+         * below, because a text field the width of a desk is not easier to
+         * fill in.
+      */
+      main { max-width: min(1280px, 100%); margin: 0 auto; }
       h1 { font-family: var(--serif); font-size: 2.25rem; margin: 0 0 6px; }
       h2 { font-family: var(--serif); font-size: 1.375rem; margin: 0 0 14px; }
-      .lede { color: var(--muted); margin: 0 0 32px; font-size: 0.9375rem; }
+      .lede { color: var(--muted); margin: 0 0 32px; font-size: 0.9375rem; max-width: 82ch; }
       .panel {
         background: var(--panel);
         border: 1px solid var(--border);
@@ -198,6 +212,9 @@ import AaltoMark from "../components/AaltoMark.astro";
         font-size: 0.9375rem;
       }
       textarea { width: 100%; min-height: 120px; resize: vertical; line-height: 1.5; }
+      /* A working measure for anything you type into. The panels are as wide
+         as the page now; the fields inside them are not. */
+      input, select, textarea { max-width: 760px; }
       input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
       /*
          Buttons are ink, not accent.
@@ -358,7 +375,7 @@ import AaltoMark from "../components/AaltoMark.astro";
         word-break: break-all;
         flex: 1 1 320px;
       }
-      .note { color: var(--muted); font-size: 0.8125rem; line-height: 1.6; margin: 14px 0 0; }
+      .note { color: var(--muted); font-size: 0.8125rem; line-height: 1.6; margin: 14px 0 0; max-width: 82ch; }
       .message { font-size: 0.875rem; margin-top: 14px; }
       .message.error { color: var(--danger); }
       .message.ok { color: var(--ok); }
@@ -390,11 +407,6 @@ import AaltoMark from "../components/AaltoMark.astro";
          is built against it. */
       .title-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
       .title-row h1 { margin: 0; }
-      .title-rule {
-        width: 1px; height: 26px;
-        background: var(--border-strong);
-        flex-shrink: 0;
-      }
 
       .back-link {
         display: inline-flex;
@@ -844,7 +856,7 @@ import AaltoMark from "../components/AaltoMark.astro";
       </a>
       <div class="title-row">
         <h1>Cohort admin</h1>
-        <span aria-hidden="true" class="title-rule"></span>
+        {/* The rule lives inside the mark, so it goes when the mark goes. */}
         <AaltoMark />
       </div>
       <p class="lede" id="lede">Loading…</p>
@@ -941,7 +953,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           <h2>Add the whole cohort</h2>
           <p class="note" style="margin-top:0">
             One person per line, as <strong>Name, email</strong>. Everyone added here is a
-            founder — add the operating team individually above.
+            founder. Add the operating team individually above.
           </p>
           <form id="add-bulk">
             <textarea
@@ -957,7 +969,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           <h2>Setup links sent</h2>
           <p class="note" style="margin-top:0">
             Each link is emailed straight to that person's own address. You never see it,
-            and neither does anyone else on the team — a setup link is as good as a
+            and neither does anyone else on the team. A setup link is as good as a
             password, so whoever holds it can claim the account. Each works once and
             expires after 14 days. If someone says it never arrived, use
             <strong>Resend link</strong> on their row.
@@ -1041,7 +1053,7 @@ import AaltoMark from "../components/AaltoMark.astro";
             the same view.
           </p>
           <p class="note" style="margin-top:0">
-            Times are the clock time in the room — the cohort's own wall clock, not
+            Times are the clock time in the room: the cohort's own wall clock, not
             converted per person. Leave the time blank for something that takes a whole
             day. The sprint week is worked out from the date, so moving the sprint start
             moves everything with it.
@@ -1115,12 +1127,12 @@ import AaltoMark from "../components/AaltoMark.astro";
               <input id="pr-title" maxlength="200" placeholder="Orientation &amp; Kick-off" />
             </label>
             <label style="flex:1 1 100%">
-              <span class="label-text">Milestones — one per line</span>
+              <span class="label-text">Milestones, one per line</span>
               <textarea id="pr-milestones" rows="4" maxlength="4000" placeholder="Define the research framework&#10;Clarify roles and tasks"></textarea>
             </label>
             <label style="flex:1 1 100%">
-              <span class="label-text">Sessions — one per line</span>
-              <textarea id="pr-sessions" rows="4" maxlength="4000" placeholder="Tue 9:30–11:30 — Team meeting, intro to the sprint&#10;Wed 13:00–15:00 — Workshop"></textarea>
+              <span class="label-text">Sessions, one per line</span>
+              <textarea id="pr-sessions" rows="4" maxlength="4000" placeholder="Tue 9:30–11:30 Team meeting, intro to the sprint&#10;Wed 13:00–15:00 Workshop"></textarea>
             </label>
             <button type="submit">Save week</button>
           </form>
@@ -1158,14 +1170,14 @@ import AaltoMark from "../components/AaltoMark.astro";
             </p>
             <p class="note" style="margin-top:0">
               Opening one tells the founder it was read, once. They are not
-              shown how often, and re-reading changes nothing — sharing
+              shown how often, and re-reading changes nothing. Sharing
               something difficult and hearing nothing back is worse than not
               sharing at all.
             </p>
             <p class="note" style="margin-top:0">
               <strong>Archive</strong> shortens this list and keeps the conversation;
               <strong>Remove</strong> takes it off the list for good. Neither touches
-              the founder&rsquo;s copy — the conversation, and their own record that
+              the founder&rsquo;s copy: the conversation, and their own record that
               they shared it, stay theirs. Organisers only.
             </p>
             <p class="message" id="shared-message" hidden></p>
@@ -1261,11 +1273,11 @@ import AaltoMark from "../components/AaltoMark.astro";
           <h2>What Sprint Buddy knows</h2>
           <p class="note" style="margin-top:0">
             What the programme's mentors have said, one entry per topic. All of
-            it is sent with every message — there is no search step to miss the
+            it is sent with every message, so there is no search step to miss the
             right passage. Order matters: it is the order they are read in.
             Fill in the source: it is for your records and lets you archive a
             whole session in one click. It is never sent to Sprint Buddy and
-            never shown to the cohort — what a mentor said in a closed room
+            never shown to the cohort. What a mentor said in a closed room
             becomes the programme's position, not a quote with their name on it.
             Archive rather than delete so you can put something back.
           </p>
@@ -1303,7 +1315,7 @@ import AaltoMark from "../components/AaltoMark.astro";
             <h2>Add knowledge from a transcript</h2>
             <p class="note" style="margin-top:0">
               Paste a mentor session. It is read in pieces and comes back as
-              draft entries for you to approve — nothing reaches Sprint Buddy
+              draft entries for you to approve. Nothing reaches Sprint Buddy
               until you tick it and add it. The transcript itself is never
               stored, only the entries you keep.
             </p>
@@ -1756,7 +1768,7 @@ import AaltoMark from "../components/AaltoMark.astro";
             remove.addEventListener("click", async () => {
               const warning =
                 "Remove " + user.name + " (" + user.email + ")?\n\n" +
-                "This permanently deletes their account and everything in it — " +
+                "This permanently deletes their account and everything in it: " +
                 "conversations, check-ins and decisions. It cannot be undone.";
               if (!confirm(warning)) return;
               remove.disabled = true;
@@ -2338,7 +2350,7 @@ import AaltoMark from "../components/AaltoMark.astro";
         const summary =
           "Added " + added.length + " of " + data.results.length + "." +
           (failed.length
-            ? " Skipped: " + failed.map((f) => (f.email || "(blank)") + " — " + f.error).join("; ")
+            ? " Skipped: " + failed.map((f) => (f.email || "(blank)") + ": " + f.error).join("; ")
             : "");
         say(message, summary, failed.length > 0);
         if (added.length) textarea.value = "";
@@ -2380,7 +2392,7 @@ import AaltoMark from "../components/AaltoMark.astro";
                another organizer's session, on the page that holds every
                destructive control there is. esc() has existed three screens
                up this file the whole time. */
-            const heading = esc([w.phase, w.title].filter(Boolean).join(" — "));
+            const heading = esc([w.phase, w.title].filter(Boolean).join(", "));
             const milestones = w.milestones.split("\n").filter((l) => l.trim()).length;
             const sessions = w.sessions.split("\n").filter((l) => l.trim()).length;
             return (
@@ -2958,7 +2970,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           : 0;
         kbSize.textContent =
           "Active pack: ~" + (size.approxTokens || 0) + " tokens, " + pct + "% of the budget." +
-          (size.truncated ? " Over budget — the lowest-ordered entries are being dropped." : "");
+          (size.truncated ? " Over budget. The lowest-ordered entries are being dropped." : "");
         renderKnowledge();
         if (!kbId.value) kbClear();
       }
@@ -3135,7 +3147,7 @@ import AaltoMark from "../components/AaltoMark.astro";
         event.preventDefault();
         const source = ingestSource.value.trim();
         const text = ingestText.value.trim();
-        if (!source) { say(ingestMessage, "Name whose session it is first — for your records, not for the cohort.", true); return; }
+        if (!source) { say(ingestMessage, "Name whose session it is first. For your records, not for the cohort.", true); return; }
         if (text.length < 200) { say(ingestMessage, "That is too short to be a session.", true); return; }
 
         const chunks = splitTranscript(text);
@@ -3622,7 +3634,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           '<section class="panel"><h2>Week ' + week + '</h2>' +
           (programme && programme.phase
             ? '<p class="note" style="margin-top:0">The cohort is on <strong>' + esc(programme.phase) + '</strong>' +
-              (programme.title ? ' — ' + esc(programme.title) : "") + ".</p>"
+              (programme.title ? ', ' + esc(programme.title) : "") + ".</p>"
             : '<p class="note" style="margin-top:0">No programme set for this week yet.</p>') +
           "</section>");
 

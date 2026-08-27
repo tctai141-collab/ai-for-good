@@ -19,9 +19,10 @@ const index = readFileSync("src/pages/index.astro", "utf-8");
 describe("where it sits", () => {
   test("beside the wordmark in the app's sidebar", () => {
     const lockup = sidebar.slice(sidebar.indexOf('className="wordmark-liquid"') - 400);
-    expect(lockup).toContain("<AaltoMark height={20} />");
+    expect(lockup).toContain("height={20}");
     // A rule between them, which is what makes it a lockup rather than two
-    // logos that happen to be near each other.
+    // logos that happen to be near each other. The mark draws it, so it is a
+    // prop here rather than a span in this file.
     expect(lockup.indexOf("wordmark-liquid")).toBeLessThan(lockup.indexOf("<AaltoMark"));
   });
 
@@ -37,7 +38,21 @@ describe("where it sits", () => {
   test("beside the page title on /admin, which has no wordmark", () => {
     expect(admin).toContain("<AaltoMark />");
     expect(admin).toContain('<h1>Cohort admin</h1>');
-    expect(admin).toContain("title-rule");
+  });
+
+  test("the divider goes when the mark goes", () => {
+    /*
+     * With no file on disk the mark removes itself. When the rule was the
+     * caller's own span it stayed behind, so every screen showed the wordmark,
+     * then a lone vertical bar, then nothing. Both halves belong to the mark.
+     */
+    expect(astroMark).toContain("aalto-rule");
+    expect(admin).not.toContain("title-rule");
+    // The astro version removes the whole lockup, not just the image.
+    expect(astroMark).toContain("box.remove()");
+    // The React version draws the rule only once the image has loaded.
+    expect(reactMark).toContain('{rule && state === "ok" &&');
+    expect(sidebar).toContain("rule={{");
   });
 
   test("no longer pinned to a corner", () => {
@@ -61,7 +76,7 @@ describe("what it must never do", () => {
     expect(reactMark).toContain('setState("missing")');
     expect(reactMark).toContain('if (state === "missing") return null;');
     expect(astroMark).toContain('img.addEventListener("error"');
-    expect(astroMark).toContain("img.remove()");
+    expect(astroMark).toContain("box.remove()");
     // A cached image can finish loading before the listener is attached.
     expect(astroMark).toContain("img.complete");
   });

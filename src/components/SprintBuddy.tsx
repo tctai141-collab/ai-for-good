@@ -87,6 +87,25 @@ function formatMarkdown(text: string): string {
  * the founder's today. en-CA is used only because it formats as ISO; no locale
  * is implied by it.
  */
+/**
+ * When a decision was made, as a person would say it.
+ *
+ * Not `d.at`, which is the string "today" on every row: the browser writes it
+ * and the schema defaults to it, so a journal of twenty decisions read as
+ * twenty decisions made today. created_at is the real one.
+ */
+function decisionDate(d: { createdAt?: string; at: string }): string {
+  if (!d.createdAt) return d.at;
+  const when = asDate(d.createdAt);
+  if (Number.isNaN(when.getTime())) return d.at;
+  const now = new Date();
+  return when.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(when.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
 function asDate(stamp: string): Date {
   // SQLite writes "2026-09-15 06:12:44" in UTC with no marker; an optimistic
   // row written here is already a full ISO string. Both have to parse the same.
@@ -121,7 +140,10 @@ type Decision = {
   summary: string;
   door: "reversible" | "one-way";
   status: "open" | "closed";
+  /** The literal string "today" on anything written by the browser. Kept
+      because it is what the API stores; never shown. Use createdAt. */
   at: string;
+  createdAt?: string;
   theme: string;
   threadId?: string;
   outcome?: string;
@@ -529,7 +551,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
   });
   const addDecision = (d: { summary: string; door: "reversible" | "one-way"; theme: string }) => {
     const id = "d" + Date.now();
-    const decision = { ...d, id, status: "open" as const, at: "today" };
+    const decision = { ...d, id, status: "open" as const, at: "today", createdAt: new Date().toISOString() };
     setDecisions((prev) => [decision, ...prev]);
     if (userEmail) {
       saveDecision(userEmail, decision).catch(() => {});
@@ -749,8 +771,10 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             <span className="wordmark-liquid" aria-label="Sprint Buddy">
               Sprint<br />Buddy
             </span>
-            <span aria-hidden="true" style={{ width: 1, alignSelf: "stretch", margin: "4px 0", background: "var(--line-strong)", flexShrink: 0 }} />
-            <AaltoMark height={20} />
+            <AaltoMark
+              height={20}
+              rule={{ width: 1, alignSelf: "stretch", margin: "4px 0", background: "var(--line-strong)", flexShrink: 0 }}
+            />
           </div>
           <button
             onClick={onToggle}
@@ -800,7 +824,13 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             <span style={{ fontSize: 20, lineHeight: 1, fontWeight: 900, marginRight: 2 }}>+</span> New conversation
           </button>
 
-          <p style={{ ...navLabel, marginTop: 26 }}>Pick up where you left off</p>
+          {/* Only when there is something to pick up. On day one every
+              founder has no conversations, so this was a heading above an
+              empty strip of sidebar telling twenty people to resume something
+              they had not started. */}
+          {threads.length > 0 && (
+            <p style={{ ...navLabel, marginTop: 26 }}>Pick up where you left off</p>
+          )}
           {/*
             Bounded, and scrolls inside itself.
 
@@ -1137,7 +1167,7 @@ function SidebarRail({
   }[] = persona === "founder"
     ? [
         { key: "chat", glyph: "✉", label: "Conversations", on: view === "chat", run: onNew },
-        { key: "checkin", glyph: "◉", label: checkinDone ? "Today's check-in — done" : "Today's check-in", on: false, dot: !checkinDone, run: onStartCheckin },
+        { key: "checkin", glyph: "◉", label: checkinDone ? "Today's check-in, done" : "Today's check-in", on: false, dot: !checkinDone, run: onStartCheckin },
         { key: "deadlines", glyph: "◱", label: "Deadlines", on: view === "deadlines", run: onDeadlines },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
         { key: "wishes", glyph: "✦", label: "Ask for something", on: view === "wishes", run: onWishes },
@@ -1922,10 +1952,14 @@ function MobileActions({
   /*
    * Two rows, not one.
    *
-   * Measured at 390px with everything on a single line: the deadline collapsed
-   * to 26 pixels, because it is the only flexible item and the five mood
-   * buttons take what they need first. The one thing a founder opens their
-   * phone to see was the one thing squeezed out.
+   * Measured at 390px on one line: the deadline title rendered as "S…". It is
+   * the only flexible item, so it pays for the check-in pill, the strip's
+   * 60px indent past the expand button, and its own date and overflow count —
+   * which between them leave one character. A chip that says "S… 2d late"
+   * names nothing; the founder has to open the sidebar to learn what is late,
+   * which is exactly the trip this strip exists to save.
+   *
+   * On its own row it has the width to say the whole thing.
    */
   return (
     <div className="mobile-actions">
@@ -1939,8 +1973,10 @@ function MobileActions({
             Today&rsquo;s check-in
           </button>
         )}
+      </div>
 
-        {next && (
+      {next && (
+        <div className="mobile-actions-row">
           <button
             type="button"
             onClick={onOpenSidebar}
@@ -1951,9 +1987,8 @@ function MobileActions({
             <span className="mobile-actions-when">{next.label}</span>
             {next.more > 0 && <span className="mobile-actions-more">+{next.more}</span>}
           </button>
-        )}
-      </div>
-
+        </div>
+      )}
     </div>
   );
 }
@@ -2057,7 +2092,11 @@ function Reflections({
   const topTheme = useMemo(() => {
     const m: Record<string, number> = {};
     threads.forEach((t) => { m[t.theme] = (m[t.theme] || 0) + 1; });
-    return Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0] || "—";
+    /* null, not a dash. The sentence that uses this drops the clause when
+       there is no theme; a placeholder glyph in the middle of a sentence read
+       as "Most of it circled —." on every account that had check-ins but no
+       titled conversations, which is every account in week one. */
+    return Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   }, [threads]);
 
   /*
@@ -2221,7 +2260,9 @@ function Reflections({
       </header>
 
       <p style={{ margin: "0 0 30px", fontSize: 15, lineHeight: 1.6, color: C.sub, letterSpacing: "var(--track-body)" }}>
-        You came here <Stat>{visits}</Stat> times. Most of it circled <Stat c={themeColor(topTheme)}>{topTheme}</Stat>. <Stat c={C.yellow}>{openCount}</Stat> {openCount === 1 ? "decision is" : "decisions are"} still open.
+        You came here <Stat>{visits}</Stat> times.{" "}
+        {topTheme && <>Most of it circled <Stat c={themeColor(topTheme)}>{topTheme}</Stat>. </>}
+        <Stat c={C.yellow}>{openCount}</Stat> {openCount === 1 ? "decision is" : "decisions are"} still open.
       </p>
 
       {/* The counts, hoisted out of the printable record at the foot of the
@@ -2251,7 +2292,7 @@ function Reflections({
             </p>
             {latestCheckin.mood != null && (
               <p style={{ margin: "10px 0 0", color: signalColor(latestCheckin.mood), fontSize: 13, fontWeight: 700 }}>
-                {signalLabel(latestCheckin.mood)} · {latestCheckin.mood}/100{latestCheckinParts?.signal ? ` — ${latestCheckinParts.signal}` : ""}
+                {signalLabel(latestCheckin.mood)} · {latestCheckin.mood}/100{latestCheckinParts?.signal ? ` · ${latestCheckinParts.signal}` : ""}
               </p>
             )}
           </blockquote>
@@ -2869,7 +2910,7 @@ function WgPrivateNote() {
         fontStyle: "italic",
       }}
     >
-      The operating team can see your profile — the six ranked, and which two
+      The operating team can see your profile: the six ranked, and which two
       you are gifted at. They cannot see your individual answers or anything you
       wrote in your own words, and neither can anyone else in the cohort.
     </p>
@@ -2913,7 +2954,7 @@ function WgConsent({ onAgree, onCancel }: { onAgree: () => void; onCancel: () =>
       <p>
         Your result is shared with the Sprint operating team. That means the two
         kinds of work you are gifted at, the two that drain you, and where the
-        other two sit — the same picture you will see.
+        other two sit. The same picture you will see.
       </p>
       <p>
         <strong>Not shared:</strong> your thirty individual answers, and anything
@@ -3112,7 +3153,7 @@ function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision
         {d.status === "closed" && d.outcome && (
           <em style={{ display: "block", marginTop: 4, fontFamily: "var(--font-serif)", fontStyle: "italic", color: C.sub, fontSize: 14.5 }}>{d.outcome}</em>
         )}
-        <span style={{ display: "block", marginTop: 5, fontSize: 12, color: C.faint }}>{d.door} · {d.at}</span>
+        <span style={{ display: "block", marginTop: 5, fontSize: 12, color: C.faint }}>{d.door} · {decisionDate(d)}</span>
       </div>
       {d.status === "open" && (
         <button
@@ -3406,7 +3447,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
           <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 2.2, textTransform: "uppercase", color: C.faint }}>Adoption</p>
           <p style={{ margin: "6px 0 0", fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>
             {cohort?.quiet} of {teams.length} have not checked in this week. That is a habit problem before it is a
-            coaching one — and until it closes, the signals above come from too few people to read much into.
+            coaching one, and until it closes the signals above come from too few people to read much into.
           </p>
         </div>
       )}
@@ -3560,7 +3601,7 @@ function useTimeContext(): TimeCtx {
   ];
 
   const dayLines = [
-    "Week 1 — Orientation & Kick-off. You'll miss this naivety later. Savor it.",
+    "Week 1, orientation and kick-off. You'll miss this naivety later. Savor it.",
     "Your cloud bill is basically a subscription to Jeff Bezos's next yacht. Worth it? Probably.",
     "Somewhere a competitor just raised $67M to do exactly what you're doing but with more headcount. Doesn't matter. You're faster.",
     "The spreadsheet says runway is 18 months. The spreadsheet is an optimist. It also said you'd launch in Q2.",
@@ -3992,7 +4033,7 @@ ${OSK_CSS}
     flex-direction: column;
     gap: 8px;
     flex-shrink: 0;
-    padding: 10px 12px 10px 60px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--line-strong);
     background: var(--card, rgba(255,255,255,0.03));
   }
@@ -4002,6 +4043,9 @@ ${OSK_CSS}
     gap: 8px;
     min-width: 0;
   }
+  /* Only the first row shares its line with the expand-sidebar button, which
+     floats over this corner. The deadline row below it gets the full width. */
+  .mobile-actions-row:first-child { padding-left: 48px; }
 }
 .mobile-actions-checkin {
   flex: 0 0 auto;

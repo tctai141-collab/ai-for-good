@@ -78,7 +78,7 @@ function openWith(
     return "No check-ins yet. Worth confirming they can sign in.";
   }
   if (daysSince >= 14) {
-    parts.push(`Quiet for ${daysSince} days — the silence is the signal.`);
+    parts.push(`Quiet for ${daysSince} days. The silence is the signal.`);
   } else if (daysSince >= 7) {
     parts.push(`Last check-in ${daysSince} days ago.`);
   }
@@ -88,7 +88,7 @@ function openWith(
   } else if (trend === "tenser") {
     parts.push("Attention score rising over recent weeks.");
   } else if (trend === "calmer") {
-    parts.push("Settling — scores easing off.");
+    parts.push("Settling, scores easing off.");
   }
 
   if (theme) parts.push(`Recurring theme: ${theme}.`);

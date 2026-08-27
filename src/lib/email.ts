@@ -93,7 +93,7 @@ async function send(message: Message): Promise<void> {
 
 function signOff(): string {
   return `
-— The Aalto Founder Sprint team
+The Aalto Founder Sprint team
 
 This link is single-use and expires in 14 days. Nobody on the operating team
 can see it or your password.`;
@@ -110,7 +110,7 @@ Your Sprint Buddy account is ready. Choose a password here:
 
 ${link}
 
-Sprint Buddy is your own space. Your conversations are private — the operating
+Sprint Buddy is your own space. Your conversations are private. The operating
 team sees themes and check-in signals, never what you wrote, unless you
 explicitly share a conversation with them.
 ${signOff()}`,
@@ -201,7 +201,7 @@ Tick it off and you will hear nothing more about it.
 
 While you are there, today's check-in takes two minutes.
 
-— The Aalto Founder Sprint team`,
+The Aalto Founder Sprint team`,
   });
 }
 
@@ -223,7 +223,7 @@ password here:
 
 ${link}
 
-If you did NOT request this, ${contactLine()} — it means somebody else
+If you did NOT request this, ${contactLine()}. It means somebody else
 triggered a reset on your account.
 ${signOff()}`,
   });

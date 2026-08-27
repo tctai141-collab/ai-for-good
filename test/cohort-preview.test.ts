@@ -106,12 +106,18 @@ describe("you always know which view you are in", () => {
   test("the preview carries a bar saying whose data it is", () => {
     /*
      * This view is meant to be indistinguishable from a founder's, which is
-     * exactly why somebody has to be told which one they are in — and told
+     * exactly why somebody has to be told which one they are in, and told
      * that the emptiness is theirs, not evidence about a founder.
+     *
+     * Asserted on the claim, not the wording. Pinning the exact sentence made
+     * a copy edit look like a regression: capitalising one word after a
+     * rewrite failed this test while the bar said the same thing.
      */
     expect(app).toContain('className="preview-bar"');
-    expect(app).toContain("your own account");
-    expect(app).toContain("not a\n              founder");
+    const bar = app.slice(app.indexOf('className="preview-bar"'), app.indexOf("preview-exit"));
+    expect(bar.toLowerCase()).toContain("your own account");
+    expect(bar.toLowerCase()).toContain("not a");
+    expect(bar.toLowerCase()).toContain("founder");
   });
 
   test("the bar is impossible to miss", () => {

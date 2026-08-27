@@ -60,7 +60,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
             Sprint Buddy could not draw this page.
           </h1>
           <p style={{ margin: "0 0 18px", fontSize: 14, lineHeight: 1.6, color: "#d0d6e0" }}>
-            Nothing you have written is affected — it is stored on the server, not
+            Nothing you have written is affected. It is stored on the server, not
             in this page. Reloading usually clears it.
           </p>
           <button

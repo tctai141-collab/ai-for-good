@@ -323,7 +323,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
   } catch (error) {
     reportError(error, { where: "admin.users", extra: { action: String(body.action) } });
     return Response.json(
-      { error: "That did not work. Nothing was changed — check the server logs." },
+      { error: "That did not work. Nothing was changed. Check the server logs." },
       { status: 500 },
     );
   }
