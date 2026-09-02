@@ -293,66 +293,26 @@ export function clientIp(request: Request): string | null {
 }
 
 /*
- * Per-address throttle, alongside the per-email one.
+ * The per-address throttle lives in limits.ts, and is re-exported here so the
+ * login route keeps importing its throttles from one place.
  *
- * The per-email limit alone stops somebody grinding one account, and does
- * nothing about the attack that actually fits this app: twenty-four known
- * addresses, ten tries each, one common password. That is 240 guesses from a
- * single machine without ever tripping a limit. This caps the machine.
- *
- * The limit itself lives in limits.ts. It is exported for the test that
- * asserts the boundary, and importing it from here would pull the database
- * open in the test runner's own process.
+ * It moved for the reason recorded in session-hardening.test.ts: this module
+ * imports the database module, and `db/index.ts` resolves `DB_PATH` once, at
+ * module load. A test that imports auth.ts therefore freezes that path before
+ * a later suite can set it, and reminders.test.ts, which sets `DB_PATH` and
+ * then dynamically imports, fails with "unable to open database file". It went
+ * green locally only because ./data already existed there, and red in CI on a
+ * fresh checkout. limits.ts imports nothing, which is what makes the throttle
+ * testable without dragging the database in behind it.
  */
-const ipFailures = new Map<string, { count: number; firstAt: number }>();
-const MAX_TRACKED_IPS = 5_000;
+export {
+  clearIpFailures,
+  isIpLockedOut,
+  recordIpFailure,
+  resetIpFailures,
+  trackedIpCount,
+} from "./limits";
 
-function bumpWindow(
-  map: Map<string, { count: number; firstAt: number }>,
-  key: string,
-  now: number,
-): void {
-  const record = map.get(key);
-  if (!record || now - record.firstAt > LOCKOUT_MS) {
-    map.set(key, { count: 1, firstAt: now });
-    return;
-  }
-  record.count += 1;
-}
-
-export function isIpLockedOut(ip: string | null): boolean {
-  if (!ip) return false;
-  const record = ipFailures.get(ip);
-  if (!record) return false;
-  if (Date.now() - record.firstAt > LOCKOUT_MS) {
-    ipFailures.delete(ip);
-    return false;
-  }
-  return record.count >= IP_FAILURE_LIMIT;
-}
-
-export function recordIpFailure(ip: string | null): void {
-  if (!ip) return;
-  const now = Date.now();
-  if (ipFailures.size >= MAX_TRACKED_IPS) {
-    for (const [key, record] of ipFailures) {
-      if (now - record.firstAt > LOCKOUT_MS) ipFailures.delete(key);
-    }
-    // Still full of live windows: that is the attack, so stop adding keys
-    // rather than letting the map grow without bound.
-    if (ipFailures.size >= MAX_TRACKED_IPS) return;
-  }
-  bumpWindow(ipFailures, ip, now);
-}
-
-export function clearIpFailures(ip: string | null): void {
-  if (ip) ipFailures.delete(ip);
-}
-
-/** Test seam. */
-export function resetIpFailures(): void {
-  ipFailures.clear();
-}
 
 export function isLockedOut(email: string): boolean {
   const record = failures.get(email);

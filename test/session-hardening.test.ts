@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createFounder, createOrganizer, post, startServer, type Harness, type Session } from "./helpers/harness";
 /* From limits.ts, not auth.ts: auth.ts opens the database on import, and a
    second connection in the test runner's own process breaks whichever suite
@@ -119,6 +120,71 @@ describe("what this file may import", () => {
     const src = readFileSync("src/lib/limits.ts", "utf-8");
     expect(src).not.toMatch(/^\s*import[\s{]/m);
     expect(src).toContain("export const IP_FAILURE_LIMIT");
+  });
+
+  test("no other suite pulls the database module into the runner's own process", () => {
+    /*
+     * The guard the comment above only described, after this trap bit twice
+     * more from two new directions: a test importing src/lib/auth for the
+     * address throttle, and a test importing src/lib/reminders to compare it
+     * against the tracker. Both are reasonable-looking, and both are the bug.
+     *
+     * db/index.ts resolves DB_PATH once, at module load, and `bun test` loads
+     * every file into one process. So the first suite to pull that module in
+     * fixes the path for all of them, and reminders.test.ts, which sets DB_PATH
+     * and *then* imports precisely because of this, gets the cached module and
+     * the default path. On a fresh checkout there is no ./data to open, and
+     * sixteen unrelated tests fail with SQLITE_CANTOPEN. On any machine that
+     * has ./data, everything passes, which is what makes it a CI-only failure
+     * and worth pinning here rather than rediscovering.
+     *
+     * reminders.test.ts is the one file allowed to do it, and only after it
+     * has set the environment.
+     */
+    /*
+     * The reachable set is computed rather than listed, because a hand-kept
+     * list is wrong the moment somebody adds an import. src/lib/backup and
+     * src/lib/persistence both look like they should be on it and are not;
+     * neither reaches db/index. db/schema does not either, since it is handed
+     * a Database and resolves no path of its own.
+     */
+    const resolveSpec = (spec: string, fromFile: string): string | null => {
+      if (!spec.startsWith(".")) return null;
+      const base = join(fromFile, "..", spec).replace(/\\/g, "/");
+      for (const candidate of [`${base}.ts`, `${base}/index.ts`]) {
+        if (existsSync(candidate)) return candidate;
+      }
+      return null;
+    };
+
+    /** Every module a file pulls in at runtime, following relative imports. */
+    const reachesDb = (entry: string): boolean => {
+      const seen = new Set<string>();
+      const queue = [entry];
+      while (queue.length) {
+        const file = queue.shift()!;
+        if (seen.has(file)) continue;
+        seen.add(file);
+        if (file === "src/db/index.ts") return true;
+        const src = readFileSync(file, "utf-8");
+        // Value imports only. `import type` is erased and loads nothing.
+        for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)\s+(?!type\b)[^;'"]*from\s*["']([^"']+)["']/g)) {
+          const next = resolveSpec(m[1]!, file);
+          if (next) queue.push(next);
+        }
+        for (const m of src.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g)) {
+          const next = resolveSpec(m[1]!, file);
+          if (next) queue.push(next);
+        }
+      }
+      return false;
+    };
+
+    const offenders = readdirSync("test")
+      .filter((f) => f.endsWith(".test.ts") && f !== "reminders.test.ts")
+      .filter((f) => reachesDb(join("test", f)));
+
+    expect(offenders).toEqual([]);
   });
 });
 

@@ -128,13 +128,14 @@ export const GET: APIRoute = async ({ cookies, request }) => {
       dueTime: d.due_time,
       sprintWeek: d.sprint_week,
       done: done.has(d.id),
-      group: groupFor(d.due_date, done.has(d.id), now),
+      // The time is part of when it is due, not just part of how it reads.
+      group: groupFor(d.due_date, done.has(d.id), now, d.due_time),
     }));
 
     return json({
       deadlines: items,
       progress: progressFor(
-        items.map((i) => ({ dueDate: i.dueDate, done: i.done })),
+        items.map((i) => ({ dueDate: i.dueDate, done: i.done, dueTime: i.dueTime })),
         now,
       ),
     });

@@ -63,6 +63,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // connection, so the *next* request on it is parsed as body bytes and
       // hangs. Draining costs a read we discard; nothing is ever written to
       // disk, which is what this limit exists to protect.
+      //
+      // Unbounded, and it has to be. That reads like the mistake readJsonBody
+      // fixed, so here is the measurement. Giving this the same 4 MB ceiling
+      // makes limits.test.ts fail from its first case: the 20 MB write is still
+      // refused with 413, and then the *server process* dies, so every later
+      // test in the file gets ConnectionRefused. Abandoning a declared-length
+      // body part-way is what does it, not the size, so no larger ceiling
+      // helps. readJsonBody can afford to give up because it is inside a route
+      // with the request already in Astro's hands; this runs before that and
+      // owns the socket.
+      //
+      // The cost is real and is accepted knowingly: a client can declare a
+      // gigabyte, send it slowly, and hold a connection while we read and
+      // discard. That is a slow-loris, and the place to cap it is a request
+      // timeout at the proxy, not here. The alternative available at this
+      // layer is dropping the server, which is the same denial of service with
+      // no attacker required.
       const reader = context.request.body?.getReader();
       if (reader) {
         for (;;) {
