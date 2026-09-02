@@ -5,7 +5,7 @@ import LiquidGlassButton from "./LiquidGlassButton";
 import ScrambleText from "./ScrambleText";
 import WelcomeSplash from "./WelcomeSplash";
 import Onboarding, { hasOnboarded } from "./Onboarding";
-import KineticGrid from "./KineticGrid";
+import Waves from "./Waves";
 import SprintBuddy from "./SprintBuddy";
 import { loadUserData, initUser, type UserData } from "../lib/persistence";
 import QuickActions from "./QuickActions";
@@ -297,7 +297,7 @@ export default function App() {
       <>
         <main className="login-screen">
           {/* Behind everything, and inert: decoration, not a control. */}
-          <KineticGrid />
+          <Waves />
           <section className="login-hero" aria-label="Sprint Buddy login">
             <div className="login-mascot-panel" aria-hidden="true">
               <div className="login-halo" />
