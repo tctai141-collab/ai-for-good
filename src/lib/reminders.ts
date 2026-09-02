@@ -1,6 +1,10 @@
 import {
+  pendingBookReminders,
   pendingReminders,
+  recordBookReminder,
   recordReminder,
+  type BookReminderKind,
+  type PendingBookReminder,
   type PendingReminder,
   type ReminderKind,
 } from "../db/index";
@@ -8,7 +12,7 @@ import {
   dueInstant as trackerDueInstant,
   helsinkiOffsetHours,
 } from "./deadlines";
-import { isEmailConfigured, sendDeadlineReminder } from "./email";
+import { isEmailConfigured, sendBookReminder, sendDeadlineReminder } from "./email";
 import { reportError } from "./errors";
 import { APP_URL_UNSET, configuredAppUrl } from "./appUrl";
 
@@ -194,6 +198,74 @@ export async function runReminders(now = new Date()): Promise<ReminderRun> {
   return { sent, failed, skipped: null };
 }
 
+/**
+ * Library books that are due back, or already are.
+ *
+ * A separate pass rather than more kinds on the deadline one, because the two
+ * have nothing in common past the clock: different tables, different audience
+ * (whoever holds the book, not the whole cohort), different words. Sharing the
+ * loop would mean a union of two unrelated row shapes for no gain.
+ *
+ * What it does share is the morning gate and the ordering. Both nudges are
+ * keyed to a date, so both wait until the founder's day has started, and the
+ * send happens before the record so that a provider outage retries on the next
+ * tick rather than silently swallowing a nudge.
+ */
+export async function runBookReminders(now = new Date()): Promise<ReminderRun> {
+  if (!isEmailConfigured()) {
+    return { sent: 0, failed: 0, skipped: "email is not configured" };
+  }
+  // Nothing here is time-of-day sensitive, so outside the sending window there
+  // is nothing to do at all.
+  if (helsinkiHour(now) < SEND_HOUR_HELSINKI) {
+    return { sent: 0, failed: 0, skipped: "before the sending hour" };
+  }
+
+  const jobs: { kind: BookReminderKind; row: PendingBookReminder }[] = [];
+  const due: { kind: BookReminderKind; dueDate: string }[] = [
+    { kind: "due-3d", dueDate: helsinkiDate(now, 3) },
+    { kind: "overdue", dueDate: helsinkiDate(now, -1) },
+  ];
+  for (const { kind, dueDate } of due) {
+    for (const row of pendingBookReminders(kind, dueDate)) jobs.push({ kind, row });
+  }
+
+  if (jobs.length === 0) return { sent: 0, failed: 0, skipped: null };
+
+  const link = appUrl();
+  if (!link) {
+    reportError(new Error(APP_URL_UNSET), { where: "book-reminders", level: "warning" });
+    return { sent: 0, failed: 0, skipped: "no configured base url" };
+  }
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const { kind, row } of jobs) {
+    try {
+      await sendBookReminder(
+        row.email,
+        row.name,
+        { title: row.title, dueDate: row.due_date },
+        kind,
+        link,
+      );
+      recordBookReminder(row.loan_id, kind);
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      // One bounced address must not stop the rest of the shelf being chased.
+      reportError(error, {
+        where: "book-reminders",
+        level: "warning",
+        extra: { kind, loan: row.loan_id },
+      });
+    }
+  }
+
+  return { sent, failed, skipped: null };
+}
+
 let scheduled = false;
 
 /**
@@ -226,6 +298,13 @@ export function startReminderScheduler(): void {
       const result = await runReminders(new Date());
       if (result.sent > 0 || result.failed > 0) {
         console.info(`[reminders] sent ${result.sent}, failed ${result.failed}`);
+      }
+      /* Books ride the same tick. Awaited in sequence rather than in parallel,
+         so a burst of both does not open two dozen simultaneous connections to
+         the mail provider. */
+      const books = await runBookReminders(new Date());
+      if (books.sent > 0 || books.failed > 0) {
+        console.info(`[book-reminders] sent ${books.sent}, failed ${books.failed}`);
       }
     } catch (error) {
       reportError(error, { where: "reminders.scheduler" });

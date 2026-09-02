@@ -63,6 +63,25 @@ beforeAll(async () => {
 afterAll(() => h?.stop());
 
 describe("quick actions", () => {
+  test("the library tab exists and has a panel to open", () => {
+    /*
+     * Both halves, because either alone is invisible: a tab with no panel
+     * shows an empty section, and a panel with no tab is unreachable. The
+     * slug is plain lowercase letters on purpose, since the discovery
+     * regexes in this file are [a-z]+ and would not see tab-library-books.
+     */
+    expect(html).toContain('class="tab" data-tab="library"');
+    expect(html).toContain('id="tab-library"');
+  });
+
+  test("the library is organizer-only, so a mentor never sees the tab", () => {
+    // Mentors read the cohort's progress. Running the office bookshelf is not
+    // that, and the API refuses them too rather than only the page hiding it.
+    const allowed = script.match(/const allowed = new Set\(\[([^\]]*)\]\)/);
+    expect(allowed).not.toBeNull();
+    expect(allowed![1]).not.toContain("library");
+  });
+
   test("every item names a tab that exists", () => {
     const tabs = new Set(
       [...html.matchAll(/class="tab" data-tab="([a-z]+)"/g)].map((m) => m[1]!),

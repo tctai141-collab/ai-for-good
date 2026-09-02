@@ -206,6 +206,61 @@ The Aalto Founder Sprint team`,
 }
 
 /**
+ * A borrowed book that is due back, or already is.
+ *
+ * Separate from sendDeadlineReminder rather than a widening of it. That one is
+ * written in deliverable vocabulary throughout ("Tick it off here when it is
+ * done"), and its kind is an inline literal union, so sharing it would mean
+ * rewriting its copy and widening that union to cover something it does not
+ * mean. A book wants different words anyway: which book, where to put it, and
+ * that bringing it back is the whole task.
+ *
+ * Two kinds, not the deadline path's five. Founders already get up to four
+ * emails per milestone, and of the two this is the one to keep quiet.
+ */
+export function sendBookReminder(
+  to: string,
+  name: string,
+  book: { title: string; dueDate: string },
+  kind: "due-3d" | "overdue",
+  appUrl: string,
+): Promise<void> {
+  const day = readableDate(book.dueDate);
+
+  const subject = {
+    "due-3d": `Due back ${day}: ${book.title}`,
+    "overdue": `Overdue: ${book.title}`,
+  }[kind];
+
+  const opener = {
+    "due-3d": `The office copy is due back in three days. No rush today, but it is
+easier to put in your bag now than to remember on the day.`,
+    "overdue": `This one is past its date. Somebody else is probably waiting for it,
+so it is worth bringing in this week.`,
+  }[kind];
+
+  return send({
+    to,
+    subject,
+    text: `Hi ${name},
+
+${opener}
+
+  ${book.title}
+  due ${day}
+
+Bring it back to the office shelf, then mark it returned here:
+
+${appUrl}
+
+Mark it returned and you will hear nothing more about it. If you need longer,
+tell an organizer and they will move the date.
+
+The Aalto Founder Sprint team`,
+  });
+}
+
+/**
  * Password reset.
  *
  * The warning line is deliberate. An organizer can still trigger this, and a
