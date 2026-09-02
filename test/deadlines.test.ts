@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   createFounder, createOrganizer, get, post,
   startServer, twoFounders, type Harness, type Session,
@@ -363,19 +364,27 @@ describe("grouping and progress", () => {
     expect(groupFor("2026-09-15", false, noon, null)).toBe("thisWeek");
   });
 
-  test("the tracker and the reminder scheduler agree on when a deadline falls due", async () => {
+  test("the reminder scheduler does not keep its own copy of this calculation", () => {
     /*
-     * They had a copy of this calculation each, and a third behaviour between
-     * them. Sharing one function is what makes the mail and the screen agree by
-     * construction, rather than by both being remembered at the same time.
+     * They had a copy each, and a third behaviour between them. Sharing one
+     * function is what makes the mail and the screen agree by construction,
+     * rather than by both being remembered at the same time.
+     *
+     * Asserted on the source rather than by calling both, which is the obvious
+     * version and is a trap: src/lib/reminders.ts imports the database module,
+     * db/index.ts resolves DB_PATH once at module load, and the runner loads
+     * every test file into one process. Importing it here froze that path
+     * before reminders.test.ts could set its own, and sixteen tests in that
+     * file died with "unable to open database file" on a fresh checkout while
+     * passing on any machine that happened to have ./data. The invariant worth
+     * holding is that there is one implementation, and that is a fact about the
+     * text.
      */
-    const { dueInstant: reminderDue } = await import("../src/lib/reminders");
-    for (const time of ["09:00", "23:59", null] as (string | null)[]) {
-      // Ordinary date, and the day the clocks change, where copies drift first.
-      for (const date of ["2026-09-15", "2026-10-25"]) {
-        expect(dueInstant(date, time)).toBe(reminderDue(date, time).getTime());
-      }
-    }
+    const src = readFileSync("src/lib/reminders.ts", "utf-8");
+    expect(src).toContain('from "./deadlines"');
+    expect(src).toContain("trackerDueInstant(dueDate, dueTime)");
+    // The copy that used to live here, and must not come back.
+    expect(src).not.toMatch(/function helsinkiOffsetHours/);
   });
 
   test("progress counts a timed deadline by its time", () => {
