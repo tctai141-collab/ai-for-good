@@ -87,7 +87,7 @@ describe("quick actions", () => {
       [...html.matchAll(/class="tab" data-tab="([a-z]+)"/g)].map((m) => m[1]!),
     );
     const targets = [...html.matchAll(/class="qa-item" data-go="([a-z]+)"/g)].map((m) => m[1]!);
-    expect(targets.length).toBe(5);
+    expect(targets.length).toBe(6);
     for (const target of targets) expect(tabs).toContain(target);
   });
 
@@ -95,7 +95,7 @@ describe("quick actions", () => {
     // The whole point of the menu over the tab bar. A stale id here degrades
     // it to a second tab bar without any error.
     const focused = [...html.matchAll(/data-focus="([a-z-]+)"/g)].map((m) => m[1]!);
-    expect(focused.length).toBe(5);
+    expect(focused.length).toBe(6);
     for (const id of focused) expect(html).toContain(`id="${id}"`);
   });
 
@@ -108,12 +108,12 @@ describe("quick actions", () => {
       for (const m of panel[0].matchAll(/id="([a-z-]+)"/g)) owner.set(m[1]!, panel[1]!);
     }
     const items = [...html.matchAll(/data-go="([a-z]+)" data-focus="([a-z-]+)"/g)];
-    expect(items.length).toBe(5);
+    expect(items.length).toBe(6);
     for (const [, tab, field] of items) expect(owner.get(field!)).toBe(tab!);
   });
 
   test("the menu is hidden until the component is running", () => {
-    // With no JS the buttons do nothing, and five dead circles in the corner
+    // With no JS the buttons do nothing, and six dead circles in the corner
     // are worse than none. Server-rendered hidden, unhidden on mount.
     expect(html).toMatch(/class="qa[^"]*" id="qa" hidden/);
     expect(quick).toContain("useEffect(() => setReady(true), [])");
@@ -121,7 +121,7 @@ describe("quick actions", () => {
   });
 
   test("parked items are out of the tab order", () => {
-    // Otherwise five invisible buttons sit between the page and whatever
+    // Otherwise six invisible buttons sit between the page and whatever
     // follows it for anyone tabbing through.
     expect(quick).toContain("tabIndex={open ? 0 : -1}");
   });
