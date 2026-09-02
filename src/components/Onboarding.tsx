@@ -68,6 +68,46 @@ const ORGANIZER: Step[] = [
   },
 ];
 
+/*
+ * The last step, appended for whoever can act on it, whatever their role: the
+ * cohort and the operating team both read this on a phone.
+ *
+ * It is here rather than in a banner of its own because there is no good later
+ * moment. Safari has no install prompt — Add to Home Screen is three taps into
+ * a share sheet — so if nobody says it, almost nobody finds it, and a banner
+ * competing with this dialog on a founder's first minute is two pieces of
+ * instructional UI where one will do.
+ */
+const INSTALL: Step = {
+  title: "Put it on your home screen",
+  body:
+    "Sprint Buddy is a website, so it lives in a tab among forty others. On iPhone, tap Share and choose Add to Home Screen; on Android, open the browser menu and choose Install app. It becomes an icon like any other and opens full screen. Do it now rather than later: an installed app has its own sign-in, so it will ask for your password once more the first time you open it.",
+};
+
+/**
+ * Can this person actually do what that step describes?
+ *
+ * Written out here rather than imported from a helper on purpose: this file's
+ * test asserts it imports from "react" and nothing else, which is what keeps
+ * the walkthrough free of the dependency stack the supplied dialog wanted.
+ */
+function installable(): boolean {
+  try {
+    /* Already installed, in which case the step is describing something they
+       have done. iOS answers on navigator; everyone else on the media query. */
+    if ((navigator as { standalone?: boolean }).standalone === true) return false;
+    if (window.matchMedia("(display-mode: standalone)").matches) return false;
+    /* A phone or a tablet. On a laptop there is no share sheet and no install
+       item, so the step would be about somebody else's device. */
+    return window.matchMedia("(pointer: coarse)").matches;
+  } catch {
+    /* Nothing here is worth falling over for. One step fewer is the safe
+       direction, the same way an unreadable localStorage shows the walkthrough
+       again rather than throwing. */
+    return false;
+  }
+}
+
 /** localStorage key. Per account, so two people sharing a laptop each get it. */
 const seenKey = (email: string) => `sprintbuddy.onboarded.${email}`;
 
@@ -94,7 +134,12 @@ export default function Onboarding({
      dashboard is and what is private, which is exactly what they need; the
      parts about adding people simply do not apply to them, and writing a
      third set of copy for one person is worse than a paragraph they skip. */
-  const steps = role === "founder" ? FOUNDER : ORGANIZER;
+  const base = role === "founder" ? FOUNDER : ORGANIZER;
+  /* Read once, on mount, not at module scope: at module scope this file is
+     evaluated before there is a window to ask, and the answer would be the
+     same for every device that ever loads the bundle. */
+  const [canInstall] = useState(installable);
+  const steps = canInstall ? [...base, INSTALL] : base;
   const [step, setStep] = useState(0);
   const ref = useRef<HTMLDialogElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);

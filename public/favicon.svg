@@ -1,5 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <path d="M16 4l12 5.5-12 5.5L4 9.5z" fill="#7bc0ff"/>
-  <path d="M4 9.5l12 5.5v12L4 21.5z" fill="#3390e6"/>
-  <path d="M16 15l12-5.5v12L16 27z" fill="#46a5ff"/>
+  <!--
+    The three faces are lit from above: a light top, the accent on the right,
+    a darker left. The hexes are the app's own indigo, not a set of their own —
+    #5e6ad2 is --brand-accent and #4a55b8 is the accent the print report uses.
+    They were three blues until the palette moved to indigo on 27 August and
+    this file did not move with it, so the tab and the app disagreed.
+  -->
+  <path d="M16 4l12 5.5-12 5.5L4 9.5z" fill="#8f97e4"/>
+  <path d="M4 9.5l12 5.5v12L4 21.5z" fill="#4a55b8"/>
+  <path d="M16 15l12-5.5v12L16 27z" fill="#5e6ad2"/>
 </svg>

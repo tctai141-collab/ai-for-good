@@ -10,6 +10,38 @@ import Root from "../components/Root";
     <title>Sprint Buddy</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!--
+      Add to Home Screen. Only this page carries these: it is the one that
+      mounts the app, and the only one not marked noindex. /admin, /setup and
+      /report are utility pages nobody installs, and with no shared layout in
+      this project the tags would be four copies drifting apart.
+
+      apple-touch-icon is not a duplicate of the icon above. iOS ignores the
+      manifest's icons for a home-screen app and does not accept SVG here, so
+      this PNG is the only art that reaches an iPhone.
+
+      The status bar is black and opaque, deliberately, and the value is worth
+      spelling out because leaving the tag off is not neutral: the default is a
+      *light* bar, which above this canvas looks like a rendering fault.
+
+      black-translucent is the better-looking answer — the app runs under the
+      clock — and viewport-fit=cover below is half of what it needs. The other
+      half is missing. Nothing in this app pads for the top inset: the one rule
+      that does, .app-root at the bottom of this file, is on a class no
+      component renders, so it has never applied to anything. Under
+      black-translucent iOS's status bar would land on the sidebar toggle in
+      .mobile-actions. Switching means adding the top inset there first and
+      checking it on a real phone, which is more than this change is.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#08090a" />
+    <!-- The standard name, and Apple's older one for iOS before 16.4, which
+         honours only its own. Both, because the pair costs a line. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sprint Buddy" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <!--
       Self-hosted rather than loaded from Google. Every page view used to send
       each founder's IP address to a third party, which sits badly with an
       EU-hosted service holding students' private reflections. Regenerate with
