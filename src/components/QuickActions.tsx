@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import GlassFilter from "./GlassFilter";
 
 /**
- * The five things an organizer does over and over, one tap from anywhere.
+ * The six things an organizer does over and over, one tap from anywhere.
  *
  * It lives in two places and behaves differently in each:
  *
@@ -91,6 +91,21 @@ const ITEMS = [
       </>
     ),
   },
+  {
+    tab: "library",
+    focus: "bk-title",
+    label: "Add a book",
+    /* A closed book, not the open one above: "Add knowledge" is already a
+       two-page spread, and at 19px two open books are one icon.
+       The second path is the page block sitting proud of the cover — without
+       it the first is a rounded rectangle and reads as a blank document. */
+    path: (
+      <>
+        <path d="M5 18.5v-13A2.5 2.5 0 0 1 7.5 3H19v18H7.5A2.5 2.5 0 0 1 5 18.5z" />
+        <path d="M5 18.5A2.5 2.5 0 0 1 7.5 16H19" />
+      </>
+    ),
+  },
 ] as const;
 
 /** What /admin listens for. Kept here so both halves name it once. */
@@ -107,7 +122,7 @@ type Props = {
 export default function QuickActions({ mode }: Props) {
   const [open, setOpen] = useState(false);
   /* Nothing on screen until this component is running. Without JS the buttons
-     do nothing, and five dead circles in the corner are worse than none. */
+     do nothing, and six dead circles in the corner are worse than none. */
   const [ready, setReady] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -167,7 +182,7 @@ export default function QuickActions({ mode }: Props) {
             className="qa-item"
             data-go={item.tab}
             data-focus={item.focus}
-            /* Out of the tab order while parked, or five invisible buttons sit
+            /* Out of the tab order while parked, or six invisible buttons sit
                between the page and whatever comes after it. */
             tabIndex={open ? 0 : -1}
             onClick={() => pick(item.tab, item.focus)}
@@ -259,7 +274,7 @@ const CSS = `
 .qa.is-open .qa-trigger { transform: rotate(135deg); }
 
 /* The items are circles, not labelled pills. Labelled pills on this arc
-   overlap: five labels up to 160px wide cannot sit 53px apart. The label
+   overlap: six labels up to 160px wide cannot sit 53px apart. The label
    appears beside the circle on hover and focus instead, and stays in the DOM
    the whole time so it is the button's accessible name. */
 .qa-item {
@@ -311,28 +326,33 @@ const CSS = `
 .qa-item:hover, .qa-item:focus-visible { z-index: 1; }
 
 .qa.is-open .qa-item { opacity: 1; pointer-events: auto; }
-/* A quarter arc at radius 136, from straight up round to straight left.
+/* A quarter arc at radius 169, from straight up round to straight left.
    Quarter rather than the half a fan usually draws: in a corner, half of a
    full circle is off-screen. The radius is set by the circles, not by taste —
-   five of them over 90 degrees sit 2·136·sin(11.25°) = 53px apart, which is a
-   7px gap at 46px across. */
-.qa.is-open .qa-item:nth-child(1) { transform: translate(0, -136px) scale(1); }
-.qa.is-open .qa-item:nth-child(2) { transform: translate(-52px, -126px) scale(1); }
-.qa.is-open .qa-item:nth-child(3) { transform: translate(-96px, -96px) scale(1); }
-.qa.is-open .qa-item:nth-child(4) { transform: translate(-126px, -52px) scale(1); }
-.qa.is-open .qa-item:nth-child(5) { transform: translate(-136px, 0) scale(1); }
+   six of them over 90 degrees sit 2·169·sin(9°) = 53px apart, which is a 7px
+   gap at 46px across. It was 136 for five, where the step was 22.5° and the
+   same 53px; a sixth at that radius closes the gap to 43px and the circles
+   touch, so the radius grows rather than the fan tightening. */
+.qa.is-open .qa-item:nth-child(1) { transform: translate(0, -169px) scale(1); }
+.qa.is-open .qa-item:nth-child(2) { transform: translate(-52px, -161px) scale(1); }
+.qa.is-open .qa-item:nth-child(3) { transform: translate(-99px, -137px) scale(1); }
+.qa.is-open .qa-item:nth-child(4) { transform: translate(-137px, -99px) scale(1); }
+.qa.is-open .qa-item:nth-child(5) { transform: translate(-161px, -52px) scale(1); }
+.qa.is-open .qa-item:nth-child(6) { transform: translate(-169px, 0) scale(1); }
 /* Opening runs first to last; closing runs last to first, so the fan collapses
    back the way a hand of cards does. */
-.qa-item:nth-child(1) { transition-delay: 100ms; }
-.qa-item:nth-child(2) { transition-delay: 75ms; }
-.qa-item:nth-child(3) { transition-delay: 50ms; }
-.qa-item:nth-child(4) { transition-delay: 25ms; }
-.qa-item:nth-child(5) { transition-delay: 0ms; }
+.qa-item:nth-child(1) { transition-delay: 125ms; }
+.qa-item:nth-child(2) { transition-delay: 100ms; }
+.qa-item:nth-child(3) { transition-delay: 75ms; }
+.qa-item:nth-child(4) { transition-delay: 50ms; }
+.qa-item:nth-child(5) { transition-delay: 25ms; }
+.qa-item:nth-child(6) { transition-delay: 0ms; }
 .qa.is-open .qa-item:nth-child(1) { transition-delay: 0ms; }
 .qa.is-open .qa-item:nth-child(2) { transition-delay: 25ms; }
 .qa.is-open .qa-item:nth-child(3) { transition-delay: 50ms; }
 .qa.is-open .qa-item:nth-child(4) { transition-delay: 75ms; }
 .qa.is-open .qa-item:nth-child(5) { transition-delay: 100ms; }
+.qa.is-open .qa-item:nth-child(6) { transition-delay: 125ms; }
 
 /* On a narrow screen the arc runs off the left edge. Stack it instead, and pin
    the labels open, since there is no hover on a phone. */
@@ -343,6 +363,7 @@ const CSS = `
   .qa.is-open .qa-item:nth-child(3) { transform: translate(0, -172px) scale(1); }
   .qa.is-open .qa-item:nth-child(4) { transform: translate(0, -228px) scale(1); }
   .qa.is-open .qa-item:nth-child(5) { transform: translate(0, -284px) scale(1); }
+  .qa.is-open .qa-item:nth-child(6) { transform: translate(0, -340px) scale(1); }
   .qa.is-open .qa-label { opacity: 1; transform: translateX(0); }
   /* The founder-side app puts its own action bar and composer along the bottom
      of a phone screen. A floating trigger there covers the thing the founder
