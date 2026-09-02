@@ -347,6 +347,43 @@ describe("grouping and progress", () => {
     expect(groupFor("2026-09-11", false, Date.parse("2026-09-11T21:30:00Z"))).toBe("overdue");
   });
 
+  test("a deadline with a time falls due at that time, not at the end of the day", () => {
+    /*
+     * The tracker grouped by date alone while the reminder scheduler already
+     * honoured due_time, so the two described the same row differently: one set
+     * for 09:00 was late enough to send the overdue mail about and not late
+     * enough to show as late. The founder was told both.
+     */
+    expect(new Date(dueInstant("2026-09-15", "09:00")).toISOString())
+      .toBe("2026-09-15T06:00:00.000Z");
+
+    const noon = Date.parse("2026-09-15T09:00:00Z"); // noon Helsinki, three hours late
+    expect(groupFor("2026-09-15", false, noon, "09:00")).toBe("overdue");
+    // The same date with no time still runs to the end of the day.
+    expect(groupFor("2026-09-15", false, noon, null)).toBe("thisWeek");
+  });
+
+  test("the tracker and the reminder scheduler agree on when a deadline falls due", async () => {
+    /*
+     * They had a copy of this calculation each, and a third behaviour between
+     * them. Sharing one function is what makes the mail and the screen agree by
+     * construction, rather than by both being remembered at the same time.
+     */
+    const { dueInstant: reminderDue } = await import("../src/lib/reminders");
+    for (const time of ["09:00", "23:59", null] as (string | null)[]) {
+      // Ordinary date, and the day the clocks change, where copies drift first.
+      for (const date of ["2026-09-15", "2026-10-25"]) {
+        expect(dueInstant(date, time)).toBe(reminderDue(date, time).getTime());
+      }
+    }
+  });
+
+  test("progress counts a timed deadline by its time", () => {
+    const noon = Date.parse("2026-09-15T09:00:00Z");
+    expect(progressFor([{ dueDate: "2026-09-15", done: false, dueTime: "09:00" }], noon))
+      .toEqual({ completed: 0, total: 1 });
+  });
+
   test("progress counts only what is due, not the whole sprint", () => {
     const items = [
       { dueDate: "2026-09-09", done: true },
@@ -390,5 +427,35 @@ describe("founder view", () => {
 
     const status = await (await get(h, "/api/deadlines?view=status", organizer.cookie)).json();
     expect(status.deadlines.some((d: { id: string }) => d.id === body.id)).toBe(true);
+  });
+
+  test("the group a founder is shown honours the deadline's time", async () => {
+    /*
+     * The wiring, not the arithmetic. groupFor learned about due_time and this
+     * route kept calling it without one, which is the whole bug: everything
+     * underneath was right and the founder still saw the wrong answer.
+     *
+     * Two deadlines on today's date, one due at the start of the day and one
+     * with no time at all. The first has passed, the second has not, so they
+     * must not land in the same group.
+     */
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Helsinki" })
+      .format(new Date());
+
+    const timed = await createDeadline(organizer, {
+      title: "Due first thing", dueDate: today, dueTime: "00:00",
+    });
+    const untimed = await createDeadline(organizer, {
+      title: "Due sometime today", dueDate: today,
+    });
+
+    const list = await (await get(h, "/api/deadlines", alice.cookie)).json();
+    const find = (id: string) =>
+      list.deadlines.find((d: { id: string }) => d.id === id) as
+        { group: string; dueTime: string | null };
+
+    expect(find(timed.body.id).dueTime).toBe("00:00");
+    expect(find(timed.body.id).group).toBe("overdue");
+    expect(find(untimed.body.id).group).toBe("thisWeek");
   });
 });

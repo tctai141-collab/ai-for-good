@@ -4,6 +4,10 @@ import {
   type PendingReminder,
   type ReminderKind,
 } from "../db/index";
+import {
+  dueInstant as trackerDueInstant,
+  helsinkiOffsetHours,
+} from "./deadlines";
 import { isEmailConfigured, sendDeadlineReminder } from "./email";
 import { reportError } from "./errors";
 import { APP_URL_UNSET, configuredAppUrl } from "./appUrl";
@@ -43,17 +47,6 @@ import { APP_URL_UNSET, configuredAppUrl } from "./appUrl";
  * every founder is in Finland, so "tomorrow" has to mean their tomorrow.
  */
 
-function helsinkiOffsetHours(date: Date): number {
-  const year = date.getUTCFullYear();
-  const lastSunday = (month: number) => {
-    const d = new Date(Date.UTC(year, month + 1, 0));
-    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
-    d.setUTCHours(1, 0, 0, 0);
-    return d;
-  };
-  return date >= lastSunday(2) && date < lastSunday(9) ? 3 : 2;
-}
-
 /** The calendar date in Helsinki, offset by whole days, as YYYY-MM-DD. */
 export function helsinkiDate(now: Date, dayOffset = 0): string {
   const shifted = new Date(now.getTime() + helsinkiOffsetHours(now) * 60 * 60 * 1000);
@@ -69,17 +62,14 @@ export function helsinkiHour(now: Date): number {
 /**
  * The instant a deadline actually falls due.
  *
- * A deadline with no time means end of day, which is what every deadline
- * written before due_time existed meant. The offset is read from the candidate
- * instant rather than from now, so a deadline on the far side of a clock change
- * is still counted back from correctly.
+ * Delegated to the tracker's own answer rather than worked out again here. This
+ * file had its own copy, and the tracker had a third behaviour: it ignored
+ * `due_time` entirely. So a deadline set for 09:00 was overdue enough to mail
+ * about and not overdue enough to show as late. Sharing one function is what
+ * makes the mail and the screen agree by construction.
  */
 export function dueInstant(dueDate: string, dueTime: string | null): Date {
-  const [y, m, d] = dueDate.split("-").map(Number);
-  const [hh, mm] = (dueTime ?? "23:59").split(":").map(Number);
-  if (!y || !m || !d) return new Date(NaN);
-  const naive = Date.UTC(y, m - 1, d, hh ?? 23, mm ?? 59);
-  return new Date(naive - helsinkiOffsetHours(new Date(naive)) * 60 * 60 * 1000);
+  return new Date(trackerDueInstant(dueDate, dueTime));
 }
 
 /*
