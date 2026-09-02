@@ -4,6 +4,7 @@ import Wishes from "./Wishes";
 import Assistant from "./Assistant";
 import AaltoMark from "./AaltoMark";
 import { DeadlinesPage, useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
+import { LibraryPage, useLibrary, type LibraryState } from "./Library";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
   INSTRUMENT_PREAMBLE,
@@ -411,7 +412,7 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines";
+type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library";
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
@@ -482,6 +483,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
   /* Deadlines are fetched once here rather than inside the sidebar section,
      because the collapsed-sidebar button needs the overdue count too. */
   const deadlines = useDeadlines(persona === "founder" ? userEmail : undefined);
+  const library = useLibrary(persona === "founder" ? userEmail : undefined);
 
   /*
    * Today's check-in, answered by the server's own record rather than by this
@@ -596,6 +598,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         open={sidebarOpen} onToggle={toggleSidebar}
         checkinDone={checkinDoneToday}
         deadlines={deadlines}
+        library={library}
         onStartCheckin={startCheckin}
         onNew={newChat}
         onThread={(id) => { setView("chat"); setActive({ id }); }}
@@ -605,6 +608,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         onProgramme={() => setView("programme")}
         onWishes={() => setView("wishes")}
         onDeadlines={() => setView("deadlines")}
+        onLibrary={() => setView("library")}
         onAssistant={() => setView("assistant")}
         canAssist={canAssist}
         onSignOut={onSignOut}
@@ -651,6 +655,9 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         {view === "deadlines" && persona === "founder" && (
           <Scroll><DeadlinesPage state={deadlines} /></Scroll>
         )}
+        {view === "library" && persona === "founder" && (
+          <Scroll><LibraryPage state={library} /></Scroll>
+        )}
         {persona === "founder" && view === "reflections" && (
           <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} /></Scroll>
         )}
@@ -680,6 +687,7 @@ type SidebarProps = {
   onToggle: () => void;
   checkinDone: boolean;
   deadlines: DeadlinesState;
+  library: LibraryState;
   onStartCheckin: () => void;
   onNew: () => void;
   onThread: (id: string) => void;
@@ -690,6 +698,7 @@ type SidebarProps = {
   onProgramme: () => void;
   onWishes: () => void;
   onDeadlines: () => void;
+  onLibrary: () => void;
   onAssistant: () => void;
   canAssist: boolean;
   onSignOut?: () => void;
@@ -697,7 +706,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onDeadlines, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, library, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onDeadlines, onLibrary, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -930,6 +939,19 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
                 </span>
               )}
             </button>
+            {/* Same shape as Deadlines, and it can shout for the same reason:
+                an overdue library book is a thing somebody else is waiting for. */}
+            <button onClick={onLibrary} className="navitem" style={{ ...navItem, background: view === "library" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+              <Glyph>▥</Glyph> <span style={{ flex: 1 }}>Library</span>
+              {library.overdueCount > 0 && (
+                <span
+                  aria-label={`${library.overdueCount} overdue`}
+                  style={{ padding: "1px 7px", borderRadius: 999, background: C.red, color: "oklch(98% 0 0)", fontSize: 11, fontWeight: 800, lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}
+                >
+                  {library.overdueCount}
+                </span>
+              )}
+            </button>
             <button onClick={onProgramme} className="navitem" style={{ ...navItem, background: view === "programme" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>▤</Glyph> <span>Programme</span>
             </button>
@@ -1036,12 +1058,14 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         <SidebarRail
           width={railWidth}
           onDeadlines={onDeadlines}
+          onLibrary={onLibrary}
           canAssist={canAssist}
           onAssistant={onAssistant}
           persona={persona}
           view={view}
           coachTeam={coachTeam}
           deadlines={deadlines}
+          library={library}
           checkinDone={checkinDone}
           onExpand={onToggle}
           onNew={onNew}
@@ -1142,16 +1166,18 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
  */
 function SidebarRail({
   persona, view, coachTeam, deadlines, checkinDone, width, canAssist,
-  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onDeadlines, onReflections, onAssistant, onPickTeam, onSignOut,
+  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onDeadlines, onLibrary, onReflections, onAssistant, onPickTeam, onSignOut,
 }: {
   width: number;
   canAssist: boolean;
   onAssistant: () => void;
   onDeadlines: () => void;
+  onLibrary: () => void;
   persona: Persona;
   view: View;
   coachTeam: Team | null;
   deadlines: DeadlinesState;
+  library: LibraryState;
   checkinDone: boolean;
   onExpand: () => void;
   onNew: () => void;
@@ -1169,6 +1195,7 @@ function SidebarRail({
         { key: "chat", glyph: "✉", label: "Conversations", on: view === "chat", run: onNew },
         { key: "checkin", glyph: "◉", label: checkinDone ? "Today's check-in, done" : "Today's check-in", on: false, dot: !checkinDone, run: onStartCheckin },
         { key: "deadlines", glyph: "◱", label: "Deadlines", on: view === "deadlines", run: onDeadlines },
+        { key: "library", glyph: "▥", label: "Library", on: view === "library", run: onLibrary },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
         { key: "wishes", glyph: "✦", label: "Ask for something", on: view === "wishes", run: onWishes },
         { key: "reflections", glyph: "◷", label: "Reflections", on: view === "reflections", run: onReflections },

@@ -4,6 +4,7 @@ import {
   countOrganizers,
   deleteUser,
   getCheckins,
+  getBookLoans,
   getDeadlineCompletions,
   getDecisions,
   getThreads,
@@ -74,6 +75,11 @@ export const GET: APIRoute = async ({ cookies }) => {
         everyTake: listWorkingGeniusTakes(session.email),
       },
       deadlinesCompleted: getDeadlineCompletions(session.email),
+      /* Library loans, for the same reason the working-style profile is here:
+         a whole new table stays invisible in a hand-assembled export until
+         somebody remembers it, and a record of what you borrowed and when is
+         data about you. Returned loans are included; the history is the point. */
+      booksBorrowed: getBookLoans(session.email),
       timesOpened: getVisits(session.email),
       note:
         "Conversations you deleted are not here. Encrypted backups may still " +

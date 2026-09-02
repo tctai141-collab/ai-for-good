@@ -28,10 +28,25 @@ describe("collapsed is a rail, not a void", () => {
   });
 
   test("every founder destination is on the rail", () => {
-    for (const key of ["chat", "checkin", "programme", "wishes", "reflections"]) {
+    for (const key of ["chat", "checkin", "programme", "wishes", "reflections", "library"]) {
       expect(rail).toContain(`key: "${key}"`);
     }
     expect(rail).toContain("onSignOut");
+  });
+
+  test("the library is reachable from the panel too, not only the rail", () => {
+    /* The rail and the expanded panel are two renderings of the same
+       navigation, and a destination added to one and not the other is
+       unreachable for whichever half of the cohort keeps the sidebar that
+       way. Peek reuses the panel, so this covers that as well. */
+    expect(app).toContain("onClick={onLibrary}");
+    expect(app).toContain('view === "library"');
+  });
+
+  test("an overdue book can shout, the way an overdue deadline does", () => {
+    // The count is the whole reason the badge exists: the page is where the
+    // detail lives, and the sidebar only has to say that something is wrong.
+    expect(app).toContain("library.overdueCount > 0");
   });
 
   test("staff get their two cohort-wide views", () => {

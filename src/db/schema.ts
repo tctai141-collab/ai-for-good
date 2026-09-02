@@ -384,6 +384,85 @@ export function initSchema(db: Database) {
     )
   `);
 
+  // --- The office library ----------------------------------------------------
+  //
+  // Physical books on a shelf in the office, and who currently has them.
+  //
+  // One row per physical copy, not per title: two copies of the same book are
+  // two rows. That keeps borrowing a plain yes or no, with no availability
+  // arithmetic and no queue, and the shelf is small enough that duplicate
+  // titles are rare.
+  //
+  // `added_by` is ON DELETE SET NULL, not CASCADE, following programme_events
+  // rather than deadlines: removing an organizer from the cohort must not
+  // delete the office's book catalogue along with them.
+  //
+  // `unaccounted` is not a state anybody picks. It is set when a borrower's
+  // account is erased while they still had the book, so the row does not
+  // quietly become lendable again. See deleteUser in db/index.ts.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS books (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      author TEXT,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active', 'archived', 'unaccounted')),
+      added_by TEXT REFERENCES users(email) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // One row per borrowing, kept after the book comes back: returned_at is the
+  // "and when did they return it" half of what this feature is for.
+  //
+  // Availability is derived from the absence of an open loan rather than
+  // stored on the book, so there is no second copy of the truth to fall out of
+  // step with the first.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS book_loans (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      borrowed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      due_date TEXT NOT NULL,
+      returned_at TEXT
+    )
+  `);
+
+  // At most one open loan per book, which is the integrity rule of the whole
+  // feature. A partial unique index enforces it in SQLite. The handler version,
+  // read-then-insert, is the one two simultaneous taps both walk straight
+  // through.
+  db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_book_loans_open
+      ON book_loans(book_id) WHERE returned_at IS NULL;
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_book_loans_user ON book_loans(user_email);
+  `);
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_books_status ON books(status, title);
+  `);
+
+  // Two nudges per loan and no more. Deadlines already send up to four emails
+  // per founder per milestone, and a library book is the lower-stakes of the
+  // two, so it starts where deadlines would have to be cut back to.
+  //
+  // The primary key is what makes a second send impossible rather than merely
+  // unlikely, exactly as on deadline_reminders. The allowed set is written
+  // correctly the first time here: SQLite cannot alter a CHECK in place, so
+  // widening one later costs a full table rebuild inside a migration.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS book_reminders (
+      loan_id TEXT NOT NULL REFERENCES book_loans(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('due-3d', 'overdue')),
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (loan_id, kind)
+    )
+  `);
+
   // The advisor's knowledge, editable rather than compiled in.
   //
   // Deliberately not a vector store. Retrieval exists to solve "more knowledge

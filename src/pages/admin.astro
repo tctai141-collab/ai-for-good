@@ -358,6 +358,40 @@ import AaltoMark from "../components/AaltoMark.astro";
         align-items: center;
       }
       .deadline-actions { margin-top: 8px; }
+      .book-row {
+        border-top: 1px solid var(--line);
+        padding: 12px 0;
+      }
+      .book-row.archived { opacity: 0.5; }
+      /* Not a warning colour by accident: an unaccounted book is one the app
+         believes left the office with somebody whose account is gone. */
+      .book-row.unaccounted { border-left: 2px solid var(--danger); padding-left: 10px; }
+      .book-head {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .book-head strong { flex: 1 1 220px; }
+      .book-meta { color: var(--ink-faint); font-size: 13px; }
+      .book-status {
+        font-size: 12.5px;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-sub);
+        white-space: nowrap;
+      }
+      .book-status.available { color: var(--brand-accent); font-weight: 700; }
+      .book-status.late { color: var(--danger); font-weight: 700; }
+      .book-row details { margin-top: 6px; }
+      .book-row summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--ink-faint);
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+      }
+      .book-actions { margin-top: 8px; }
       .link-item {
         border: 1px solid var(--border);
         border-radius: 10px;
@@ -885,6 +919,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           <button type="button" class="tab" data-tab="wishes">Wishes<span id="wish-badge" class="tab-badge" hidden></span></button>
           <button type="button" class="tab" data-tab="people">People</button>
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
+          <button type="button" class="tab" data-tab="library">Library</button>
           <button type="button" class="tab" data-tab="shared">Shared</button>
           <button type="button" class="tab" data-tab="broadcast">Broadcast</button>
           <button type="button" class="tab" data-tab="knowledge">Knowledge</button>
@@ -1158,6 +1193,45 @@ import AaltoMark from "../components/AaltoMark.astro";
             <p class="message" id="wish-message" hidden></p>
             <div id="wish-list"></div>
           </section>
+        </div>
+
+        <div class="tabpanel" id="tab-library" hidden>
+        <section class="panel">
+          <h2>Library</h2>
+          <p class="note" style="margin-top:0">
+            The books on the office shelf. One row per physical copy, so two copies of
+            the same title are two rows. Founders borrow and return them themselves
+            from their own Library tab; you only need to be here to put a book on the
+            shelf or to sort something out.
+          </p>
+          <p class="note" style="margin-top:0">
+            A loan runs four weeks. Whoever has it is emailed three days before it is
+            due and once the morning after, and returning it stops both. Archive a book
+            that has left the shelf for good; delete is for one added by mistake, and
+            takes its borrowing history with it.
+          </p>
+
+          <form id="add-book" class="row">
+            <label>
+              <span class="label-text">Title</span>
+              <input id="bk-title" required maxlength="200" placeholder="The Hard Thing About Hard Things" />
+            </label>
+            <label>
+              <span class="label-text">Author (optional)</span>
+              <input id="bk-author" maxlength="120" placeholder="Ben Horowitz" />
+            </label>
+            <label>
+              <span class="label-text">Note (optional)</span>
+              <input id="bk-notes" maxlength="2000" placeholder="Shelf by the window" />
+            </label>
+            <input id="bk-id" type="hidden" />
+            <button type="submit" id="bk-submit">Add book</button>
+            <button type="button" id="bk-cancel" class="ghost" hidden>Cancel</button>
+          </form>
+          <p class="message" id="bk-message" hidden></p>
+
+          <div id="library-list"></div>
+        </section>
         </div>
 
         <div class="tabpanel" id="tab-shared" hidden>
@@ -1793,6 +1867,263 @@ import AaltoMark from "../components/AaltoMark.astro";
       /* The submit handler looks this up again locally; the row buttons are
          rendered outside it and need their own reference. */
       const dlMessage = document.getElementById("dl-message");
+
+
+      async function libraryApi(body) {
+        let res;
+        try {
+          res = await fetch("/api/library", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        } catch {
+          return { ok: false, data: { error: "Could not reach the server." } };
+        }
+        let data = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = { error: "The server returned an error (" + res.status + ") with no details." };
+        }
+        return { ok: res.ok, data };
+      }
+
+      /*
+       * Every row here is built with createElement and textContent, never by
+       * concatenating into innerHTML.
+       *
+       * Book titles, authors and notes are typed by people, and the stored XSS
+       * this page already had was exactly that: a record field interpolated raw.
+       * esc() exists three screens up, and building nodes means never needing to
+       * remember it.
+       */
+      async function loadLibrary() {
+        let data;
+        try {
+          const res = await fetch("/api/library?view=status");
+          if (!res.ok) return;
+          data = await res.json();
+        } catch {
+          return;
+        }
+        const list = document.getElementById("library-list");
+        if (!list) return;
+        list.textContent = "";
+
+        if (!data.books || !data.books.length) {
+          const empty = document.createElement("p");
+          empty.className = "note";
+          empty.textContent = "No books yet. Add the first one above.";
+          list.append(empty);
+          return;
+        }
+
+        /* Anything needing a human sorts to the top: a book nobody can account
+           for, then one that is late, then the rest as the server ordered them. */
+        const weight = (b) => (b.status === "unaccounted" ? 0 : b.loanState === "overdue" ? 1 : 2);
+        const books = data.books.slice().sort((a, b) => weight(a) - weight(b));
+
+        for (const book of books) {
+          const row = document.createElement("div");
+          row.className = "book-row"
+            + (book.status === "archived" ? " archived" : "")
+            + (book.status === "unaccounted" ? " unaccounted" : "");
+
+          const head = document.createElement("div");
+          head.className = "book-head";
+
+          const title = document.createElement("strong");
+          title.textContent = book.title;
+          head.append(title);
+
+          const meta = document.createElement("span");
+          meta.className = "book-meta";
+          const bits = [];
+          if (book.author) bits.push(book.author);
+          if (book.notes) bits.push(book.notes);
+          if (book.status === "archived") bits.push("archived");
+          meta.textContent = bits.join(" \u00b7 ");
+          head.append(meta);
+
+          const status = document.createElement("span");
+          status.className = "book-status";
+          if (book.status === "unaccounted") {
+            status.className += " late";
+            status.textContent = "unaccounted for, check the shelf";
+          } else if (book.available) {
+            status.className += " available";
+            status.textContent = "on the shelf";
+          } else if (book.borrower) {
+            if (book.loanState === "overdue") status.className += " late";
+            status.textContent = (book.borrower.name || book.borrower.email)
+              + ", due " + dueLabel(book.dueDate)
+              + (book.loanState === "overdue" ? " (late)" : "");
+          } else {
+            status.textContent = "not on the shelf";
+          }
+          head.append(status);
+          row.append(head);
+
+          if (book.history && book.history.length) {
+            const details = document.createElement("details");
+            const summary = document.createElement("summary");
+            summary.textContent = book.history.length === 1
+              ? "1 loan" : book.history.length + " loans";
+            details.append(summary);
+            const history = document.createElement("ul");
+            for (const loan of book.history) {
+              const item = document.createElement("li");
+              item.textContent = (loan.name || "someone")
+                + ", " + loan.borrowedAt.slice(0, 10)
+                + (loan.returnedAt ? " to " + loan.returnedAt.slice(0, 10) : ", still out");
+              history.append(item);
+            }
+            details.append(history);
+            row.append(details);
+          }
+
+          const actions = document.createElement("div");
+          actions.className = "book-actions row";
+
+          if (book.loanId) {
+            const back = document.createElement("button");
+            back.type = "button";
+            back.className = "ghost";
+            back.textContent = "Mark returned";
+            back.addEventListener("click", async () => {
+              back.disabled = true;
+              const { ok, data: result } = await libraryApi({ action: "return", id: book.id });
+              if (!ok) {
+                back.disabled = false;
+                return say(document.getElementById("bk-message"), result.error || "Could not mark that returned.", true);
+              }
+              loadLibrary();
+            });
+            actions.append(back);
+
+            /* Moving the date is how a renewal is expressed: there is no second
+               concept, just a loan that is due later than it was. */
+            const extend = document.createElement("button");
+            extend.type = "button";
+            extend.className = "ghost";
+            extend.textContent = "Another 4 weeks";
+            extend.addEventListener("click", async () => {
+              extend.disabled = true;
+              const due = new Date(Date.now() + 28 * 86400000).toISOString().slice(0, 10);
+              const { ok, data: result } = await libraryApi({ action: "set-due", loanId: book.loanId, dueDate: due });
+              if (!ok) {
+                extend.disabled = false;
+                return say(document.getElementById("bk-message"), result.error || "Could not move that date.", true);
+              }
+              loadLibrary();
+            });
+            actions.append(extend);
+          }
+
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.className = "ghost";
+          edit.textContent = "Edit";
+          edit.addEventListener("click", () => {
+            document.getElementById("bk-id").value = book.id;
+            document.getElementById("bk-title").value = book.title;
+            document.getElementById("bk-author").value = book.author || "";
+            document.getElementById("bk-notes").value = book.notes || "";
+            document.getElementById("bk-submit").textContent = "Save changes";
+            document.getElementById("bk-cancel").hidden = false;
+            document.getElementById("bk-title").focus();
+          });
+          actions.append(edit);
+
+          const archive = document.createElement("button");
+          archive.type = "button";
+          archive.className = "ghost";
+          archive.textContent = book.status === "archived" ? "Restore" : "Archive";
+          archive.addEventListener("click", async () => {
+            archive.disabled = true;
+            const status = book.status === "archived" ? "active" : "archived";
+            const { ok, data: result } = await libraryApi({ action: "update", id: book.id, status });
+            if (!ok) {
+              archive.disabled = false;
+              return say(document.getElementById("bk-message"), result.error || "Could not change that.", true);
+            }
+            loadLibrary();
+          });
+          actions.append(archive);
+
+          /* Two-step rather than confirm(): a browser modal blocks everything
+             else on the page, and nothing here uses one. */
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "ghost";
+          remove.textContent = "Delete";
+          remove.addEventListener("click", async () => {
+            if (remove.dataset.armed !== "yes") {
+              remove.dataset.armed = "yes";
+              remove.textContent = "Delete for good?";
+              setTimeout(() => {
+                if (!remove.isConnected) return;
+                remove.dataset.armed = "";
+                remove.textContent = "Delete";
+              }, 4000);
+              return;
+            }
+            remove.disabled = true;
+            const { ok, data: result } = await libraryApi({ action: "delete", id: book.id });
+            if (!ok) {
+              remove.disabled = false;
+              return say(document.getElementById("bk-message"), result.error || "Could not delete that.", true);
+            }
+            loadLibrary();
+          });
+          actions.append(remove);
+
+          row.append(actions);
+          list.append(row);
+        }
+      }
+
+      function resetBookForm() {
+        document.getElementById("bk-id").value = "";
+        document.getElementById("bk-title").value = "";
+        document.getElementById("bk-author").value = "";
+        document.getElementById("bk-notes").value = "";
+        document.getElementById("bk-submit").textContent = "Add book";
+        document.getElementById("bk-cancel").hidden = true;
+      }
+
+      document.getElementById("bk-cancel").addEventListener("click", () => {
+        resetBookForm();
+        const message = document.getElementById("bk-message");
+        if (message) message.hidden = true;
+      });
+
+      document.getElementById("add-book").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const message = document.getElementById("bk-message");
+        const id = document.getElementById("bk-id");
+        const title = document.getElementById("bk-title");
+        const author = document.getElementById("bk-author");
+        const notes = document.getElementById("bk-notes");
+
+        if (!title.value.trim()) return say(message, "A title is required.", true);
+
+        const editing = Boolean(id.value);
+        const { ok, data } = await libraryApi({
+          action: editing ? "update" : "create",
+          id: editing ? id.value : undefined,
+          title: title.value,
+          author: author.value,
+          notes: notes.value,
+        });
+        if (!ok) {
+          return say(message, data.error || "Could not save this book.", true);
+        }
+        say(message, (editing ? "Saved \u201c" : "Added \u201c") + title.value.trim() + "\u201d.", false);
+        resetBookForm();
+        loadLibrary();
+      });
 
       async function deadlineApi(body) {
         let res;
@@ -3744,6 +4075,7 @@ import AaltoMark from "../components/AaltoMark.astro";
         loadWishes();
         if (myRole === "mentor") return;
         loadDeadlines();
+        loadLibrary();
         loadProgramme();
         loadEvents();
         loadKnowledge();

@@ -579,6 +579,28 @@ export function deleteUser(email: string): void {
     // Cascades from users anyway, but erasure is the wrong place to rely on a
     // constraint staying as it is.
     db.run("DELETE FROM working_genius_takes WHERE user_email = $email", { $email: email });
+    /*
+     * The library, and the one case here where erasing a person is not the
+     * whole job.
+     *
+     * A loan row names a founder, so it is personal data and it goes. But the
+     * book is a physical object that is still in their bag, and deleting the
+     * loan on its own makes the shelf claim it is available. The next organizer
+     * to look would see a book that nobody has and nobody can find.
+     *
+     * So the book is marked unaccounted first, in the same transaction, which
+     * keeps the fact that it left the office without keeping anything about
+     * who took it. The reminder rows go with the loans by CASCADE.
+     */
+    db.run(
+      `UPDATE books SET status = 'unaccounted', updated_at = datetime('now')
+        WHERE id IN (
+          SELECT book_id FROM book_loans
+           WHERE user_email = $email AND returned_at IS NULL
+        )`,
+      { $email: email },
+    );
+    db.run("DELETE FROM book_loans WHERE user_email = $email", { $email: email });
     // sessions and invites cascade, but being explicit costs nothing and keeps
     // the intent readable next to the rest.
     db.run("DELETE FROM sessions WHERE user_email = $email", { $email: email });
@@ -1173,6 +1195,304 @@ export function deadlineCompletionCounts(): Record<string, number> {
     )
     .all() as { deadline_id: string; n: number }[];
   return Object.fromEntries(rows.map((r) => [r.deadline_id, r.n]));
+}
+
+// --- The office library ------------------------------------------------------
+//
+// Books on the shelf, and the loans against them. Ids are server-generated
+// throughout and a borrower is only ever the session's own email; there is no
+// function here that takes an identity from anywhere else.
+
+export type BookRow = {
+  id: string;
+  title: string;
+  author: string | null;
+  notes: string | null;
+  status: "active" | "archived" | "unaccounted";
+  added_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BookInput = {
+  title: string;
+  author?: string | null;
+  notes?: string | null;
+};
+
+export type LoanRow = {
+  id: string;
+  book_id: string;
+  user_email: string;
+  borrowed_at: string;
+  due_date: string;
+  returned_at: string | null;
+};
+
+/** A book with its open loan, if it has one, and the borrower's name. */
+export type ShelfRow = BookRow & {
+  loan_id: string | null;
+  borrower_email: string | null;
+  borrower_name: string | null;
+  borrowed_at: string | null;
+  due_date: string | null;
+};
+
+/** Adds a book to the shelf. Returns the row, including its server-chosen id. */
+export function createBook(input: BookInput, addedBy: string): BookRow {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  db.run(
+    `INSERT INTO books (id, title, author, notes, added_by)
+     VALUES ($id, $title, $author, $notes, $added_by)`,
+    {
+      $id: id,
+      $title: input.title,
+      $author: input.author ?? null,
+      $notes: input.notes ?? null,
+      $added_by: addedBy,
+    },
+  );
+  return getBook(id)!;
+}
+
+export function getBook(id: string): BookRow | null {
+  const db = getDb();
+  return db.query("SELECT * FROM books WHERE id = $id").get({ $id: id }) as BookRow | null;
+}
+
+export function countBooks(): number {
+  const db = getDb();
+  return (db.query("SELECT COUNT(*) AS n FROM books").get() as { n: number }).n;
+}
+
+/**
+ * The shelf, with whoever currently holds each book.
+ *
+ * One query rather than a lookup per book: the organizer view lists every book
+ * and the founder view lists most of them, so the per-row version is a hundred
+ * round trips to render one page.
+ *
+ * The join is to the *open* loan only (returned_at IS NULL), which the partial
+ * unique index guarantees is at most one, so this cannot fan a book out into
+ * several rows however long its history gets.
+ */
+export function listShelf(includeInactive = false): ShelfRow[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT b.*,
+              l.id AS loan_id,
+              l.user_email AS borrower_email,
+              u.name AS borrower_name,
+              l.borrowed_at AS borrowed_at,
+              l.due_date AS due_date
+         FROM books b
+         LEFT JOIN book_loans l
+           ON l.book_id = b.id AND l.returned_at IS NULL
+         LEFT JOIN users u ON u.email = l.user_email
+        ${includeInactive ? "" : "WHERE b.status != 'archived'"}
+        ORDER BY b.title ASC, b.created_at ASC`,
+    )
+    .all() as ShelfRow[];
+}
+
+export function updateBook(
+  id: string,
+  fields: Partial<BookInput> & { status?: BookRow["status"] },
+): boolean {
+  const db = getDb();
+  const existing = getBook(id);
+  if (!existing) return false;
+  db.run(
+    `UPDATE books SET
+       title = $title,
+       author = $author,
+       notes = $notes,
+       status = $status,
+       updated_at = datetime('now')
+     WHERE id = $id`,
+    {
+      $id: id,
+      $title: fields.title ?? existing.title,
+      // undefined leaves it alone; null clears it.
+      $author: fields.author === undefined ? existing.author : fields.author,
+      $notes: fields.notes === undefined ? existing.notes : fields.notes,
+      $status: fields.status ?? existing.status,
+    },
+  );
+  return true;
+}
+
+export function deleteBook(id: string): void {
+  const db = getDb();
+  db.run("DELETE FROM books WHERE id = $id", { $id: id });
+}
+
+/** The open loan on a book, if there is one. */
+export function openLoanForBook(bookId: string): LoanRow | null {
+  const db = getDb();
+  return db
+    .query("SELECT * FROM book_loans WHERE book_id = $id AND returned_at IS NULL")
+    .get({ $id: bookId }) as LoanRow | null;
+}
+
+export function getLoan(id: string): LoanRow | null {
+  const db = getDb();
+  return db.query("SELECT * FROM book_loans WHERE id = $id").get({ $id: id }) as LoanRow | null;
+}
+
+/**
+ * Takes a book off the shelf for one person.
+ *
+ * `userEmail` must come from the session. There is no code path that accepts a
+ * borrower from a request body, which is what makes this immune to the bug
+ * class that affected threads, decisions and check-ins.
+ *
+ * Throws if the book is already out. The caller is expected to let the unique
+ * index be the arbiter rather than checking first: two founders tapping Borrow
+ * at the same moment both pass a read-then-write check, and only one of them
+ * can pass this.
+ */
+export function borrowBook(bookId: string, userEmail: string, dueDate: string): LoanRow {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  db.run(
+    `INSERT INTO book_loans (id, book_id, user_email, due_date)
+     VALUES ($id, $book_id, $user_email, $due_date)`,
+    { $id: id, $book_id: bookId, $user_email: userEmail, $due_date: dueDate },
+  );
+  return getLoan(id)!;
+}
+
+/**
+ * Puts a book back. Returns false when there was nothing out to return.
+ *
+ * Read then write, because the bun:sqlite shim types `run` as void and there
+ * is no changes() to consult. The UPDATE keeps its own `returned_at IS NULL`
+ * guard regardless, so two simultaneous returns cannot stamp two different
+ * times onto one loan: the second matches nothing.
+ */
+export function returnLoan(loanId: string): boolean {
+  const db = getDb();
+  const open = getLoan(loanId);
+  if (!open || open.returned_at !== null) return false;
+  db.run(
+    "UPDATE book_loans SET returned_at = datetime('now') WHERE id = $id AND returned_at IS NULL",
+    { $id: loanId },
+  );
+  return true;
+}
+
+/** Moves an open loan's due date. This is also how a renewal is expressed. */
+export function setLoanDue(loanId: string, dueDate: string): boolean {
+  const db = getDb();
+  const open = getLoan(loanId);
+  if (!open || open.returned_at !== null) return false;
+  db.run(
+    "UPDATE book_loans SET due_date = $due WHERE id = $id AND returned_at IS NULL",
+    { $id: loanId, $due: dueDate },
+  );
+  return true;
+}
+
+/** Every loan against a book, newest first. The organizer's history view. */
+export function loanHistory(bookId: string): (LoanRow & { name: string | null })[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT l.*, u.name AS name
+         FROM book_loans l
+         LEFT JOIN users u ON u.email = l.user_email
+        WHERE l.book_id = $id
+        ORDER BY l.borrowed_at DESC`,
+    )
+    .all({ $id: bookId }) as (LoanRow & { name: string | null })[];
+}
+
+/** One person's loans, newest first. Used by the founder view and the export. */
+export function loansForUser(userEmail: string): (LoanRow & { title: string })[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT l.*, b.title AS title
+         FROM book_loans l
+         JOIN books b ON b.id = l.book_id
+        WHERE l.user_email = $email
+        ORDER BY l.borrowed_at DESC`,
+    )
+    .all({ $email: userEmail }) as (LoanRow & { title: string })[];
+}
+
+export type BookReminderKind = "due-3d" | "overdue";
+
+export type PendingBookReminder = {
+  loan_id: string;
+  book_id: string;
+  title: string;
+  due_date: string;
+  email: string;
+  name: string;
+};
+
+/**
+ * Loans due on a given date that still owe a nudge of this kind.
+ *
+ * The NOT EXISTS against book_reminders is what makes this idempotent: the
+ * scheduler can run every hour, or twice after a deploy, without anybody being
+ * told the same thing twice. Returned loans and books that are not on the
+ * active shelf are excluded, so putting a book back silences the rest of its
+ * reminders without anything having to remember to cancel them.
+ */
+export function pendingBookReminders(
+  kind: BookReminderKind,
+  dueDate: string,
+): PendingBookReminder[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT l.id AS loan_id, b.id AS book_id, b.title, l.due_date, u.email, u.name
+         FROM book_loans l
+         JOIN books b ON b.id = l.book_id
+         JOIN users u ON u.email = l.user_email
+        WHERE l.returned_at IS NULL
+          AND l.due_date = $due
+          AND b.status = 'active'
+          AND NOT EXISTS (
+            SELECT 1 FROM book_reminders r
+             WHERE r.loan_id = l.id AND r.kind = $kind
+          )
+        ORDER BY u.name ASC`,
+    )
+    .all({ $due: dueDate, $kind: kind }) as PendingBookReminder[];
+}
+
+/** Records that a nudge went out, so it never goes out again. */
+export function recordBookReminder(loanId: string, kind: BookReminderKind): void {
+  const db = getDb();
+  db.run(
+    "INSERT OR IGNORE INTO book_reminders (loan_id, kind) VALUES ($id, $kind)",
+    { $id: loanId, $kind: kind },
+  );
+}
+
+/** The loans in a founder's data export. */
+export function getBookLoans(
+  userEmail: string,
+): { book: string; borrowedAt: string; dueDate: string; returnedAt: string | null }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT b.title AS book, l.borrowed_at AS borrowedAt,
+              l.due_date AS dueDate, l.returned_at AS returnedAt
+         FROM book_loans l
+         JOIN books b ON b.id = l.book_id
+        WHERE l.user_email = $email
+        ORDER BY l.borrowed_at DESC`,
+    )
+    .all({ $email: userEmail }) as {
+      book: string; borrowedAt: string; dueDate: string; returnedAt: string | null;
+    }[];
 }
 
 /**

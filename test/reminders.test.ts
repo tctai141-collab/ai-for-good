@@ -33,6 +33,7 @@ async function createDeadline(title: string, dueDate: string, dueTime: string | 
 /* Loaded after the environment points at the harness, because the database
    module resolves DB_PATH when it is first imported. */
 let runReminders: (now?: Date) => Promise<{ sent: number; failed: number }>;
+let runBookReminders: (now?: Date) => Promise<{ sent: number; failed: number }>;
 let helsinkiDate: (now: Date, dayOffset?: number) => string;
 
 async function runPass() {
@@ -53,6 +54,7 @@ beforeAll(async () => {
 
   const reminders = await import("../src/lib/reminders");
   runReminders = reminders.runReminders;
+  runBookReminders = reminders.runBookReminders;
   helsinkiDate = reminders.helsinkiDate;
 });
 
@@ -252,5 +254,138 @@ describe("the morning gate", () => {
     expect(
       h.sent.slice(atNoon).filter((m) => m.subject === "Three days: Not at 4am").map((m) => m.to).sort(),
     ).toEqual(["alice@example.test", "bob@example.test"]);
+  });
+});
+
+/**
+ * Library books.
+ *
+ * A second pass on the same tick, and the same restraint applies for the same
+ * reason. Two nudges rather than the deadline path's four, because a borrowed
+ * book is the lower-stakes of the two and founders already get plenty.
+ *
+ * These live in this file rather than beside the rest of the library tests
+ * because this is the one suite allowed to import src/lib/reminders: it sets
+ * DB_PATH first and imports dynamically, and doing that anywhere else freezes
+ * the path for the whole runner process.
+ */
+describe("library reminders", () => {
+  async function addBook(title: string) {
+    const res = await post(h, "/api/library", { action: "create", title }, organizer.cookie);
+    expect(res.status).toBe(200);
+    return (await res.json() as { id: string }).id;
+  }
+
+  /** Borrow, then put the due date where the test needs it. */
+  async function lendTo(who: Session, title: string, dueDate: string) {
+    const id = await addBook(title);
+    const borrowed = await post(h, "/api/library", { action: "borrow", id }, who.cookie);
+    expect(borrowed.status).toBe(200);
+
+    const db = h.db();
+    let loanId = "";
+    try {
+      const row = db
+        .query("SELECT id FROM book_loans WHERE book_id = $id AND returned_at IS NULL")
+        .get({ $id: id }) as { id: string };
+      loanId = row.id;
+      db.run("UPDATE book_loans SET due_date = $due WHERE id = $id", { $due: dueDate, $id: loanId });
+    } finally {
+      db.close();
+    }
+    return { id, loanId };
+  }
+
+  test("whoever has it hears three days before it is due", async () => {
+    await lendTo(alice, "Zero to One", helsinkiDate(NOW, 3));
+
+    const before = h.sent.length;
+    await runBookReminders(NOW);
+
+    const fresh = h.sent.slice(before).filter((m) => m.subject.startsWith("Due back"));
+    expect(fresh.map((m) => m.to)).toEqual(["alice@example.test"]);
+    // Only the borrower. This is not a cohort announcement.
+    expect(fresh).toHaveLength(1);
+  });
+
+  test("and never a second time", async () => {
+    const before = h.sent.length;
+    await runBookReminders(NOW);
+    expect(h.sent.slice(before).filter((m) => m.subject.startsWith("Due back"))).toHaveLength(0);
+  });
+
+  test("overdue goes out the morning after, once", async () => {
+    await lendTo(bob, "The Hard Thing", helsinkiDate(NOW, -1));
+
+    const before = h.sent.length;
+    await runBookReminders(NOW);
+    const fresh = h.sent.slice(before).filter((m) => m.subject === "Overdue: The Hard Thing");
+    expect(fresh.map((m) => m.to)).toEqual(["bob@example.test"]);
+
+    const again = h.sent.length;
+    await runBookReminders(NOW);
+    expect(h.sent.slice(again).filter((m) => m.subject === "Overdue: The Hard Thing")).toHaveLength(0);
+  });
+
+  test("bringing it back silences what was still to come", async () => {
+    const { id } = await lendTo(alice, "Returned in time", helsinkiDate(NOW, 3));
+    expect((await post(h, "/api/library", { action: "return", id }, alice.cookie)).status).toBe(200);
+
+    const before = h.sent.length;
+    await runBookReminders(NOW);
+    expect(h.sent.slice(before).filter((m) => m.subject.includes("Returned in time"))).toHaveLength(0);
+  });
+
+  test("nothing for a book the team archived", async () => {
+    const { id } = await lendTo(alice, "Archived mid-loan", helsinkiDate(NOW, 3));
+    await post(h, "/api/library", { action: "update", id, status: "archived" }, organizer.cookie);
+
+    const before = h.sent.length;
+    await runBookReminders(NOW);
+    expect(h.sent.slice(before).filter((m) => m.subject.includes("Archived mid-loan"))).toHaveLength(0);
+  });
+
+  test("nothing in the small hours, for the same reason deadlines wait", async () => {
+    await lendTo(bob, "Not at 4am either", helsinkiDate(NOW, 3));
+
+    const smallHours = new Date("2026-09-15T01:00:00Z");
+    const before = h.sent.length;
+    await runBookReminders(smallHours);
+    expect(h.sent.slice(before).filter((m) => m.subject.includes("Not at 4am either"))).toHaveLength(0);
+
+    const atNoon = h.sent.length;
+    await runBookReminders(NOW);
+    expect(
+      h.sent.slice(atNoon).filter((m) => m.subject.includes("Not at 4am either")).map((m) => m.to),
+    ).toEqual(["bob@example.test"]);
+  });
+
+  test("two nudges per loan and no more, whatever the pass is run", async () => {
+    /* The whole risk with this feature is volume. A loan that is ignored from
+       start to finish must produce exactly two emails, ever. */
+    const { loanId } = await lendTo(alice, "Ignored throughout", helsinkiDate(NOW, 3));
+
+    const before = h.sent.length;
+    await runBookReminders(NOW);
+
+    // Move it to yesterday and run again, which is the overdue moment.
+    const db = h.db();
+    try {
+      db.run("UPDATE book_loans SET due_date = $due WHERE id = $id",
+        { $due: helsinkiDate(NOW, -1), $id: loanId });
+    } finally {
+      db.close();
+    }
+    await runBookReminders(NOW);
+    // And keep running: nothing further.
+    await runBookReminders(NOW);
+    await runBookReminders(NOW);
+
+    const mine = h.sent.slice(before).filter((m) => m.subject.includes("Ignored throughout"));
+    expect(mine).toHaveLength(2);
+    expect(mine.map((m) => m.subject).sort()).toEqual([
+      "Due back Friday 18 September: Ignored throughout",
+      "Overdue: Ignored throughout",
+    ]);
   });
 });
