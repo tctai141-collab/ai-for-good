@@ -194,6 +194,133 @@ export function capHistory<T extends { role: string; content: string }>(messages
  */
 export const IP_FAILURE_LIMIT = 30;
 
+
+/**
+ * How long a per-address lockout lasts. Matches the per-email window in
+ * auth.ts; they are the same policy seen from two angles.
+ */
+export const IP_LOCKOUT_MS = 15 * 60 * 1000;
+
+/*
+ * Per-address login throttle, alongside the per-email one in auth.ts.
+ *
+ * The per-email limit alone stops somebody grinding one account, and does
+ * nothing about the attack that actually fits this app: twenty-four known
+ * addresses, ten tries each, one common password. That is 240 guesses from a
+ * single machine without ever tripping a limit. This caps the machine.
+ *
+ * It lives here rather than in auth.ts, and that is not tidiness. auth.ts
+ * imports the database module, and db/index.ts resolves DB_PATH once, at
+ * module load; so a test importing auth.ts freezes that path for the whole
+ * runner process, and reminders.test.ts, which sets DB_PATH and then
+ * dynamically imports, dies with "unable to open database file". This file
+ * imports nothing, which is the property that keeps the throttle testable.
+ */
+const ipFailures = new Map<string, { count: number; firstAt: number }>();
+const MAX_TRACKED_IPS = 5_000;
+/** Sweeps clear down to here, so the next few hundred calls need no sweep. */
+const IP_LOW_WATER = 4_000;
+
+/**
+ * Records one failure against a key, keeping the map ordered by recency.
+ *
+ * The reordering is what makes eviction safe. Map iteration is insertion
+ * ordered and mutating a value does not change that, so without the delete an
+ * address that started failing early sits at the front forever and is the first
+ * thing dropped when room is needed. That is precisely backwards, because it
+ * is the one still attacking. Re-inserting on every bump turns the order into
+ * least-recently-active first, so what gets dropped is what has gone quiet.
+ */
+function bumpIpWindow(
+  map: Map<string, { count: number; firstAt: number }>,
+  key: string,
+  now: number,
+): void {
+  const record = map.get(key);
+  if (!record || now - record.firstAt > IP_LOCKOUT_MS) {
+    map.delete(key);
+    map.set(key, { count: 1, firstAt: now });
+    return;
+  }
+  record.count += 1;
+  map.delete(key);
+  map.set(key, record);
+}
+
+export function isIpLockedOut(ip: string | null): boolean {
+  if (!ip) return false;
+  const record = ipFailures.get(ip);
+  if (!record) return false;
+  if (Date.now() - record.firstAt > IP_LOCKOUT_MS) {
+    ipFailures.delete(ip);
+    return false;
+  }
+  return record.count >= IP_FAILURE_LIMIT;
+}
+
+/*
+ * A failure is always recorded. The map is kept bounded by making room, never
+ * by declining to count.
+ *
+ * This used to return early once the map was full of live windows: "that is
+ * the attack, so stop adding keys". It bounded the memory and cancelled the
+ * throttle at the same time, because the key is the first entry of
+ * `X-Forwarded-For` and therefore free to invent. Five thousand throwaway
+ * values fill the map, and from then on nothing is counted at all: the address
+ * actually guessing passwords never reaches the limit and is never locked out.
+ * The memory bound became the way past the control it belongs to.
+ *
+ * Both siblings already had the right shape (the login throttle above and the
+ * RateLimiter in limits.ts each clear down to a low-water mark rather than
+ * refusing new entries), and this is now the same: drop expired windows, then
+ * drop least-recently-active ones until there is room. Evicting a live window
+ * loses one attacker's tally, which is a real cost, but a bounded one, and it
+ * beats losing every tally including theirs. Clearing to a low-water mark
+ * rather than to exactly the ceiling keeps the sweep amortised to O(1), so this
+ * cannot be turned into CPU exhaustion the way a sweep-every-call version can.
+ */
+export function recordIpFailure(ip: string | null): void {
+  if (!ip) return;
+  const now = Date.now();
+
+  if (ipFailures.size >= MAX_TRACKED_IPS) {
+    for (const [key, record] of ipFailures) {
+      if (now - record.firstAt > IP_LOCKOUT_MS) ipFailures.delete(key);
+    }
+    // Still full of live windows. Map iteration is recency ordered, thanks to
+    // bumpIpWindow re-inserting, so the quietest addresses go first.
+    if (ipFailures.size >= IP_LOW_WATER) {
+      let toDrop = ipFailures.size - IP_LOW_WATER;
+      for (const key of ipFailures.keys()) {
+        if (toDrop-- <= 0) break;
+        if (key === ip) continue; // never evict the caller we are about to count
+        ipFailures.delete(key);
+      }
+    }
+  }
+
+  bumpIpWindow(ipFailures, ip, now);
+}
+
+export function clearIpFailures(ip: string | null): void {
+  if (ip) ipFailures.delete(ip);
+}
+
+/** Test seam. */
+export function resetIpFailures(): void {
+  ipFailures.clear();
+}
+
+/**
+ * Test/telemetry only, mirroring trackedFailureCount for the email map.
+ *
+ * Exported so the memory bound is asserted rather than assumed: this map is
+ * keyed by a value the caller chooses, and the whole reason it is swept is that
+ * it would otherwise grow for as long as someone kept inventing addresses.
+ */
+export function trackedIpCount(): number {
+  return ipFailures.size;
+}
 /**
  * Reads a JSON body without trusting the size the caller claimed.
  *

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+  IP_FAILURE_LIMIT,
   isIpLockedOut,
   recordIpFailure,
   resetIpFailures,
   trackedIpCount,
-} from "../src/lib/auth";
-import { IP_FAILURE_LIMIT } from "../src/lib/limits";
+} from "../src/lib/limits";
 
 /**
  * The per-address login throttle, and the bound that was quietly disabling it.
@@ -24,8 +24,14 @@ import { IP_FAILURE_LIMIT } from "../src/lib/limits";
  *
  * These call the module directly rather than going through HTTP, which is the
  * exception in this suite and is deliberate: the flood is thousands of entries,
- * and every login attempt over HTTP costs a full Argon2id verify. The functions
- * touched here are pure in-memory bookkeeping and never open the database.
+ * and every login attempt over HTTP costs a full Argon2id verify.
+ *
+ * The import is from limits.ts, never auth.ts, and that matters. auth.ts pulls
+ * in the database module, which resolves DB_PATH once at load; importing it
+ * here froze that path for the whole runner process and made reminders.test.ts
+ * fail three files later with "unable to open database file". It passed locally
+ * because ./data existed and failed in CI on a fresh checkout, which is exactly
+ * the trap session-hardening.test.ts already warns about.
  */
 
 /** Above MAX_TRACKED_IPS in auth.ts, so the map is genuinely at its ceiling. */
