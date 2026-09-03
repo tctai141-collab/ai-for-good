@@ -141,6 +141,9 @@ export const GET: APIRoute = async ({ cookies }) => {
   }
 
   const founders = listFounders();
+  /* Read once: the map and the count of who is missing from it are two halves
+     of one sentence and must come from the same read. */
+  const sharedMap = workingGeniusMap();
   const checkins = getCohortCheckins();
   const openDecisions = getOpenDecisionCounts();
   const week = currentSprintWeek();
@@ -268,7 +271,16 @@ export const GET: APIRoute = async ({ cookies }) => {
      * is a fact an organizer needs; naming them turns a voluntary thing into
      * a visible omission, which is not consent.
      */
-    map: workingGeniusMap(),
-    mapWithheld: founders.length - workingGeniusMap().length,
+    map: sharedMap,
+    /*
+     * Both sides of this subtraction have to be founders, or it is not a
+     * count of anything. It used to run the query twice as well, so the two
+     * halves of one sentence came from two reads of the database.
+     *
+     * Clamped, because a number that cannot be negative should not be able to
+     * print as one: it says "N founders have not shared", and "-1 founders"
+     * on a dashboard is worse than the arithmetic being quietly wrong.
+     */
+    mapWithheld: Math.max(0, founders.length - sharedMap.length),
   });
 };
