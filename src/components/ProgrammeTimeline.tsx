@@ -289,31 +289,70 @@ function Timeline({ events, today, startDate, totalWeeks }: ViewProps) {
             {group.isNow && <span className="pt-nowtag">This week</span>}
           </div>
 
-          <div className="pt-rail">
-            {group.events.map((event) => {
-              const past = event.startsOn < today;
-              const isToday = event.startsOn === today;
-              const kind = KINDS[event.kind];
-              return (
-                <div
-                  key={event.id}
-                  ref={event.id === firstUpcoming ? nextRef : undefined}
-                  className={`pt-item${past ? " is-past" : ""}${isToday ? " is-today" : ""}`}
-                >
-                  <span className={`pt-dot${kind.major ? " is-major" : ""}`} aria-hidden="true">{kind.glyph}</span>
-                  <div className="pt-when">
-                    <span className="pt-day">{longDate(event.startsOn, fromIsoDay(today).getFullYear())}</span>
-                    <span className="pt-time">{timeLabel(event)}</span>
-                  </div>
-                  <EventBody event={event} />
+          {byDay(group.events).map((day) => {
+            const past = day.iso < today;
+            const isToday = day.iso === today;
+            return (
+              <div
+                key={day.iso}
+                className={`pt-dgroup${past ? " is-past" : ""}${isToday ? " is-today" : ""}`}
+              >
+                {/*
+                  The date is said once for the day, not once per event. It was
+                  repeated on every row, so a day holding three things stated
+                  "Friday 11 September" three times and the eye had to compare
+                  them to learn they were the same day.
+
+                  "Today" belongs here too. It is a property of the day, and as
+                  a per-row badge it appeared twice on a day with two events.
+                */}
+                <div className="pt-dhead">
+                  <span className="pt-dlabel">{longDate(day.iso, fromIsoDay(today).getFullYear())}</span>
+                  {isToday && <span className="pt-dtoday">Today</span>}
                 </div>
-              );
-            })}
-          </div>
+
+                {day.events.map((event) => (
+                  <div
+                    key={event.id}
+                    ref={event.id === firstUpcoming ? nextRef : undefined}
+                    className="pt-item"
+                  >
+                    <div className="pt-when">
+                      <span
+                        className={`pt-glyph${KINDS[event.kind].major ? " is-major" : ""}`}
+                        aria-hidden="true"
+                      >
+                        {KINDS[event.kind].glyph}
+                      </span>
+                      <span className="pt-time">{timeLabel(event)}</span>
+                    </div>
+                    <EventBody event={event} />
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </section>
       ))}
     </div>
   );
+}
+
+/**
+ * The events of one group, split into calendar days in the order they occur.
+ *
+ * They arrive sorted by date, so this only has to notice where the day changes
+ * rather than sort again — and a Map would answer the same question while
+ * losing the guarantee that the days come out in order.
+ */
+export function byDay(events: ProgrammeEvent[]): { iso: string; events: ProgrammeEvent[] }[] {
+  const days: { iso: string; events: ProgrammeEvent[] }[] = [];
+  for (const event of events) {
+    const last = days[days.length - 1];
+    if (last && last.iso === event.startsOn) last.events.push(event);
+    else days.push({ iso: event.startsOn, events: [event] });
+  }
+  return days;
 }
 
 function EventBody({ event }: { event: ProgrammeEvent }) {
@@ -327,20 +366,20 @@ function EventBody({ event }: { event: ProgrammeEvent }) {
    * same row sat empty. A control that costs a click to reveal what would fit
    * anyway is a control that should not exist.
    *
-   * It takes its own column on a wide screen and falls under the title on a
-   * narrow one, so nothing is lost on a phone either.
+   * It sits under the title rather than in a column of its own. As a third
+   * column it set the height of every row it appeared in and left the same
+   * width dark on every row it did not — measured, 450px of 1118px, empty on
+   * half the events, and rows alternating 69px and 94px down the page.
    */
   return (
-    <>
-      <div className="pt-body">
-        <div className="pt-bodyhead">
-          <h3 className="pt-eventtitle">{event.title}</h3>
-          <span className={`pt-kind${kind.major ? " is-major" : ""}`}>{kind.label}</span>
-        </div>
-        {event.location && <p className="pt-loc">{event.location}</p>}
+    <div className="pt-body">
+      <div className="pt-bodyhead">
+        <h3 className="pt-eventtitle">{event.title}</h3>
+        <span className={`pt-kind${kind.major ? " is-major" : ""}`}>{kind.label}</span>
       </div>
-      {event.description ? <p className="pt-desc">{event.description}</p> : <span />}
-    </>
+      {event.location && <p className="pt-loc">{event.location}</p>}
+      {event.description && <p className="pt-desc">{event.description}</p>}
+    </div>
   );
 }
 
@@ -534,44 +573,74 @@ export const PROGRAMME_CSS = `
 }
 .pt-grouphead.is-now { border-bottom-color: var(--brand-accent); }
 
-/* The rail is one continuous line down the column of marks, so a week reads as
-   a run of time rather than a stack of cards. */
-.pt-rail { position: relative; padding-left: 26px; }
-.pt-rail::before {
-  content: ""; position: absolute; left: 5px; top: 14px; bottom: 14px;
-  width: 1px; background: var(--line);
+/*
+ * A day is the unit, and the layout is sized by its container rather than by
+ * the window.
+ *
+ * The old row was 220px minmax(0,1fr) minmax(0,1.15fr) with the phone rule
+ * on @media (max-width: 720px). Both halves of that were wrong together: the
+ * date column was fixed, so every pixel of shrinkage came out of the title and
+ * the note, and the breakpoint watched the *window* while the thing actually
+ * being squeezed was this column — the window minus a ~290px sidebar. A phone
+ * held in landscape is 844px, which is over the breakpoint, so the phone rule
+ * never fired and the desktop grid ran in ~554px: measured, an 87px title
+ * column and rows of 288px. At 380px the note column was 7px and the row
+ * overflowed to the right.
+ *
+ * So: no fixed column, and the query asks the container.
+ */
+.pt-timeline {
+  container-type: inline-size;
+  /*
+   * Narrower than the page, unlike the calendar, which earns all 1280px
+   * because a month grid is genuinely that wide. This is a column of text: at
+   * full width the rules under each day ran 1144px while the words stopped at
+   * about 600, so every row ended in a long ruled emptiness. Capping it is
+   * what stops the list looking like a table with its right half missing.
+   */
+  max-width: min(920px, 100%);
+}
+
+/* Days are separated by more than the gap between events inside one, which is
+   what makes a day read as a block instead of the list reading as one run. */
+.pt-dgroup + .pt-dgroup { margin-top: 22px; }
+.pt-dgroup.is-past { opacity: 0.5; }
+.pt-dgroup.is-past:hover { opacity: 0.85; }
+
+.pt-dhead {
+  display: flex; align-items: baseline; gap: 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pt-dlabel {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-sub, #8a8f98);
+}
+.pt-dgroup.is-today .pt-dlabel { color: var(--ink); }
+.pt-dgroup.is-today .pt-dhead { border-bottom-color: rgba(94,106,210,0.45); }
+.pt-dtoday {
+  padding: 1px 7px; border-radius: 999px;
+  background: var(--brand-accent); color: #fff;
+  font-size: 0.625rem; font-weight: 700; letter-spacing: 0.03em;
 }
 
 .pt-item {
-  position: relative; display: grid;
-  /* Date, what it is, and what to know about it. The third column is what the
-     width is for; without it the row was half content and half dark. */
-  grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 4px 28px;
-  padding: 14px 0;
+  display: grid;
+  /* Time, then everything else. minmax(0, …) on both, so a narrow container
+     takes the space out of the time column instead of overflowing. */
+  grid-template-columns: minmax(0, 108px) minmax(0, 1fr);
+  gap: 2px 18px;
+  padding: 11px 0;
 }
-.pt-item + .pt-item { border-top: 1px solid rgba(255,255,255,0.05); }
-.pt-item.is-past { opacity: 0.5; }
-.pt-item.is-past:hover { opacity: 0.8; }
+.pt-item + .pt-item { border-top: 1px solid rgba(255,255,255,0.04); }
 
-.pt-dot {
-  position: absolute; left: -26px; top: 17px;
-  width: 11px; text-align: center; line-height: 1;
-  font-size: 0.5rem; color: var(--ink-sub, #8a8f98);
-  background: var(--surface, #0e0f12);
-  padding: 3px 0;
+.pt-when { display: flex; align-items: baseline; gap: 7px; }
+.pt-glyph { font-size: 0.5rem; line-height: 1.9; color: var(--ink-sub, #8a8f98); }
+.pt-glyph.is-major { color: var(--brand-accent); font-size: 0.625rem; }
+.pt-time {
+  font-size: 0.8125rem; color: var(--ink-sub, #8a8f98);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.pt-dot.is-major { color: var(--brand-accent); font-size: 0.625rem; }
-.pt-item.is-today .pt-dot { color: var(--brand-accent); }
-
-.pt-when { display: flex; flex-direction: column; gap: 2px; }
-.pt-day { font-size: 0.875rem; font-weight: 600; color: var(--ink); }
-.pt-item.is-today .pt-day::after {
-  content: "Today"; margin-left: 8px; padding: 1px 6px;
-  border-radius: 999px; background: var(--brand-accent); color: #fff;
-  font-size: 0.625rem; font-weight: 700; letter-spacing: 0.03em;
-}
-.pt-time { font-size: 0.8125rem; color: var(--ink-sub, #8a8f98); font-variant-numeric: tabular-nums; }
 
 .pt-body { min-width: 0; }
 .pt-bodyhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -587,9 +656,12 @@ export const PROGRAMME_CSS = `
   white-space: nowrap;
 }
 .pt-kind.is-major { border-color: rgba(94,106,210,0.5); color: #a5adf0; }
-.pt-loc { margin: 5px 0 0; font-size: 0.8125rem; color: var(--ink-sub, #8a8f98); }
+.pt-loc { margin: 4px 0 0; font-size: 0.8125rem; color: var(--ink-sub, #8a8f98); }
 .pt-desc {
-  margin: 0; max-width: 60ch; align-self: start;
+  /* 68ch, because it now runs under the title rather than in a column of its
+     own: the column used to do the measuring and there is nothing to stop it
+     spanning the page otherwise. */
+  margin: 5px 0 0; max-width: 68ch;
   font-size: 0.875rem; line-height: 1.55; color: var(--ink-sub, #8a8f98);
   white-space: pre-wrap;
 }
@@ -672,14 +744,21 @@ export const PROGRAMME_CSS = `
 }
 .pt-close:hover { background: rgba(255,255,255,0.08); color: var(--ink); }
 
+/*
+ * The time stops being a column once this one is narrow.
+ *
+ * A container query, not a media query, because what decides this is the width
+ * left for the list — the window less whatever the sidebar is taking — and not
+ * the width of the window. 108px of time against the rest is comfortable down
+ * to about 420px; below that the time sits on its own line above the title and
+ * the row keeps its full width for the words.
+ */
+@container (max-width: 420px) {
+  .pt-item { grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 10px 0; }
+}
+
 @media (max-width: 720px) {
   .pt-wrap { padding: 24px 16px 64px; }
-  /* The date column stops being a column: at this width 190px of it leaves the
-     title about twelve characters, and every event wraps to four lines. */
-  /* One column: the date row, the title, then the note under it. */
-  .pt-item { grid-template-columns: 1fr; gap: 4px; }
-  .pt-desc { margin-top: 4px; }
-  .pt-when { flex-direction: row; align-items: baseline; gap: 8px; }
   .pt-cell { min-height: 58px; padding: 3px; }
 
   /*
