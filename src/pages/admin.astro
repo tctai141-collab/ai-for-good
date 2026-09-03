@@ -390,6 +390,20 @@ import AaltoMark from "../components/AaltoMark.astro";
       /* Loan history stays folded inside the book cell rather than taking a
          column of its own: it is the one thing here nobody reads until they
          are already asking about a specific book. */
+      .bk-note { margin-top: 4px; }
+      .bk-note summary {
+        cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none;
+      }
+      .bk-note summary::-webkit-details-marker { display: none; }
+      .bk-note summary::before { content: "\25b8  "; }
+      .bk-note[open] summary::before { content: "\25be  "; }
+      .bk-note summary:hover { color: var(--sub); }
+      .bk-note summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+      .bk-note-body {
+        margin-top: 4px; font-size: 0.75rem; line-height: 1.5;
+        color: var(--muted); overflow-wrap: anywhere;
+      }
+
       .bk-history { margin-top: 5px; }
       .bk-history summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none; }
       .bk-history summary::-webkit-details-marker { display: none; }
@@ -2041,14 +2055,28 @@ import AaltoMark from "../components/AaltoMark.astro";
           title.textContent = book.title;
           linesBox.append(title);
 
-          const bits = [];
-          if (book.author) bits.push(book.author);
-          if (book.notes) bits.push(book.notes);
-          if (bits.length) {
+          if (book.author) {
             const sub = document.createElement("span");
             sub.className = "bk-sub";
-            sub.textContent = bits.join(" · ");
+            sub.textContent = book.author;
             linesBox.append(sub);
+          }
+
+          /* The note folds away, the way loan history below it already does.
+             It is free text an organizer typed — "shelf by the window, ask Tai
+             first" — and printed in full on every row it was taller than the
+             book it described. */
+          if (book.notes) {
+            const noteBox = document.createElement("details");
+            noteBox.className = "bk-note";
+            const noteSummary = document.createElement("summary");
+            noteSummary.textContent = "Note";
+            noteBox.append(noteSummary);
+            const noteBody = document.createElement("div");
+            noteBody.className = "bk-note-body";
+            noteBody.textContent = book.notes;
+            noteBox.append(noteBody);
+            linesBox.append(noteBox);
           }
 
           if (book.history && book.history.length) {
