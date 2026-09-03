@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   createFounder, createMentor, createOrganizer, get, post, startServer,
   type Harness, type Session,
@@ -125,6 +126,32 @@ describe("what a mentor cannot do", () => {
       );
       expect(res.status).toBe(403);
     }
+  });
+});
+
+describe("nothing offers a mentor a door that is locked", () => {
+  test("the quick-actions menu is not shown to them", () => {
+    /*
+     * The dashboard branch in App.tsx is entered by organizers and mentors
+     * alike, and the quick menu sat inside it under a comment claiming it was
+     * organizers only. Every item opens a tab that /admin's mentor allowlist
+     * closes again — it keeps mentor, shared and wishes — so for a mentor each
+     * circle was a shortcut to being bounced back to This week.
+     *
+     * Read from the source rather than over HTTP: the menu is a React island
+     * inside a client:only tree, so there is no server-rendered markup for a
+     * request to inspect. /admin removes it for mentors at runtime already;
+     * this is the other half, on the founder-side app.
+     */
+    const app = readFileSync("src/components/App.tsx", "utf-8");
+    expect(app).toContain('{user.role === "organizer" && <QuickActions mode="navigate" />}');
+  });
+
+  test("but /admin itself stays linked, because they have a page there", () => {
+    // The fix is not "hide everything from mentors". They have a real mentor
+    // view; it is the shortcuts into the organizer tabs that were wrong.
+    const app = readFileSync("src/components/App.tsx", "utf-8");
+    expect(app).toContain('href="/admin"');
   });
 });
 
