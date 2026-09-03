@@ -89,5 +89,17 @@ services:
       - key: RESEND_REPLY_TO
         sync: false
       # --- Error tracking (EU region)
+      #
+      # Unset, deliberately and currently. src/lib/errors.ts treats a missing
+      # DSN as "reporting is off" and never throws, so the app runs normally
+      # without it; the cost is that a founder tells you something broke before
+      # any alert does.
+      #
+      # Setting this is not only a dashboard change. PRIVACY.md enumerates the
+      # processors students are told about, and Sentry was struck from that
+      # table when this was left empty — so switching it on means putting the
+      # row back, with the project's real region. Choose the EU region if you
+      # do: every other processor is EU, and PRIVACY.md singles out Anthropic
+      # as the only transfer that leaves it.
       - key: SENTRY_DSN
         sync: false
