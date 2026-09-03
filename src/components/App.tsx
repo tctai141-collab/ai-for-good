@@ -452,9 +452,17 @@ export default function App() {
         {/* The same menu that sits on /admin. Here it links rather than
             switching tab, so picking "Add deadline" lands in the deadline
             form instead of on the admin page's front door with the form four
-            tabs away. Organizers only: every item leads somewhere a founder
-            cannot go. */}
-        <QuickActions mode="navigate" />
+            tabs away.
+
+            Organizers only, and now actually so. The comment already claimed
+            it — "every item leads somewhere a founder cannot go" — but this
+            branch is entered by organizers *and* mentors, so a mentor got the
+            menu too. Every item in it opens a tab the mentor allowlist on
+            /admin closes again (mentor, shared, wishes are the three they
+            keep), so each one was a shortcut to being bounced back to This
+            week. /admin itself stays linked above: mentors have a real page
+            there. */}
+        {user.role === "organizer" && <QuickActions mode="navigate" />}
         <PersistentBuddy stage={buddyStage} />
       </>
     );

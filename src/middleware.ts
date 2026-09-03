@@ -135,6 +135,31 @@ export const onRequest = defineMiddleware(async (context, next) => {
   response.headers.set("X-Content-Type-Options", "nosniff");
 
   /*
+   * Nothing rendered here may be written down.
+   *
+   * Every response this middleware touches is server-rendered and specific to
+   * whoever asked for it: the API returns one person's conversations, check-ins
+   * and deadlines, /report is a founder's own profile, and /admin is the
+   * cohort. Only /api/health said so; the other twenty-nine routes sent no
+   * caching directive at all, which leaves the decision to heuristics — the
+   * browser's, and any proxy in front of us.
+   *
+   * That proxy is not hypothetical: this is served through Cloudflare, which
+   * declines to cache these today only because it judges them dynamic. A
+   * "cache everything" rule added later for the marketing pages would be one
+   * dashboard toggle away from serving one founder's session to another.
+   *
+   * The threat this actually answers is closer to home, and is the one this
+   * codebase already worries about elsewhere: a shared university machine,
+   * where the next person presses Back. no-store keeps it out of the disk
+   * cache and out of the back/forward cache.
+   *
+   * Static files never reach this middleware — the node adapter serves them
+   * before Astro is involved — so the fonts and icons keep their caching.
+   */
+  response.headers.set("Cache-Control", "no-store");
+
+  /*
    * Everything denied except the microphone, which this origin may ask for.
    *
    * It was denied outright, and that was correct until dictation shipped —

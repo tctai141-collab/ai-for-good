@@ -64,6 +64,74 @@ beforeAll(async () => {
 
 afterAll(() => h?.stop());
 
+describe("the session cookie survives the app being closed", () => {
+  test("it carries both Max-Age and Expires", async () => {
+    /*
+     * A founder signed into the installed iOS app, force-quit it, reopened it
+     * and was asked to sign in again — the behaviour of a session cookie, not
+     * of one with a fortnight on it.
+     *
+     * RFC 6265 says Max-Age wins where both are present, so on a browser that
+     * follows the spec Expires changes nothing. It is here for WebKit, which
+     * has a history of mishandling Max-Age-only cookies in home-screen web
+     * apps. Honestly labelled: a mitigation, not a confirmed diagnosis — the
+     * other suspect is iOS not flushing the cookie before the kill.
+     *
+     * Pinned because it looks redundant, and the next person to tidy it away
+     * would have no way of knowing why it was added.
+     */
+    const h2 = await startServer();
+    try {
+      await createOrganizer(h2, "cookie@example.test");
+      const res = await fetch(`${h2.url}/api/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", origin: h2.url },
+        body: JSON.stringify({
+          action: "login",
+          email: "cookie@example.test",
+          password: "organizer-password-1",
+        }),
+      });
+      const raw = (res.headers.getSetCookie?.() ?? []).join(";");
+      expect(raw).toMatch(/Max-Age=\d+/i);
+      expect(raw).toMatch(/Expires=/i);
+      // Both must describe the same fortnight, or one of them is a lie.
+      const maxAge = Number(raw.match(/Max-Age=(\d+)/i)![1]);
+      expect(maxAge).toBe(14 * 24 * 60 * 60);
+      const expires = Date.parse(raw.match(/Expires=([^;]+)/i)![1]!);
+      const drift = Math.abs(expires - (Date.now() + maxAge * 1000));
+      expect(drift).toBeLessThan(60_000);
+    } finally {
+      h2.stop();
+    }
+  });
+
+  test("and is still HttpOnly, Secure and Lax", async () => {
+    // The attributes that make it worth having. Asserted alongside the two
+    // above so a change to the expiry cannot quietly drop one of these.
+    const h2 = await startServer();
+    try {
+      await createOrganizer(h2, "attrs@example.test");
+      const res = await fetch(`${h2.url}/api/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", origin: h2.url },
+        body: JSON.stringify({
+          action: "login",
+          email: "attrs@example.test",
+          password: "organizer-password-1",
+        }),
+      });
+      const raw = (res.headers.getSetCookie?.() ?? []).join(";");
+      expect(raw).toContain("HttpOnly");
+      expect(raw).toContain("Secure");
+      expect(raw).toContain("SameSite=Lax");
+      expect(raw).toContain("Path=/");
+    } finally {
+      h2.stop();
+    }
+  });
+});
+
 describe("signing out", () => {
   test("is accepted from a browser behind a TLS-terminating proxy", async () => {
     const session = await createFounder(h, organizer, "proxy@example.test", "Proxy", "proxy-password-11");
