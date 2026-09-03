@@ -4,6 +4,8 @@ import {
   startServer, twoFounders, type Harness, type Session,
 } from "./helpers/harness";
 import { dueDateFor, loanStateFor, LOAN_DAYS } from "../src/lib/library";
+import { dueLabel } from "../src/components/Library";
+import { readFileSync } from "node:fs";
 
 /**
  * The office library.
@@ -523,5 +525,55 @@ describe("when a loan is late", () => {
   test("the loan period is four weeks", () => {
     expect(LOAN_DAYS).toBe(28);
     expect(dueDateFor(new Date("2026-09-15T12:00:00Z"))).toBe("2026-10-13");
+  });
+});
+
+describe("when a book comes back", () => {
+  /*
+   * The point of this column is not the borrower's own convenience — they know
+   * when they took it out. It is read by the people who do *not* have the
+   * book, deciding whether it is worth waiting for rather than buying. That
+   * makes an ambiguous date worse than none: "due Wed" is equally true of a
+   * book back in two days and one back in nine.
+   */
+  const at = (iso: string, todayIso: string) => dueLabel(iso, Date.parse(`${todayIso}T12:00:00Z`));
+
+  test("a date inside the week names the day it means", () => {
+    // Was "due Wed", which does not say which Wed.
+    const label = at("2026-09-09", "2026-09-07");
+    expect(label).toContain("09/09/2026");
+    expect(label).toContain("Wed");
+  });
+
+  test("a date further out carries its year", () => {
+    // Was "due 23 Sep". A seven-week programme crosses a year boundary for
+    // anything carried into January.
+    expect(at("2026-09-23", "2026-09-07")).toBe("due 23/09/2026");
+    expect(at("2027-01-06", "2026-12-30")).toBe("due 06/01/2027");
+  });
+
+  test("the near words are left alone", () => {
+    // "2d late" is a prompt; a calendar date is a lookup. Unchanged on purpose.
+    expect(at("2026-09-07", "2026-09-07")).toBe("due today");
+    expect(at("2026-09-08", "2026-09-07")).toBe("due tomorrow");
+    expect(at("2026-09-05", "2026-09-07")).toBe("2d late");
+  });
+
+  test("it is shown for a book somebody else has, not only your own", () => {
+    /*
+     * The whole request. A founder looking at a title someone else is holding
+     * should be able to see when it is back without asking them. Keyed on
+     * availability rather than on isMine, so it covers every row that is out.
+     */
+    const src = readFileSync("src/components/Library.tsx", "utf-8");
+    expect(src).toContain("book.dueDate && !book.available ? dueLabel(book.dueDate) : null");
+    expect(src).not.toContain("book.isMine ? dueLabel");
+  });
+
+  test("and the API sends a founder the date to show", () => {
+    // Rendering it is no use if the payload withholds it from non-borrowers.
+    const api = readFileSync("src/pages/api/library.ts", "utf-8");
+    const founderShape = api.slice(api.indexOf("isMine: b.borrower_email === session.email") - 900);
+    expect(founderShape).toContain("dueDate: b.due_date");
   });
 });

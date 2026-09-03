@@ -44,14 +44,26 @@ export type MyLoan = {
 type Payload = { books: BookItem[]; mine: MyLoan[] };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** dd/mm/yyyy, so a date is never ambiguous about which one it means. */
+function numeric(date: Date): string {
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${date.getUTCFullYear()}`;
+}
 
 /**
  * A due date in the words somebody would use out loud.
  *
- * Days rather than dates while it is close, because "2 days late" is a
- * prompt and "28 Aug" is a lookup. Parsed as UTC noon so the day name cannot
- * slip either side of midnight.
+ * Days rather than dates while it is close, because "2 days late" is a prompt
+ * and a calendar date is a lookup. That part is unchanged.
+ *
+ * What changed is everything past tomorrow. This said "due Wed", which is
+ * equally true of a book back in two days and one back in nine, and "due 23
+ * Sep" with no year. That is tolerable on your own loan, where you already
+ * know roughly when you took it out — but this column is read by the people
+ * who do *not* have the book, deciding whether it is worth waiting for. For
+ * them the whole value of the line is which day it actually is.
  */
 export function dueLabel(iso: string, now: number = Date.now()): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -65,8 +77,10 @@ export function dueLabel(iso: string, now: number = Date.now()): string {
   if (days === 0) return "due today";
   if (days === 1) return "due tomorrow";
   const date = new Date(at);
-  if (days < 7) return `due ${DAYS[date.getUTCDay()]}`;
-  return `due ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+  /* The weekday still leads inside the week — it is what somebody plans
+     against — but it no longer stands alone. */
+  if (days < 7) return `due ${DAYS[date.getUTCDay()]} ${numeric(date)}`;
+  return `due ${numeric(date)}`;
 }
 
 export type LibraryState = {
