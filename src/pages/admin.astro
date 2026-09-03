@@ -116,7 +116,10 @@ import AaltoMark from "../components/AaltoMark.astro";
       /* Only the signed-in organizer is tinted. A deterministic colour per
          person would put twenty hues on a page whose whole palette is one red,
          and none of them would mean anything. */
-      .avatar.you { background: var(--accent); border-color: transparent; color: #0b0c0f; }
+      /* --accent-hover, not --accent. These initials are 12px, and dark ink
+         on the base indigo measures 4.16:1 against the 4.5 that size asks for.
+         The lighter step is already a token and takes it to 5.0:1. */
+      .avatar.you { background: var(--accent-hover); border-color: transparent; color: #0b0c0f; }
       .member-lines { display: flex; flex-direction: column; min-width: 0; }
       .member-name { font-weight: 600; }
       .member-email {
@@ -178,7 +181,10 @@ import AaltoMark from "../components/AaltoMark.astro";
       .pill { white-space: nowrap; }
       .pill.active { color: var(--ok); border-color: rgba(111, 207, 151, 0.4); }
       .pill.pending { color: #e2b93b; border-color: rgba(226, 185, 59, 0.4); }
-      .pill.organizer { color: var(--accent); border-color: rgba(94, 106, 210, 0.4); }
+      /* 4.05:1 on --accent, 4.87:1 on the lighter step, and 12px text wants
+         4.5. The border stays the base indigo: a 1px edge is a boundary, which
+         is held to 3:1, and it already clears that. */
+      .pill.organizer { color: var(--accent-hover); border-color: rgba(94, 106, 210, 0.4); }
       /* Distinct from organizer, because the difference is the whole point:
          one of these can delete a founder and the other cannot. */
       .pill.mentor { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
@@ -393,6 +399,9 @@ import AaltoMark from "../components/AaltoMark.astro";
       .bk-note { margin-top: 4px; }
       .bk-note summary {
         cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none;
+        /* Every disclosure on this page is a tap target, and 0.75rem of text
+           on its own is about 15px tall. WCAG 2.2 asks 24. */
+        display: inline-flex; align-items: center; min-height: 24px;
       }
       .bk-note summary::-webkit-details-marker { display: none; }
       .bk-note summary::before { content: "\25b8  "; }
@@ -405,7 +414,7 @@ import AaltoMark from "../components/AaltoMark.astro";
       }
 
       .bk-history { margin-top: 5px; }
-      .bk-history summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none; }
+      .bk-history summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none; display: inline-flex; align-items: center; min-height: 24px; }
       .bk-history summary::-webkit-details-marker { display: none; }
       .bk-history summary::before { content: "\25b8  "; }
       .bk-history[open] summary::before { content: "\25be  "; }
@@ -464,12 +473,14 @@ import AaltoMark from "../components/AaltoMark.astro";
       .message.error { color: var(--danger); }
       .message.ok { color: var(--ok); }
       /* ---- Broadcast ---------------------------------------------- */
-      .inline { display: inline-flex; align-items: center; gap: 8px; }
+      .inline { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; }
       .bc-tag {
         font-family: inherit;
         font-size: 0.75rem;
         padding: 2px 8px;
         margin-right: 4px;
+        /* 23px on padding alone, a pixel under the 24 minimum. */
+        min-height: 24px;
       }
       /* Scrolls rather than growing without limit: the point of the individual
          picker is to glance at it, and a list that pushes the Send button off
@@ -481,7 +492,10 @@ import AaltoMark from "../components/AaltoMark.astro";
         display: grid;
         gap: 6px;
       }
-      .bc-people label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
+      .bc-people label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; min-height: 24px; }
+      /* The recipient disclosure and the three role checkboxes: the label is
+         the target, not the 16px box inside it, and the label was 22px. */
+      #tab-broadcast summary { min-height: 24px; display: flex; align-items: center; }
       .bc-people .role { color: var(--muted); font-size: 0.75rem; }
       .bc-sent { font-size: 0.875rem; padding: 8px 0; border-bottom: 1px solid var(--border); }
       .bc-sent .when { color: var(--muted); font-size: 0.75rem; }
@@ -925,7 +939,7 @@ import AaltoMark from "../components/AaltoMark.astro";
   .pr-unset { color: var(--muted); font-style: normal; }
   .pr-counts { color: var(--muted); font-size: 0.8125rem; white-space: nowrap; }
   .pr-actions { display: flex; gap: 6px; }
-  .pr-actions button { padding: 3px 10px; font-size: 0.75rem; }
+  .pr-actions button { padding: 3px 10px; font-size: 0.75rem; min-height: 28px; }
   @media (max-width: 760px) {
     .pr-row { grid-template-columns: 74px 1fr; gap: 4px 12px; }
     .pr-counts, .pr-actions { grid-column: 1 / -1; }
@@ -951,7 +965,10 @@ import AaltoMark from "../components/AaltoMark.astro";
     white-space: nowrap;
   }
   .ev-actions { display: flex; gap: 6px; }
-  .ev-actions button { padding: 3px 10px; font-size: 0.75rem; }
+  /* min-height, because the padding alone left these at 21px in the week
+     list and exactly 24px in this one — the floor WCAG 2.2 sets, with nothing
+     spare. Both lists are dense and read side by side; they get the same. */
+  .ev-actions button { padding: 3px 10px; font-size: 0.75rem; min-height: 28px; }
   @media (max-width: 760px) {
     /* The five-column grid gives the title about eight characters here. */
     .ev-row { grid-template-columns: 52px 1fr; gap: 4px 12px; }
