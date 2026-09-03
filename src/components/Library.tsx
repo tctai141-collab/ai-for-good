@@ -173,20 +173,6 @@ function statusOf(book: BookItem): { tone: Tone; label: string } {
 }
 
 /**
- * Two letters off the spine.
- *
- * A shelf of prose titles is hard to scan; a block of colour with initials in
- * it gives the eye somewhere to land, the way the avatar column does in a list
- * of people. Deliberately drawn as a book rather than a circle — a round
- * avatar next to a title reads as an author's face.
- */
-function initialsOf(title: string): string {
-  const words = title.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
-  const letters = words.slice(0, 2).map((w) => w[0]!.toUpperCase());
-  return letters.join("") || "?";
-}
-
-/**
  * Sort order for the one table.
  *
  * The page asks exactly one thing of a founder — bring back what is late — so
@@ -218,14 +204,14 @@ function Row({
     <tr className={busy ? "is-busy" : undefined}>
       <td>
         <div className="li-book">
-          <span className={`li-cover is-${tone}`} aria-hidden="true">
-            {initialsOf(book.title)}
-          </span>
-          <span className="li-book-text">
-            <span className="li-book-title">{book.title}</span>
-            {book.author && <span className="li-book-sub">{book.author}</span>}
-            {book.notes && <span className="li-book-note">{book.notes}</span>}
-          </span>
+          <span className="li-book-title">{book.title}</span>
+          {book.author && <span className="li-book-sub">{book.author}</span>}
+          {book.notes && (
+            <details className="li-booknote">
+              <summary>Note</summary>
+              <span className="li-booknote-body">{book.notes}</span>
+            </details>
+          )}
         </div>
       </td>
 
@@ -500,38 +486,52 @@ export const LIBRARY_CSS = `
 /* Fixed proportions rather than letting the book title absorb every spare
    pixel: the eye tracks title → status → due → button along a straight line,
    and it can only do that if the line is the same length on every row. */
-.li-table th:nth-child(1), .li-table td:nth-child(1) { width: 46%; }
-.li-table th:nth-child(2), .li-table td:nth-child(2) { width: 26%; }
+.li-table th:nth-child(1), .li-table td:nth-child(1) { width: 58%; }
+.li-table th:nth-child(2), .li-table td:nth-child(2) { width: 20%; }
 .li-col-due { width: 1%; white-space: nowrap; }
 .li-col-act { width: 1%; text-align: right; white-space: nowrap; }
 
 /* ── The book cell ── */
-.li-book { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.li-cover {
-  flex: none;
-  width: 30px; height: 38px;
-  display: grid; place-items: center;
-  border-radius: 3px 5px 5px 3px;
-  /* The spine, so the tile reads as a book rather than a swatch. */
-  border-left: 3px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.06);
-  color: var(--ink-sub, #d0d6e0);
-  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.02em;
-}
-.li-cover.is-ok    { background: rgba(76,183,130,0.14);  border-left-color: rgba(76,183,130,0.55);  color: #9fdcbc; }
-.li-cover.is-mine  { background: rgba(94,106,210,0.18);  border-left-color: rgba(94,106,210,0.65);  color: #b6bdf0; }
-.li-cover.is-late  { background: rgba(235,87,87,0.16);   border-left-color: rgba(235,87,87,0.65);   color: #f4a5a5; }
-.li-cover.is-unknown { background: rgba(242,201,76,0.14); border-left-color: rgba(242,201,76,0.55); color: #f0dc9b; }
+.li-book { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
-.li-book-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* Everything in this cell wraps and nothing is clipped. It used to be one
+   nowrap line with an ellipsis, which on a real shelf meant a title ending in
+   "..." and a note — the description of the book — that could not be read at
+   all, with nothing to click to see the rest. A row is as tall as its longest
+   book; there are tens of them, not thousands. */
 .li-book-title {
-  font-size: 0.875rem; font-weight: 500; line-height: 1.35; color: var(--ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.875rem; font-weight: 500; line-height: 1.4; color: var(--ink);
+  overflow-wrap: anywhere;
 }
-.li-book-sub { font-size: 0.75rem; line-height: 1.4; color: var(--ink-faint, #8a8f98); }
-.li-book-note {
-  font-size: 0.75rem; line-height: 1.4; color: var(--ink-faint, #8a8f98); opacity: 0.75;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.li-book-sub { font-size: 0.75rem; line-height: 1.45; color: var(--ink-faint, #8a8f98); overflow-wrap: anywhere; }
+
+/* The shelf note, folded away.
+   It is the one field with no length anybody agreed to — "shelf by the window,
+   ask Tai first" is a sentence, and printed in full on every row it was taller
+   than the book it described. A native <details> rather than state: it needs
+   no JavaScript, it is keyboard-operable for free, and the browser gets the
+   accessibility right. Closed by default, because the note is the thing you go
+   looking for, not the thing you are reading the page for. */
+.li-booknote { margin-top: 3px; }
+.li-booknote summary {
+  display: inline-flex; align-items: center; gap: 5px;
+  list-style: none; cursor: pointer;
+  font-size: 0.75rem; line-height: 1.4;
+  color: var(--ink-faint, #8a8f98);
+  transition: color 120ms var(--ease-out-quart, ease);
+}
+.li-booknote summary::-webkit-details-marker { display: none; }
+.li-booknote summary::before { content: "▸"; font-size: 0.625rem; }
+.li-booknote[open] summary::before { content: "▾"; }
+.li-booknote summary:hover { color: var(--ink-sub, #d0d6e0); }
+.li-booknote summary:focus-visible {
+  outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 3px;
+}
+.li-booknote-body {
+  display: block; margin-top: 4px;
+  font-size: 0.75rem; line-height: 1.5;
+  color: var(--ink-faint, #8a8f98);
+  overflow-wrap: anywhere;
 }
 
 /* ── Status badge ── */
@@ -600,7 +600,6 @@ export const LIBRARY_CSS = `
   .li-table th:nth-child(1), .li-table td:nth-child(1),
   .li-table th:nth-child(2), .li-table td:nth-child(2) { width: auto; }
   .li-table th, .li-table td { padding: 10px 12px; }
-  .li-book-sub, .li-book-note { display: none; }
 }
 
 /* Below this there is no width for three columns: a title, a badge reading
@@ -621,6 +620,5 @@ export const LIBRARY_CSS = `
   .li-table td { border: 0; padding: 0; }
   .li-table td:nth-child(2) { margin-top: 9px; }
   .li-col-act { margin-top: 11px; text-align: left; }
-  .li-book-sub { display: block; }
 }
 `;

@@ -367,17 +367,6 @@ import AaltoMark from "../components/AaltoMark.astro";
          It is the people table's shape now, because it is the same kind of
          list and the operating team reads the two back to back: an avatar
          cell, a status pill, one column per fact. */
-      .avatar.book {
-        width: 30px; height: 38px;
-        border-radius: 3px 5px 5px 3px;
-        /* The spine, so the tile reads as a book and not as a person. */
-        border-left: 3px solid rgba(255, 255, 255, 0.18);
-        font-size: 0.6875rem;
-      }
-      .avatar.book.shelf { background: rgba(76, 183, 130, 0.14); border-left-color: rgba(76, 183, 130, 0.55); color: #9fdcbc; }
-      .avatar.book.late { background: rgba(235, 87, 87, 0.16); border-left-color: rgba(235, 87, 87, 0.65); color: #f4a5a5; }
-      .avatar.book.unaccounted { background: rgba(242, 201, 76, 0.14); border-left-color: rgba(242, 201, 76, 0.55); color: #f0dc9b; }
-
       .pill.shelf { color: var(--ok); border-color: rgba(76, 183, 130, 0.4); }
       .pill.late { color: var(--danger); border-color: rgba(235, 87, 87, 0.45); }
       /* Unaccounted was red here, and the comment that set it said so on
@@ -391,13 +380,30 @@ import AaltoMark from "../components/AaltoMark.astro";
       .pill.unaccounted { color: var(--warn); border-color: rgba(242, 201, 76, 0.4); }
 
       .bk-row.archived { opacity: 0.55; }
-      .bk-sub { font-size: 0.8125rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+      /* Wraps rather than clips: this line carries the author and the shelf
+         note, and an ellipsis on it hid the note entirely with nothing to
+         click to get it back. */
+      .bk-sub { font-size: 0.8125rem; color: var(--muted); overflow-wrap: anywhere; }
       .bk-due { font-size: 0.8125rem; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
       .bk-due.late { color: var(--danger); font-weight: 600; }
 
       /* Loan history stays folded inside the book cell rather than taking a
          column of its own: it is the one thing here nobody reads until they
          are already asking about a specific book. */
+      .bk-note { margin-top: 4px; }
+      .bk-note summary {
+        cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none;
+      }
+      .bk-note summary::-webkit-details-marker { display: none; }
+      .bk-note summary::before { content: "\25b8  "; }
+      .bk-note[open] summary::before { content: "\25be  "; }
+      .bk-note summary:hover { color: var(--sub); }
+      .bk-note summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+      .bk-note-body {
+        margin-top: 4px; font-size: 0.75rem; line-height: 1.5;
+        color: var(--muted); overflow-wrap: anywhere;
+      }
+
       .bk-history { margin-top: 5px; }
       .bk-history summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none; }
       .bk-history summary::-webkit-details-marker { display: none; }
@@ -1943,15 +1949,6 @@ import AaltoMark from "../components/AaltoMark.astro";
        * esc() exists three screens up, and building nodes means never needing to
        * remember it.
        */
-      /* Two letters off the spine, matching the founder's Library tab.
-         Not initials(), which takes the first and last word: "The Mom Test"
-         reads as TT that way, and every "The ..." on the shelf collides. */
-      function bookInitials(title) {
-        const words = String(title || "").trim().split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
-        if (!words.length) return "?";
-        return words.slice(0, 2).map((w) => [...w][0].toUpperCase()).join("");
-      }
-
       /* Where a book is, as one pill. Archived is checked before availability:
          a book off the shelf for good is not "on the shelf" just because no
          loan is open against it. */
@@ -2051,15 +2048,6 @@ import AaltoMark from "../components/AaltoMark.astro";
 
           /* ── Book ── */
           const bookCell = document.createElement("td");
-          const member = document.createElement("div");
-          member.className = "member";
-
-          const avatar = document.createElement("div");
-          avatar.className = "avatar book" + (tone ? " " + tone : "");
-          avatar.setAttribute("aria-hidden", "true");
-          avatar.textContent = bookInitials(book.title);
-          member.append(avatar);
-
           const linesBox = document.createElement("div");
           linesBox.className = "member-lines";
           const title = document.createElement("span");
@@ -2067,14 +2055,28 @@ import AaltoMark from "../components/AaltoMark.astro";
           title.textContent = book.title;
           linesBox.append(title);
 
-          const bits = [];
-          if (book.author) bits.push(book.author);
-          if (book.notes) bits.push(book.notes);
-          if (bits.length) {
+          if (book.author) {
             const sub = document.createElement("span");
             sub.className = "bk-sub";
-            sub.textContent = bits.join(" · ");
+            sub.textContent = book.author;
             linesBox.append(sub);
+          }
+
+          /* The note folds away, the way loan history below it already does.
+             It is free text an organizer typed — "shelf by the window, ask Tai
+             first" — and printed in full on every row it was taller than the
+             book it described. */
+          if (book.notes) {
+            const noteBox = document.createElement("details");
+            noteBox.className = "bk-note";
+            const noteSummary = document.createElement("summary");
+            noteSummary.textContent = "Note";
+            noteBox.append(noteSummary);
+            const noteBody = document.createElement("div");
+            noteBody.className = "bk-note-body";
+            noteBody.textContent = book.notes;
+            noteBox.append(noteBody);
+            linesBox.append(noteBox);
           }
 
           if (book.history && book.history.length) {
@@ -2096,8 +2098,7 @@ import AaltoMark from "../components/AaltoMark.astro";
             linesBox.append(details);
           }
 
-          member.append(linesBox);
-          bookCell.append(member);
+          bookCell.append(linesBox);
           row.append(bookCell);
 
           /* ── Status ── */
