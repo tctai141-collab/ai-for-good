@@ -195,14 +195,18 @@ describe("how long it lasts", () => {
     expect(css).toContain("animation-name: splash-push");
   });
 
-  test("six seconds, and deliberately", () => {
-    // Five is equally sanctioned; the point of pinning it is that it is a
-    // decision rather than a default, and that raising it further has a cost
-    // paid on every sign-in.
+  test("seven seconds, chosen by watching it", () => {
+    /*
+     * Six was the guess; seven is what it came to after sitting through it on
+     * a real screen. Pinned as a range rather than a value because the exact
+     * number is a judgement someone may revisit — but not silently, and not
+     * upward without meeting the cost: this plays on every interactive
+     * sign-in, and the film itself is only ten seconds long.
+     */
     const match = code.match(/SPLASH_MS = (\d+)/);
     expect(match).not.toBeNull();
     const ms = Number(match![1]);
     expect(ms).toBeGreaterThanOrEqual(5000);
-    expect(ms).toBeLessThanOrEqual(6000);
+    expect(ms).toBeLessThanOrEqual(7000);
   });
 });
