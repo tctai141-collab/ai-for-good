@@ -434,18 +434,50 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
   const [cohort, setCohort] = useState<CohortData | null>(null);
   const [cohortLoading, setCohortLoading] = useState(persona === "coach");
 
+  /*
+   * The cohort, re-read whenever this tab comes back to the front.
+   *
+   * It used to be fetched once, on mount, and never again — and the roster it
+   * holds is edited somewhere else entirely. An organizer deletes an account
+   * on /admin, comes back to the tab they left open here, and the heatmap, the
+   * sidebar list and the team map all still name the person whose account no
+   * longer exists. The server was right the whole time; this page had simply
+   * stopped asking. It reported as "the profile is deleted but I can still see
+   * them in the Team map", and it survives until the tab is reloaded, which
+   * nobody has a reason to do.
+   *
+   * Refetching on visibility rather than polling: the change always happens
+   * while this tab is in the background, so coming back to the front is
+   * exactly the moment the answer might be stale, and it costs one request at
+   * the point somebody is about to look.
+   */
   useEffect(() => {
     if (persona !== "coach") return;
     let cancelled = false;
-    fetch("/api/cohort")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: CohortData | null) => {
-        if (cancelled) return;
-        setCohort(data);
-        setCohortLoading(false);
-      })
-      .catch(() => { if (!cancelled) setCohortLoading(false); });
-    return () => { cancelled = true; };
+
+    const read = () => {
+      fetch("/api/cohort")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: CohortData | null) => {
+          if (cancelled) return;
+          /* A failed refetch keeps what is on screen. Blanking the dashboard
+             because one request lost the network is worse than showing the
+             answer from a minute ago. */
+          if (data) setCohort(data);
+          setCohortLoading(false);
+        })
+        .catch(() => { if (!cancelled) setCohortLoading(false); });
+    };
+
+    read();
+    const onVisible = () => { if (document.visibilityState === "visible") read(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [persona]);
 
   const [threads, setThreads] = useState<Thread[]>(initialData?.threads || []);

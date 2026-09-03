@@ -1973,7 +1973,25 @@ import AaltoMark from "../components/AaltoMark.astro";
                 remove.disabled = false;
                 return alert(data.error || "Could not remove this account.");
               }
+              /*
+               * Everything that names a founder, not just the list they were
+               * removed from.
+               *
+               * load() redraws the People table and nothing else, and every
+               * other tab on this page holds whatever it fetched when the page
+               * opened. loadMentor in particular is the cohort heatmap and the
+               * team map, and it was called exactly once, at startup — so a
+               * deleted account went on being named there until somebody
+               * reloaded, which is how it was reported. The library matters
+               * too: deleting a borrower marks their loans unaccounted, and
+               * that shelf would still show the book as out.
+               */
               load();
+              loadMentor();
+              loadShared();
+              loadWishes();
+              loadDeadlines();
+              loadLibrary();
             });
             actions.append(remove);
           }
