@@ -73,11 +73,19 @@ and who received it is recorded in the audit log.
 | **Anthropic** | Message text, to generate replies | Requests may route via the US, Europe, Asia or Australia; data is **stored in the US**. Retention period confirmed as 30 days in the console (Settings, Privacy Controls). Inputs and outputs flagged under the Usage Policy are kept up to 2 years. Not used for model training. |
 | **Resend** | Email address and the message, for invites and reminders | EU |
 | **Cloudflare R2** | Encrypted database snapshots | EU |
-| **Sentry** | Error type, stack, and route. **Never message content, request bodies or cookies** | See Sentry project region |
 
 The Anthropic row is the one transfer that may leave the EU, and it is the most
 significant one, because it carries what founders actually write. It must be
 completed rather than left vague.
+
+This table listed a fifth processor, Sentry, for error tracking. It has been
+removed because no such service is configured: `SENTRY_DSN` is unset, and with
+it unset the app reports nothing to anybody — errors are written to the
+server's own log and go no further. Naming a recipient that receives nothing is
+the same kind of inaccuracy as omitting one that does.
+
+If error tracking is switched on later, the row goes back, with the project's
+real region rather than a promise to look it up.
 
 ## Retention
 
