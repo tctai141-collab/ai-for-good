@@ -1,6 +1,11 @@
 import type { APIRoute } from "astro";
 import { readJsonBody } from "../../lib/limits";
-import { listProgrammeWeeks, recordAdminAction, upsertProgrammeWeek } from "../../db/index";
+import {
+  deleteProgrammeWeek,
+  listProgrammeWeeks,
+  recordAdminAction,
+  upsertProgrammeWeek,
+} from "../../db/index";
 import { getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
 import { cap } from "../../lib/limits";
@@ -59,13 +64,27 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     if (!session) return json({ error: "Not signed in." }, 401);
     if (session.role !== "organizer") return json({ error: "Organizers only." }, 403);
 
-    const read = await readJsonBody<{ week?: unknown; phase?: unknown; title?: unknown; milestones?: unknown; sessions?: unknown }>(request);
+    const read = await readJsonBody<{ action?: unknown; week?: unknown; phase?: unknown; title?: unknown; milestones?: unknown; sessions?: unknown }>(request);
     if (!read.ok) return read.response;
     const body = read.value;
 
     const week = Number(body.week);
     if (!Number.isInteger(week) || week < 1 || week > TOTAL_WEEKS) {
       return json({ error: `Week must be between 1 and ${TOTAL_WEEKS}.` }, 400);
+    }
+
+    /*
+     * Deleting is opt-in, and the shape without an action is untouched.
+     *
+     * A body with no `action` still means "save this week", which is what
+     * every existing caller sends and what programme.test.ts pins. Only the
+     * explicit action removes anything, so a request that loses its fields on
+     * the way here cannot turn into a delete by accident.
+     */
+    if (body.action === "delete") {
+      deleteProgrammeWeek(week);
+      recordAdminAction(session.email, "programme:delete", null, `week ${week}`);
+      return json({ ok: true, deleted: week });
     }
 
     upsertProgrammeWeek({

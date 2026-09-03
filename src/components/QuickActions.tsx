@@ -68,7 +68,11 @@ const ITEMS = [
     ),
   },
   {
-    tab: "programme",
+    /* "weeks", not "programme". pr-phase is a week-themes field, and week
+       themes moved to their own tab; admin-nav.test.ts checks that every
+       focus target really lives inside the tab named beside it, so these two
+       have to travel together. */
+    tab: "weeks",
     focus: "pr-phase",
     label: "Set the week",
     path: (

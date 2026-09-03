@@ -93,6 +93,65 @@ describe("editing the programme", () => {
   });
 });
 
+/*
+ * Removing a week outright.
+ *
+ * Blanking every field has always deleted the row, and that is the behaviour
+ * tested above — but it was the *only* way, and nothing said so, so the admin
+ * page carried no Remove button on any of the fifteen rows and clearing a week
+ * meant emptying five fields and hoping. This is the same outcome, asked for
+ * plainly.
+ */
+describe("removing a week", () => {
+  const weeks = async (cookie: string) =>
+    ((await (await get(h, "/api/programme", cookie)).json()) as { weeks: { week: number }[] }).weeks;
+
+  test("an organizer can remove one, and only the one", async () => {
+    await saveWeek(4, { phase: "Keep", title: "Four", milestones: "a", sessions: "b" });
+    await saveWeek(5, { phase: "Drop", title: "Five", milestones: "a", sessions: "b" });
+
+    const res = await post(h, "/api/programme", { action: "delete", week: 5 }, organizer.cookie);
+    expect(res.status).toBe(200);
+
+    const after = await weeks(organizer.cookie);
+    expect(after.some((w) => w.week === 5)).toBe(false);
+    expect(after.some((w) => w.week === 4)).toBe(true);
+  });
+
+  test("removing a week that was never set is not an error", async () => {
+    // The row for an unwritten week is a real row on the page now, so the
+    // button can be reached before anything has been stored under it.
+    expect((await post(h, "/api/programme", { action: "delete", week: 12 }, organizer.cookie)).status).toBe(200);
+  });
+
+  test("a founder cannot remove one", async () => {
+    await saveWeek(6, { phase: "Theirs", title: "Six", milestones: "a", sessions: "b" });
+    expect((await post(h, "/api/programme", { action: "delete", week: 6 }, founder.cookie)).status).toBe(403);
+    expect((await weeks(organizer.cookie)).some((w) => w.week === 6)).toBe(true);
+  });
+
+  test("nobody signed in cannot remove one", async () => {
+    await saveWeek(7, { phase: "Theirs", title: "Seven", milestones: "a", sessions: "b" });
+    expect((await post(h, "/api/programme", { action: "delete", week: 7 })).status).toBe(401);
+    expect((await weeks(organizer.cookie)).some((w) => w.week === 7)).toBe(true);
+  });
+
+  test("the week is still bounds-checked", async () => {
+    expect((await post(h, "/api/programme", { action: "delete", week: 0 }, organizer.cookie)).status).toBe(400);
+    expect((await post(h, "/api/programme", { action: "delete", week: 99 }, organizer.cookie)).status).toBe(400);
+  });
+
+  test("a body with no action still saves, and never deletes", async () => {
+    /*
+     * The old shape is what every existing caller sends, and it has to keep
+     * meaning "save". If a dropped field could be read as a delete, a failed
+     * form submission would quietly empty a week instead of erroring.
+     */
+    await saveWeek(8, { phase: "Eight", title: "Eight", milestones: "a", sessions: "b" });
+    expect((await weeks(organizer.cookie)).some((w) => w.week === 8)).toBe(true);
+  });
+});
+
 describe("what reaches the advisor once the sprint is running", () => {
   let running: Harness;
   let runningOrganizer: Session;

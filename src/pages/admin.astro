@@ -329,7 +329,7 @@ import AaltoMark from "../components/AaltoMark.astro";
       }
       .links { margin-top: 20px; }
       .deadline-row {
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--border);
         padding: 12px 0;
       }
       .deadline-row.archived { opacity: 0.5; }
@@ -340,19 +340,19 @@ import AaltoMark from "../components/AaltoMark.astro";
         flex-wrap: wrap;
       }
       .deadline-head strong { flex: 1 1 220px; }
-      .deadline-meta { color: var(--ink-faint); font-size: 13px; }
+      .deadline-meta { color: var(--muted); font-size: 13px; }
       .deadline-count {
         font-size: 12.5px;
         font-variant-numeric: tabular-nums;
-        color: var(--ink-sub);
+        color: var(--muted);
         white-space: nowrap;
       }
-      .deadline-count.all-done { color: var(--brand-accent); font-weight: 700; }
+      .deadline-count.all-done { color: var(--accent); font-weight: 700; }
       .deadline-row details { margin-top: 6px; }
       .deadline-row summary {
         cursor: pointer;
         font-size: 13px;
-        color: var(--ink-faint);
+        color: var(--muted);
         min-height: 32px;
         display: flex;
         align-items: center;
@@ -483,7 +483,7 @@ import AaltoMark from "../components/AaltoMark.astro";
       }
       .bc-people label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
       .bc-people .role { color: var(--muted); font-size: 0.75rem; }
-      .bc-sent { font-size: 0.875rem; padding: 8px 0; border-bottom: 1px solid var(--line); }
+      .bc-sent { font-size: 0.875rem; padding: 8px 0; border-bottom: 1px solid var(--border); }
       .bc-sent .when { color: var(--muted); font-size: 0.75rem; }
       [hidden] { display: none !important; }
       a { color: var(--accent); }
@@ -853,22 +853,22 @@ import AaltoMark from "../components/AaltoMark.astro";
       /* ── Wishes ── */
   .tab-badge {
     display: inline-block; margin-left: 6px; padding: 0 6px;
-    border-radius: 999px; background: var(--brand-accent); color: #fff;
+    border-radius: 999px; background: var(--accent); color: #fff;
     font-size: 0.6875rem; font-weight: 700; line-height: 1.5;
     font-variant-numeric: tabular-nums;
   }
   .wish {
-    padding: 14px 0; border-top: 1px solid var(--line);
+    padding: 14px 0; border-top: 1px solid var(--border);
   }
   .wish.is-answered { opacity: 0.62; }
   .wish.is-answered:hover { opacity: 1; }
   .wish-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
   .wish-from { font-weight: 700; font-size: 0.9375rem; }
-  .wish-to, .wish-when { font-size: 0.8125rem; color: var(--ink-sub); }
+  .wish-to, .wish-when { font-size: 0.8125rem; color: var(--muted); }
   .wish-status {
     margin-left: auto; padding: 1px 8px; border-radius: 999px;
-    border: 1px solid var(--line-strong);
-    font-size: 0.6875rem; font-weight: 600; color: var(--ink-sub);
+    border: 1px solid var(--border-strong);
+    font-size: 0.6875rem; font-weight: 600; color: var(--muted);
   }
   .wish.is-answered .wish-status { border-color: rgba(124,184,147,0.5); color: #7CB893; }
   .wish-body {
@@ -877,7 +877,7 @@ import AaltoMark from "../components/AaltoMark.astro";
   }
   .wish-reply {
     margin-top: 10px; padding-left: 14px;
-    border-left: 2px solid var(--brand-accent);
+    border-left: 2px solid var(--accent);
   }
   .wish-replyhead { margin: 0 0 2px; font-size: 0.75rem; font-weight: 700; }
   .wish-replybox { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; }
@@ -890,28 +890,64 @@ import AaltoMark from "../components/AaltoMark.astro";
 
   /* ── Programme events ── */
   .ev-month {
-    margin: 22px 0 8px;
+    /* Sticky, with a ground of its own: the rows scroll under it, and without
+       an opaque background they show through it. */
+    position: sticky; top: 0; z-index: 1;
+    margin: 22px 0 8px; padding: 6px 4px;
+    background: var(--panel);
     font-size: 0.75rem; font-weight: 700;
     letter-spacing: 0.07em; text-transform: uppercase;
-    color: var(--ink-sub);
+    color: var(--muted);
+  }
+  .ev-earlier { margin-bottom: 6px; font-size: 0.75rem; }
+
+  /* The row being edited, and the form that drops in under it. */
+  .ev-row.is-editing, .pr-row.is-editing { background: rgba(255, 255, 255, 0.04); }
+  .ev-edit, .pr-edit {
+    padding: 14px 12px 4px;
+    border-bottom: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  /* Week themes: the same shape as an event row, so the two lists read alike. */
+  .pr-row {
+    display: grid;
+    grid-template-columns: 74px 1fr auto auto;
+    align-items: baseline; gap: 12px;
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+  }
+  .pr-row.is-empty { opacity: 0.55; }
+  .pr-row.is-empty:hover { opacity: 1; }
+  .pr-heading { min-width: 0; overflow-wrap: anywhere; }
+  .pr-unset { color: var(--muted); font-style: normal; }
+  .pr-counts { color: var(--muted); font-size: 0.8125rem; white-space: nowrap; }
+  .pr-actions { display: flex; gap: 6px; }
+  .pr-actions button { padding: 3px 10px; font-size: 0.75rem; }
+  @media (max-width: 760px) {
+    .pr-row { grid-template-columns: 74px 1fr; gap: 4px 12px; }
+    .pr-counts, .pr-actions { grid-column: 1 / -1; }
+    .pr-actions { margin-top: 4px; }
   }
   .ev-row {
     display: grid;
     grid-template-columns: 52px 92px 1fr auto auto;
     align-items: baseline; gap: 12px;
     padding: 9px 4px;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--border);
     font-size: 0.875rem;
   }
   .ev-row.is-past { opacity: 0.5; }
   .ev-date { font-weight: 700; font-variant-numeric: tabular-nums; }
-  .ev-time { color: var(--ink-sub); font-variant-numeric: tabular-nums; }
+  .ev-time { color: var(--muted); font-variant-numeric: tabular-nums; }
   .ev-title { min-width: 0; }
-  .ev-loc { color: var(--ink-sub); }
+  .ev-loc { color: var(--muted); }
   .ev-kind {
     padding: 1px 8px; border-radius: 999px;
-    border: 1px solid var(--line-strong);
-    font-size: 0.6875rem; font-weight: 600; color: var(--ink-sub);
+    border: 1px solid var(--border-strong);
+    font-size: 0.6875rem; font-weight: 600; color: var(--muted);
     white-space: nowrap;
   }
   .ev-actions { display: flex; gap: 6px; }
@@ -966,6 +1002,7 @@ import AaltoMark from "../components/AaltoMark.astro";
                labels. No tab carries a background of its own. -->
           <span class="tab-cursor" id="tab-cursor" aria-hidden="true"></span>
           <button type="button" class="tab" data-tab="programme">Programme</button>
+          <button type="button" class="tab" data-tab="weeks">Week themes</button>
           <button type="button" class="tab" data-tab="mentor">This week</button>
           <button type="button" class="tab" data-tab="wishes">Wishes<span id="wish-badge" class="tab-badge" hidden></span></button>
           <button type="button" class="tab" data-tab="people">People</button>
@@ -1145,6 +1182,11 @@ import AaltoMark from "../components/AaltoMark.astro";
             moves everything with it.
           </p>
 
+          <!-- The form lives here when it is adding something, and is moved
+               bodily into a row when that row is being edited. It is one node,
+               so moving it carries every value and listener with it; the
+               alternative was a second copy of these eight fields. -->
+          <div id="ev-form-home">
           <form id="event-form" class="row">
             <input type="hidden" id="ev-id" />
             <label style="flex:2 1 260px">
@@ -1184,11 +1226,18 @@ import AaltoMark from "../components/AaltoMark.astro";
             <button type="submit" id="ev-submit">Add to the programme</button>
             <button type="button" id="ev-cancel" class="secondary" hidden>Cancel</button>
           </form>
+          </div>
           <p class="message" id="ev-message" hidden></p>
 
           <div id="event-list"></div>
         </section>
+        </div>
 
+        <!-- Its own tab, because the two together ran to five screens: the
+             dates list is 45 rows by mid-sprint and the week form is two
+             textareas tall, so anything below the fold was reached by
+             scrolling past the other section. -->
+        <div class="tabpanel" id="tab-weeks" hidden>
         <section class="panel">
           <h2>Week themes</h2>
           <p class="note" style="margin-top:0">
@@ -1199,6 +1248,9 @@ import AaltoMark from "../components/AaltoMark.astro";
             it at all, which is better than saying something stale.
           </p>
 
+          <!-- Same trick as the events form: one node, moved into whichever
+               week is being edited. -->
+          <div id="pr-form-home">
           <form id="programme-form" class="row">
             <label>
               <span class="label-text">Week</span>
@@ -1221,7 +1273,9 @@ import AaltoMark from "../components/AaltoMark.astro";
               <textarea id="pr-sessions" rows="4" maxlength="4000" placeholder="Tue 9:30–11:30 Team meeting, intro to the sprint&#10;Wed 13:00–15:00 Workshop"></textarea>
             </label>
             <button type="submit">Save week</button>
+            <button type="button" id="pr-cancel" class="secondary" hidden>Cancel</button>
           </form>
+          </div>
           <p class="message" id="pr-message" hidden></p>
 
           <div id="programme-list"></div>
@@ -2837,9 +2891,14 @@ import AaltoMark from "../components/AaltoMark.astro";
       const prSessions = document.getElementById("pr-sessions");
       const prMessage = document.getElementById("pr-message");
       const programmeList = document.getElementById("programme-list");
+      const programmeForm = document.getElementById("programme-form");
+      const prFormHome = document.getElementById("pr-form-home");
+      const prCancel = document.getElementById("pr-cancel");
 
       let programmeWeeks = [];
       let totalWeeks = 15;
+      /* Which week the form is sitting in, or null when it is at home. */
+      let editingWeek = null;
 
       function fillWeek(week) {
         const row = programmeWeeks.find((w) => w.week === week);
@@ -2849,42 +2908,64 @@ import AaltoMark from "../components/AaltoMark.astro";
         prSessions.value = row ? row.sessions : "";
       }
 
+      /*
+       * Put the week form back before writing to programmeList.innerHTML —
+       * same hazard as the events list, same one-line answer.
+       */
+      function homeWeekForm() {
+        if (programmeForm.parentElement !== prFormHome) prFormHome.appendChild(programmeForm);
+      }
+
       function renderProgramme() {
-        if (!programmeWeeks.length) {
-          programmeList.innerHTML =
-            '<p class="note">No weeks entered yet. The advisor says nothing about the programme until one is.</p>';
-          return;
+        homeWeekForm();
+
+        /*
+         * Every week, not only the stored ones.
+         *
+         * The list showed the weeks that had something in them, so the way to
+         * fill in week nine was to notice it was missing, scroll back up and
+         * pick it out of a dropdown. A fifteen-week programme has fifteen rows
+         * whether or not anybody has written them yet; the empty ones say so
+         * and open the same editor.
+         */
+        const rows = [];
+        for (let week = 1; week <= totalWeeks; week++) {
+          const w = programmeWeeks.find((row) => row.week === week);
+          const editing = week === editingWeek;
+          /* Escaped. These two are the only values on this page that were
+             interpolated into innerHTML raw, and they are organizer-written
+             free text — so one organizer could store script that ran in
+             another organizer's session, on the page that holds every
+             destructive control there is. esc() has existed three screens
+             up this file the whole time. */
+          const heading = esc(w ? [w.phase, w.title].filter(Boolean).join(", ") : "");
+          const milestones = w ? w.milestones.split("\n").filter((l) => l.trim()).length : 0;
+          const sessions = w ? w.sessions.split("\n").filter((l) => l.trim()).length : 0;
+
+          rows.push(
+            '<div class="pr-row' + (w ? "" : " is-empty") + (editing ? " is-editing" : "") + '">' +
+            '<strong class="pr-week">Week ' + week + "</strong>" +
+            '<span class="pr-heading">' + (w ? (heading || "<em>untitled</em>") : '<em class="pr-unset">Not set</em>') + "</span>" +
+            '<span class="pr-counts">' +
+              (w ? milestones + " milestone" + (milestones === 1 ? "" : "s") +
+                   ", " + sessions + " session" + (sessions === 1 ? "" : "s") : "") +
+            "</span>" +
+            '<span class="pr-actions">' +
+              '<button type="button" data-week="' + week + '">' +
+                (editing ? "Editing" : w ? "Edit" : "Add") + "</button>" +
+              /* Only a week with something in it can be cleared. */
+              (w ? '<button type="button" class="ghost danger" data-delete-week="' + week + '">Remove</button>' : "") +
+            "</span>" +
+            "</div>" +
+            (editing ? '<div class="pr-edit" id="pr-edit-slot"></div>' : ""),
+          );
         }
-        programmeList.innerHTML = programmeWeeks
-          .map((w) => {
-            /* Escaped. These two are the only values on this page that were
-               interpolated into innerHTML raw, and they are organizer-written
-               free text — so one organizer could store script that ran in
-               another organizer's session, on the page that holds every
-               destructive control there is. esc() has existed three screens
-               up this file the whole time. */
-            const heading = esc([w.phase, w.title].filter(Boolean).join(", "));
-            const milestones = w.milestones.split("\n").filter((l) => l.trim()).length;
-            const sessions = w.sessions.split("\n").filter((l) => l.trim()).length;
-            return (
-              '<div class="row" style="align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-              '<strong style="min-width:70px">Week ' + w.week + "</strong>" +
-              '<span style="flex:1">' + (heading || "<em>untitled</em>") + "</span>" +
-              '<span class="note" style="margin:0">' + milestones + " milestone" + (milestones === 1 ? "" : "s") +
-              ", " + sessions + " session" + (sessions === 1 ? "" : "s") + "</span>" +
-              '<button type="button" data-week="' + w.week + '">Edit</button>' +
-              "</div>"
-            );
-          })
-          .join("");
-        programmeList.querySelectorAll("button[data-week]").forEach((b) => {
-          b.addEventListener("click", () => {
-            const week = Number(b.dataset.week);
-            prWeek.value = String(week);
-            fillWeek(week);
-            prPhase.focus();
-          });
-        });
+        programmeList.innerHTML = rows.join("");
+
+        if (editingWeek) {
+          const slot = document.getElementById("pr-edit-slot");
+          if (slot) slot.appendChild(programmeForm);
+        }
       }
 
       async function loadProgramme() {
@@ -2936,6 +3017,79 @@ import AaltoMark from "../components/AaltoMark.astro";
         const blank = !prPhase.value.trim() && !prTitle.value.trim() &&
           !prMilestones.value.trim() && !prSessions.value.trim();
         say(prMessage, blank ? "Week " + prWeek.value + " cleared." : "Week " + prWeek.value + " saved.", false);
+        editingWeek = null;
+        prCancel.hidden = true;
+        homeWeekForm();
+        loadProgramme();
+      });
+
+      prCancel.addEventListener("click", () => {
+        editingWeek = null;
+        prCancel.hidden = true;
+        prMessage.hidden = true;
+        homeWeekForm();
+        renderProgramme();
+      });
+
+      programmeList.addEventListener("click", async (event) => {
+        const button = event.target;
+        if (!button || !button.getAttribute) return;
+
+        const week = button.getAttribute("data-week");
+        if (week) {
+          const n = Number(week);
+          prWeek.value = String(n);
+          fillWeek(n);
+          prCancel.hidden = false;
+          /* The form comes to the row rather than the row sending you to the
+             form — week fifteen used to be a 1,200px trip each way. */
+          editingWeek = n;
+          renderKeepingStill('[data-week="' + n + '"]', renderProgramme);
+          prPhase.focus({ preventScroll: true });
+          return;
+        }
+
+        const doomed = button.getAttribute("data-delete-week");
+        if (!doomed) return;
+
+        /*
+         * Two-step rather than confirm(), which is how the rest of this page
+         * asks: a browser modal blocks everything to ask about one row, and
+         * nothing here uses one. A week theme is prose somebody wrote and it
+         * is not recoverable from the page, so it does get asked.
+         */
+        if (button.dataset.armed !== "yes") {
+          button.dataset.armed = "yes";
+          button.textContent = "Sure?";
+          setTimeout(() => {
+            if (!button.isConnected) return;
+            button.dataset.armed = "";
+            button.textContent = "Remove";
+          }, 4000);
+          return;
+        }
+
+        let res;
+        try {
+          res = await fetch("/api/programme", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "delete", week: Number(doomed) }),
+          });
+        } catch {
+          return say(prMessage, "Could not reach the server.", true);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return say(prMessage, data.error || "Could not remove that week.", true);
+
+        say(prMessage, "Week " + doomed + " removed.", false);
+        /* If the row being edited is the one just removed, the form has to come
+           home before the re-render drops the slot out from under it. */
+        if (editingWeek === Number(doomed)) {
+          editingWeek = null;
+          prCancel.hidden = true;
+          homeWeekForm();
+        }
         loadProgramme();
       });
 
@@ -3050,6 +3204,7 @@ import AaltoMark from "../components/AaltoMark.astro";
       const evCancel = document.getElementById("ev-cancel");
       const evMessage = document.getElementById("ev-message");
       const eventList = document.getElementById("event-list");
+      const eventForm = document.getElementById("event-form");
 
       const EVENT_KINDS = {
         session: "Session", milestone: "Milestone", checkpoint: "Checkpoint",
@@ -3057,6 +3212,50 @@ import AaltoMark from "../components/AaltoMark.astro";
       };
 
       let programmeEvents = [];
+      /* Which row the form is currently sitting in, or null when it is at home
+         adding something new. */
+      let editingEventId = null;
+      /* Months folded away. Everything before the current one starts closed:
+         by week eight most of the list is behind us, and the row somebody came
+         to change is almost always the next one, not the fortieth one back. */
+      let openPastMonths = false;
+
+      const evFormHome = document.getElementById("ev-form-home");
+
+      /*
+       * Put the form back before anything writes to eventList.innerHTML.
+       *
+       * This is the whole trick and the whole hazard. innerHTML on the list
+       * destroys its subtree, and while a row is being edited the live form is
+       * inside that subtree \u2014 so a re-render triggered mid-edit would delete
+       * the node, taking the half-typed values and every listener with it.
+       * Homing it first costs one line and makes the render safe to call from
+       * anywhere.
+       */
+      function homeEventForm() {
+        if (eventForm.parentElement !== evFormHome) evFormHome.appendChild(eventForm);
+      }
+
+      /*
+       * Re-render without the page sliding under the pointer.
+       *
+       * Moving the form out of its home slot removes its height from above the
+       * viewport, so everything below rides up — measured at 264px, which is
+       * small enough to look like a glitch and large enough to lose your place
+       * in a 45-row list. Holding one element's distance from the top of the
+       * window across the re-render pins the whole thing: the row you clicked
+       * stays exactly where you clicked it.
+       */
+      function renderKeepingStill(anchorSelector, render) {
+        const before = document.querySelector(anchorSelector);
+        const top = before ? before.getBoundingClientRect().top : null;
+        render();
+        if (top === null) return;
+        const after = document.querySelector(anchorSelector);
+        if (!after) return;
+        const drift = after.getBoundingClientRect().top - top;
+        if (drift) window.scrollBy(0, drift);
+      }
 
       function eventWhen(entry) {
         if (!entry.startTime) return "All day";
@@ -3064,6 +3263,7 @@ import AaltoMark from "../components/AaltoMark.astro";
       }
 
       function renderEvents() {
+        homeEventForm();
         if (!programmeEvents.length) {
           eventList.innerHTML = '<p class="note">Nothing scheduled yet.</p>';
           return;
@@ -3080,13 +3280,24 @@ import AaltoMark from "../components/AaltoMark.astro";
         }
 
         const today = new Date().toISOString().slice(0, 10);
+        const thisMonth = today.slice(0, 7);
+
+        /* A month is "past" only when all of it is behind us, so the month you
+           are living in never folds away underneath you. */
+        const pastMonths = months.filter(function (m) { return m.key < thisMonth; });
+        const hiddenCount = openPastMonths
+          ? 0
+          : pastMonths.reduce(function (sum, m) { return sum + m.rows.length; }, 0);
+
         eventList.innerHTML = months.map(function (group) {
+          if (!openPastMonths && group.key < thisMonth) return "";
           const label = new Date(group.key + "-01T00:00:00Z").toLocaleDateString("en-GB", {
             month: "long", year: "numeric", timeZone: "UTC",
           });
           const rows = group.rows.map(function (entry) {
             const past = entry.startsOn < today;
-            return '<div class="ev-row' + (past ? " is-past" : "") + '">' +
+            const editing = entry.id === editingEventId;
+            return '<div class="ev-row' + (past ? " is-past" : "") + (editing ? " is-editing" : "") + '">' +
               '<span class="ev-date">' + esc(entry.startsOn.slice(8) + "/" + entry.startsOn.slice(5, 7)) + '</span>' +
               '<span class="ev-time">' + esc(eventWhen(entry)) + '</span>' +
               '<span class="ev-title">' + esc(entry.title) +
@@ -3094,13 +3305,33 @@ import AaltoMark from "../components/AaltoMark.astro";
               '</span>' +
               '<span class="ev-kind">' + esc(EVENT_KINDS[entry.kind] || entry.kind) + '</span>' +
               '<span class="ev-actions">' +
-                '<button type="button" data-edit-event="' + esc(entry.id) + '">Edit</button>' +
+                '<button type="button" data-edit-event="' + esc(entry.id) + '">' + (editing ? "Editing" : "Edit") + '</button>' +
                 '<button type="button" class="danger" data-delete-event="' + esc(entry.id) + '">Remove</button>' +
               '</span>' +
-            '</div>';
+            '</div>' +
+            /* The form is moved in here after this string is written. Empty
+               until then, and only ever one of them on the page. */
+            (editing ? '<div class="ev-edit" id="ev-edit-slot"></div>' : "");
           }).join("");
           return '<h3 class="ev-month">' + esc(label) + '</h3>' + rows;
         }).join("");
+
+        if (hiddenCount) {
+          eventList.insertAdjacentHTML("afterbegin",
+            '<button type="button" class="ghost ev-earlier" data-show-earlier="yes">' +
+            "Show " + hiddenCount + " earlier item" + (hiddenCount === 1 ? "" : "s") +
+            "</button>");
+        } else if (openPastMonths && pastMonths.length) {
+          eventList.insertAdjacentHTML("afterbegin",
+            '<button type="button" class="ghost ev-earlier" data-show-earlier="no">Hide earlier items</button>');
+        }
+
+        /* Last, because it has to happen after innerHTML and because the slot
+           only exists when something is being edited. */
+        if (editingEventId) {
+          const slot = document.getElementById("ev-edit-slot");
+          if (slot) slot.appendChild(eventForm);
+        }
       }
 
       async function loadEvents() {
@@ -3117,6 +3348,7 @@ import AaltoMark from "../components/AaltoMark.astro";
       }
 
       function resetEventForm() {
+        editingEventId = null;
         evId.value = "";
         evTitle.value = "";
         evKind.value = "session";
@@ -3127,15 +3359,24 @@ import AaltoMark from "../components/AaltoMark.astro";
         evDescription.value = "";
         evSubmit.textContent = "Add to the programme";
         evCancel.hidden = true;
+        homeEventForm();
       }
 
       evCancel.addEventListener("click", function () {
         resetEventForm();
         say(evMessage, "", false);
         evMessage.hidden = true;
+        renderEvents();
       });
 
       eventList.addEventListener("click", async function (event) {
+        const earlier = event.target.getAttribute && event.target.getAttribute("data-show-earlier");
+        if (earlier) {
+          openPastMonths = earlier === "yes";
+          renderEvents();
+          return;
+        }
+
         const editId = event.target.getAttribute && event.target.getAttribute("data-edit-event");
         if (editId) {
           const entry = programmeEvents.find(function (e) { return e.id === editId; });
@@ -3150,8 +3391,15 @@ import AaltoMark from "../components/AaltoMark.astro";
           evDescription.value = entry.description;
           evSubmit.textContent = "Save changes";
           evCancel.hidden = false;
-          evTitle.focus();
-          evTitle.scrollIntoView({ block: "center" });
+          /* Re-render moves the form into this row. No scrollIntoView and no
+             focus jump: the form arrives where the click was, which is the
+             whole point — editing the last of forty-five events used to throw
+             the page 2,200px upwards and leave you to find your way back.
+             The anchor is this row's own Edit button, which exists on both
+             sides of the render. */
+          editingEventId = entry.id;
+          renderKeepingStill('[data-edit-event="' + CSS.escape(entry.id) + '"]', renderEvents);
+          evTitle.focus({ preventScroll: true });
           return;
         }
 
