@@ -432,11 +432,30 @@ export function listSharedWorkingGenius(): Array<{
   const db = getDb();
   return db
     .query(
+      /*
+       * Founders only.
+       *
+       * The join had no role in it, so anybody who took the assessment and
+       * agreed to share showed up here — including organizers and mentors.
+       * The table this feeds is headed "Founder" and says it shows "where each
+       * founder's energy goes", so an organizer who did the exercise appeared
+       * in the cohort's map as though they were in the cohort. It was reported
+       * as an account that would not delete: the name kept appearing after the
+       * profile went, because it was never the deleted account — it was the
+       * organizer's own, in a list they did not expect to be in.
+       *
+       * It also quietly broke the count underneath. mapWithheld is
+       * founders.length - map.length, so a non-founder in the map cancels out
+       * a founder who has not shared: one founder who had shared nothing and
+       * one organizer who had read as "everyone has shared", and with two
+       * organizers it would have gone negative.
+       */
       `SELECT w.user_email, u.name, w.primary_type, w.counts_json,
               w.completed_at, w.shared_at
          FROM working_genius w
          JOIN users u ON u.email = w.user_email
         WHERE w.shared_at IS NOT NULL
+          AND u.role = 'founder'
         ORDER BY u.name COLLATE NOCASE`,
     )
     .all() as Array<{
