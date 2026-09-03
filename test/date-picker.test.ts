@@ -42,8 +42,21 @@ beforeAll(async () => {
    * very call the test forbids, and a check that cannot tell a prohibition
    * from its violation is not a check.
    */
+  /* The end marker names the submit handler specifically. It used to be just
+     `document.getElementById("add-deadline")`, which stopped being unique the
+     moment the deadline list took its own reference to that form — and since
+     the new one sits earlier in the file, the slice inverted and came back
+     empty.
+
+     That failed rather than passing, which is the good outcome and worth
+     keeping: each test here pairs a forbidden string with a required one, so
+     an empty region trips the required half instead of satisfying the
+     prohibition by having nothing in it. */
   picker = inline
-    .slice(inline.indexOf("const DP_MONTHS"), inline.indexOf('document.getElementById("add-deadline")'))
+    .slice(
+      inline.indexOf("const DP_MONTHS"),
+      inline.indexOf('document.getElementById("add-deadline").addEventListener'),
+    )
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
 });
