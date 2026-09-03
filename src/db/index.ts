@@ -1890,6 +1890,19 @@ export function upsertProgrammeWeek(row: ProgrammeWeekRow): void {
 }
 
 /**
+ * Clears one week.
+ *
+ * upsertProgrammeWeek above already deletes when every field comes in blank,
+ * and that stays — but it is not something anybody can find. It was the only
+ * way to remove a week, so the admin page had no Remove button on any of the
+ * fifteen rows and clearing one meant emptying five fields and pressing Save
+ * without being told that would do it. Saying it plainly costs one statement.
+ */
+export function deleteProgrammeWeek(week: number): void {
+  getDb().run("DELETE FROM programme_weeks WHERE week = $week", { $week: week });
+}
+
+/**
  * The moments a founder can be nudged about one deadline.
  *
  * 'due-soon' is retired and nothing writes it any more. It stays in the type
