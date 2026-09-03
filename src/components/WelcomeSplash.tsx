@@ -59,13 +59,16 @@ function greeting(name: string): string {
  * How long the splash is held. A floor, not a cut: see `onDone` below.
  *
  * Three seconds until the film arrived, which was long enough for a line of
- * type and too short to read as anything. Six is one number and moving it is a
- * one-line change — five is equally fine — but it is worth knowing what it
- * costs before raising it further: this runs on every interactive sign-in, and
- * sessions go idle after 24 hours, so a founder meets it most mornings for
- * seven weeks. That is what the skip control is for.
+ * type and too short to read as anything. Six was the first guess; seven is
+ * what it settled at after watching it run, which is the only way to pick this
+ * number — the film is ten seconds long, so this is the point in the shot it
+ * cuts away from rather than an abstract duration.
+ *
+ * Worth knowing what it costs before raising it further: this runs on every
+ * interactive sign-in, and sessions go idle after 24 hours, so a founder meets
+ * it most mornings for seven weeks. That is what the skip control is for.
  */
-export const SPLASH_MS = 6000;
+export const SPLASH_MS = 7000;
 
 /** Same-origin, committed under public/. See the note above on why. */
 const FILM = "/video/iss-hero-720p.mp4";
