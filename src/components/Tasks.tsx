@@ -57,7 +57,6 @@ const heading: React.CSSProperties = {
 };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function parse(dueDate: string): Date | null {
   const [y, m, d] = dueDate.split("-").map(Number);
@@ -74,12 +73,20 @@ function daysLate(dueDate: string): number {
   return Math.max(0, Math.round((now - due.getTime()) / 86_400_000));
 }
 
+/** dd/mm/yyyy. Written out because a deadline is a date, and a date read
+    wrong by one month is the whole point of the feature missed. */
+function numeric(date: Date): string {
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${date.getUTCFullYear()}`;
+}
+
 /**
- * At this width the date has to earn its characters.
- *
- * Within the week a weekday is what a founder actually plans against — "Fri"
- * answers "how long have I got" without arithmetic. Further out the weekday
- * stops being useful and the calendar date takes over.
+ * The weekday answers "how long have I got" without arithmetic, which is what
+ * a founder plans against inside the week. It was the only thing shown there,
+ * and on its own it does not say *which* week: "Wed" is equally true of a
+ * deadline seven days out, and there is no way to tell from the row which one
+ * this is. The date follows it now, and stands alone further out.
  */
 export function statusLabel(item: DeadlineItem): string {
   if (item.done) return "Done";
@@ -89,8 +96,8 @@ export function statusLabel(item: DeadlineItem): string {
   }
   const date = parse(item.dueDate);
   if (!date) return item.dueDate;
-  if (item.group === "thisWeek") return DAYS[date.getUTCDay()]!;
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+  if (item.group === "thisWeek") return `${DAYS[date.getUTCDay()]!} ${numeric(date)}`;
+  return numeric(date);
 }
 
 /**
@@ -263,6 +270,18 @@ export function nextUp(state: DeadlinesState): { item: DeadlineItem; label: stri
  */
 export function DeadlinesPage({ state }: { state: DeadlinesState }) {
   const { data, toggle, busyId } = state;
+  /* Done deadlines are folded away by default.
+     
+     They were a fourth section, dimmed but always open, and by week three that
+     is the longest list on the page: everything achieved sitting between the
+     founder and the two things still to do. It is a record rather than a task,
+     so it keeps its place on this page and stops taking up the room.
+     
+     Anything ticked in this session stays where it was regardless — `pinned`
+     in useDeadlines holds it in its original group so it does not disappear
+     from under the cursor. Folding this away cannot swallow what was just
+     ticked. */
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   if (!data) {
     return (
@@ -307,8 +326,32 @@ export function DeadlinesPage({ state }: { state: DeadlinesState }) {
         groups.map((group) => {
           const rows = items.filter((d) => d.group === group.key);
           if (!rows.length) return null;
+          if (group.key === "done") {
+            return (
+              <section key={group.key} className="dl-group is-done">
+                <button
+                  type="button"
+                  className="dl-archive"
+                  aria-expanded={archiveOpen}
+                  onClick={() => setArchiveOpen((open) => !open)}
+                >
+                  <span className={`dl-caret${archiveOpen ? " is-open" : ""}`} aria-hidden="true">
+                    &rsaquo;
+                  </span>
+                  {group.label} <span className="dl-archive-count">{rows.length}</span>
+                </button>
+                {archiveOpen && (
+                  <ul className="dl-list">
+                    {rows.map((item) => (
+                      <Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />
+                    ))}
+                  </ul>
+                )}
+              </section>
+            );
+          }
           return (
-            <section key={group.key} className={`dl-group${group.key === "done" ? " is-done" : ""}`}>
+            <section key={group.key} className="dl-group">
               <h2 className={`dl-grouphead${group.urgent ? " is-urgent" : ""}`}>
                 {group.label} <span>{rows.length}</span>
               </h2>
@@ -361,8 +404,27 @@ export const DEADLINES_CSS = `
 }
 
 .dl-group { margin-bottom: 30px; max-width: var(--dl-measure); }
-.dl-group.is-done { opacity: 0.55; }
-.dl-group.is-done:hover { opacity: 0.85; }
+/* Folded away, so it is quiet by being closed rather than by being faint.
+   The old rule dimmed the whole section to 0.55 and lifted it on hover, which
+   made a permanently half-legible list — the worst of both. */
+.dl-archive {
+  display: flex; align-items: baseline; gap: 8px;
+  width: 100%; margin: 0 0 8px; padding: 0 10px 8px;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: none; color: var(--ink-faint);
+  font-family: inherit; font-size: 0.8125rem; font-weight: 600;
+  letter-spacing: 0.02em; text-align: left; cursor: pointer;
+  transition: color 120ms ease;
+}
+.dl-archive:hover { color: var(--ink-sub); }
+.dl-archive:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.dl-archive-count { color: var(--ink-faint); font-weight: 500; }
+.dl-caret {
+  display: inline-block; font-size: 1rem; line-height: 1;
+  transition: transform 160ms var(--ease-out-quart, ease);
+}
+.dl-caret.is-open { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .dl-caret { transition: none; } }
 
 .dl-grouphead {
   display: flex; align-items: baseline; gap: 8px;

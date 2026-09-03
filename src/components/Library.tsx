@@ -44,14 +44,26 @@ export type MyLoan = {
 type Payload = { books: BookItem[]; mine: MyLoan[] };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** dd/mm/yyyy, so a date is never ambiguous about which one it means. */
+function numeric(date: Date): string {
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${date.getUTCFullYear()}`;
+}
 
 /**
  * A due date in the words somebody would use out loud.
  *
- * Days rather than dates while it is close, because "2 days late" is a
- * prompt and "28 Aug" is a lookup. Parsed as UTC noon so the day name cannot
- * slip either side of midnight.
+ * Days rather than dates while it is close, because "2 days late" is a prompt
+ * and a calendar date is a lookup. That part is unchanged.
+ *
+ * What changed is everything past tomorrow. This said "due Wed", which is
+ * equally true of a book back in two days and one back in nine, and "due 23
+ * Sep" with no year. That is tolerable on your own loan, where you already
+ * know roughly when you took it out — but this column is read by the people
+ * who do *not* have the book, deciding whether it is worth waiting for. For
+ * them the whole value of the line is which day it actually is.
  */
 export function dueLabel(iso: string, now: number = Date.now()): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -65,8 +77,10 @@ export function dueLabel(iso: string, now: number = Date.now()): string {
   if (days === 0) return "due today";
   if (days === 1) return "due tomorrow";
   const date = new Date(at);
-  if (days < 7) return `due ${DAYS[date.getUTCDay()]}`;
-  return `due ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+  /* The weekday still leads inside the week — it is what somebody plans
+     against — but it no longer stands alone. */
+  if (days < 7) return `due ${DAYS[date.getUTCDay()]} ${numeric(date)}`;
+  return `due ${numeric(date)}`;
 }
 
 export type LibraryState = {
@@ -192,7 +206,12 @@ function Row({
         <div className="li-book">
           <span className="li-book-title">{book.title}</span>
           {book.author && <span className="li-book-sub">{book.author}</span>}
-          {book.notes && <span className="li-book-note">{book.notes}</span>}
+          {book.notes && (
+            <details className="li-booknote">
+              <summary>Note</summary>
+              <span className="li-booknote-body">{book.notes}</span>
+            </details>
+          )}
         </div>
       </td>
 
@@ -485,8 +504,33 @@ export const LIBRARY_CSS = `
   overflow-wrap: anywhere;
 }
 .li-book-sub { font-size: 0.75rem; line-height: 1.45; color: var(--ink-faint, #8a8f98); overflow-wrap: anywhere; }
-.li-book-note {
-  font-size: 0.75rem; line-height: 1.45; color: var(--ink-faint, #8a8f98); opacity: 0.8;
+
+/* The shelf note, folded away.
+   It is the one field with no length anybody agreed to — "shelf by the window,
+   ask Tai first" is a sentence, and printed in full on every row it was taller
+   than the book it described. A native <details> rather than state: it needs
+   no JavaScript, it is keyboard-operable for free, and the browser gets the
+   accessibility right. Closed by default, because the note is the thing you go
+   looking for, not the thing you are reading the page for. */
+.li-booknote { margin-top: 3px; }
+.li-booknote summary {
+  display: inline-flex; align-items: center; gap: 5px;
+  list-style: none; cursor: pointer;
+  font-size: 0.75rem; line-height: 1.4;
+  color: var(--ink-faint, #8a8f98);
+  transition: color 120ms var(--ease-out-quart, ease);
+}
+.li-booknote summary::-webkit-details-marker { display: none; }
+.li-booknote summary::before { content: "▸"; font-size: 0.625rem; }
+.li-booknote[open] summary::before { content: "▾"; }
+.li-booknote summary:hover { color: var(--ink-sub, #d0d6e0); }
+.li-booknote summary:focus-visible {
+  outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 3px;
+}
+.li-booknote-body {
+  display: block; margin-top: 4px;
+  font-size: 0.75rem; line-height: 1.5;
+  color: var(--ink-faint, #8a8f98);
   overflow-wrap: anywhere;
 }
 
