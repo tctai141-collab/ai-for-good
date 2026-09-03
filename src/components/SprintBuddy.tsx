@@ -3838,9 +3838,21 @@ ${OSK_CSS}
   height: 16px;
   margin: 0;
   flex-shrink: 0;
-  border: 1px solid var(--line-strong);
+  /*
+     Not --line-strong, which is what this was.
+     
+     --line-strong is rgba(255,255,255,0.10), and an empty box drawn with it on
+     the card ground comes out at 1.29:1 — against the 3:1 WCAG asks for the
+     boundary of a control you are meant to find and click. It was reported as
+     simply not visible, which is the same finding arrived at by looking.
+     --line-visible would not have fixed it either: 0.16 measures 1.57:1.
+     
+     0.42 measures 4.08:1. The faint fill is doing separate work: a hairline
+     outline alone still reads as an absence, where a box with something in it
+     reads as a control waiting to be used. */
+  border: 1px solid rgba(255, 255, 255, 0.42);
   border-radius: 4px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   /* The supplied component's shadow-sm shadow-black/5. Barely there, and it is
      what stops the box reading as a hole punched in the row. */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -3849,7 +3861,7 @@ ${OSK_CSS}
   place-items: center;
   transition: background 120ms ease, border-color 120ms ease;
 }
-.deadline-check:hover:not(:disabled) { border-color: var(--brand-accent); }
+.deadline-check:hover:not(:disabled) { border-color: var(--brand-accent); background: rgba(255, 255, 255, 0.09); }
 .deadline-check:checked { background: var(--brand-accent); border-color: var(--brand-accent); }
 .deadline-check::after {
   content: "";
