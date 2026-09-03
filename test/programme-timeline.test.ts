@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
-  fromIsoDay, isoDay, longDate, sprintWeekOf, timeLabel, KINDS,
+  byDay, fromIsoDay, isoDay, longDate, sprintWeekOf, timeLabel, KINDS,
   type ProgrammeEvent,
 } from "../src/components/ProgrammeTimeline";
 /* From lib, not from the API route: importing the route would pull in
@@ -279,5 +279,76 @@ describe("the sidebar and the page agree", () => {
   test("the view is read-only — editing lives on /admin", () => {
     const stripped = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
     expect(stripped).not.toContain('method: "POST"');
+  });
+});
+
+describe("a day is the unit, not a row", () => {
+  /*
+   * The date used to be printed on every event, so a day holding three things
+   * said "Friday 11 September" three times, and "Today" appeared once per
+   * event rather than once. Grouping is what fixes both.
+   */
+  test("events on the same day are gathered under it, in order", () => {
+    const days = byDay([
+      event({ id: "a", startsOn: "2026-09-08", startTime: "09:00" }),
+      event({ id: "b", startsOn: "2026-09-08", startTime: "13:00" }),
+      event({ id: "c", startsOn: "2026-09-09", startTime: "10:00" }),
+    ]);
+    expect(days.map((d) => d.iso)).toEqual(["2026-09-08", "2026-09-09"]);
+    expect(days[0]!.events.map((e) => e.id)).toEqual(["a", "b"]);
+    expect(days[1]!.events.map((e) => e.id)).toEqual(["c"]);
+  });
+
+  test("a day is never split in two", () => {
+    /* It walks a sorted list and only notices where the day changes, which is
+       the whole reason listProgrammeEvents orders by starts_on. If that ORDER
+       BY is ever dropped the same date would open a second group, and the page
+       would show one day twice. */
+    const days = byDay([
+      event({ id: "a", startsOn: "2026-09-08" }),
+      event({ id: "b", startsOn: "2026-09-09" }),
+      event({ id: "c", startsOn: "2026-09-08" }),
+    ]);
+    expect(days.filter((d) => d.iso === "2026-09-08").length).toBe(2);
+  });
+
+  test("no events, no days", () => {
+    expect(byDay([])).toEqual([]);
+  });
+});
+
+describe("the list survives a narrow column", () => {
+  /* Comments stripped: the rules carry notes quoting the very values these
+     assertions rule out, and a check that cannot tell a prohibition from its
+     violation is not a check. */
+  const css = source.replace(/\/\*[\s\S]*?\*\//g, "");
+  const item = css.slice(css.indexOf(".pt-item {"), css.indexOf(".pt-item + .pt-item"));
+
+  test("no column of the row is a fixed width", () => {
+    /*
+     * The date column was a flat 220px, so every pixel a narrow container took
+     * came out of the title and the note instead: measured at 554px of content
+     * — a phone in landscape, once the sidebar has had its share — the title
+     * column was 87px and rows ran to 288px. At 380px the note column was 7px
+     * and the row overflowed to the right.
+     */
+    expect(item).toContain("grid-template-columns:");
+    expect(item).not.toMatch(/grid-template-columns:\s*\d+px/);
+    expect(item).toContain("minmax(0,");
+  });
+
+  test("the layout asks the container, not the window", () => {
+    /*
+     * The width that matters is the one left for the list — the window less a
+     * ~290px sidebar — and a media query cannot see it. A phone in landscape
+     * is 844px, over the old 720px breakpoint, so the phone rule never fired
+     * on the one orientation that needed it most.
+     */
+    expect(css).toContain("container-type: inline-size");
+    expect(css).toContain("@container");
+  });
+
+  test("the note is measured, now that no column measures it for it", () => {
+    expect(css).toMatch(/\.pt-desc\s*\{[^}]*max-width:/);
   });
 });
