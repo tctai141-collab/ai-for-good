@@ -293,13 +293,34 @@ describe("deadlines got a page", () => {
     expect(page).toContain("<Row key={item.id} item={item} onToggle={toggle} busy={busyId === item.id} />");
   });
 
-  test("grouped by when, with done last and quiet", () => {
+  test("grouped by when, with done last and folded away", () => {
     const page = tasks.slice(tasks.indexOf("export function DeadlinesPage"));
     for (const key of ["overdue", "thisWeek", "upcoming", "done"]) {
       expect(page).toContain(`key: "${key}"`);
     }
     expect(page.indexOf('key: "overdue"')).toBeLessThan(page.indexOf('key: "done"'));
-    expect(tasks).toContain(".dl-group.is-done { opacity: 0.55; }");
+    /*
+     * Quiet by being closed, not by being faint. This pinned
+     * `.dl-group.is-done { opacity: 0.55; }` — a section permanently rendered
+     * at just over half legibility, which by week three is also the longest
+     * list on the page and sits between the founder and the work still to do.
+     * It is a disclosure now, shut until asked for.
+     */
+    expect(page).toContain("const [archiveOpen, setArchiveOpen] = useState(false)");
+    expect(page).toContain("aria-expanded={archiveOpen}");
+    expect(page).toContain("{archiveOpen && (");
+    expect(tasks).not.toContain("opacity: 0.55");
+  });
+
+  test("folding the archive cannot swallow what was just ticked", () => {
+    /*
+     * Ticking something moves it into the done group, and if that group is
+     * shut the row would vanish from under the cursor with no way to untick a
+     * mistake. `pinned` already holds a row in its original group for the rest
+     * of the session, which is what makes closing the archive safe — so the
+     * two are checked together rather than separately.
+     */
+    expect(tasks).toContain("const [pinned, setPinned] = useState<Set<string>>");
   });
 
   test("the overdue count still shouts, from the nav entry", () => {
