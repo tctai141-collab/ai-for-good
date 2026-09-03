@@ -358,40 +358,90 @@ import AaltoMark from "../components/AaltoMark.astro";
         align-items: center;
       }
       .deadline-actions { margin-top: 8px; }
-      .book-row {
-        border-top: 1px solid var(--line);
-        padding: 12px 0;
+      /* ── The library table ──
+         This was a stack of divs: the borrower's name, the due date and five
+         buttons all set as body text on one wrapping line, with the whole row
+         hanging off a `border-top: 1px solid var(--line)` — a token this page
+         has never defined, so the rule separating the books was invisible.
+
+         It is the people table's shape now, because it is the same kind of
+         list and the operating team reads the two back to back: an avatar
+         cell, a status pill, one column per fact. */
+      .pill.shelf { color: var(--ok); border-color: rgba(76, 183, 130, 0.4); }
+      .pill.late { color: var(--danger); border-color: rgba(235, 87, 87, 0.45); }
+      /* Unaccounted was red here, and the comment that set it said so on
+         purpose: a book whose borrower's account is gone is not a mild
+         problem. It is amber now for one reason only — overdue is red, and in
+         a table the two sat in the same column looking identical, which is
+         the one thing a status colour must not do. Different response, so
+         different colour: red is somebody to chase, amber is a shelf to go
+         and look at. Flip it back if the severity matters more than the
+         distinction. */
+      .pill.unaccounted { color: var(--warn); border-color: rgba(242, 201, 76, 0.4); }
+
+      .bk-row.archived { opacity: 0.55; }
+      /* Wraps rather than clips: this line carries the author and the shelf
+         note, and an ellipsis on it hid the note entirely with nothing to
+         click to get it back. */
+      .bk-sub { font-size: 0.8125rem; color: var(--muted); overflow-wrap: anywhere; }
+      .bk-due { font-size: 0.8125rem; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+      .bk-due.late { color: var(--danger); font-weight: 600; }
+
+      /* Loan history stays folded inside the book cell rather than taking a
+         column of its own: it is the one thing here nobody reads until they
+         are already asking about a specific book. */
+      .bk-note { margin-top: 4px; }
+      .bk-note summary {
+        cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none;
       }
-      .book-row.archived { opacity: 0.5; }
-      /* Not a warning colour by accident: an unaccounted book is one the app
-         believes left the office with somebody whose account is gone. */
-      .book-row.unaccounted { border-left: 2px solid var(--danger); padding-left: 10px; }
-      .book-head {
-        display: flex;
-        align-items: baseline;
-        gap: 12px;
-        flex-wrap: wrap;
+      .bk-note summary::-webkit-details-marker { display: none; }
+      .bk-note summary::before { content: "\25b8  "; }
+      .bk-note[open] summary::before { content: "\25be  "; }
+      .bk-note summary:hover { color: var(--sub); }
+      .bk-note summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+      .bk-note-body {
+        margin-top: 4px; font-size: 0.75rem; line-height: 1.5;
+        color: var(--muted); overflow-wrap: anywhere;
       }
-      .book-head strong { flex: 1 1 220px; }
-      .book-meta { color: var(--ink-faint); font-size: 13px; }
-      .book-status {
-        font-size: 12.5px;
-        font-variant-numeric: tabular-nums;
-        color: var(--ink-sub);
-        white-space: nowrap;
+
+      .bk-history { margin-top: 5px; }
+      .bk-history summary { cursor: pointer; font-size: 0.75rem; color: var(--muted); list-style: none; }
+      .bk-history summary::-webkit-details-marker { display: none; }
+      .bk-history summary::before { content: "\25b8  "; }
+      .bk-history[open] summary::before { content: "\25be  "; }
+      .bk-history ul { margin: 6px 0 0; padding-left: 15px; font-size: 0.75rem; color: var(--muted); }
+      .bk-history li { margin-bottom: 3px; }
+
+      /* The shelf in four numbers, above the table. An organizer opens this tab
+         to answer "is anything wrong", and that used to mean reading every row. */
+      .bk-summary {
+        display: flex; gap: 6px 22px; flex-wrap: wrap;
+        margin: 18px 0 16px; font-size: 0.875rem; color: var(--muted);
       }
-      .book-status.available { color: var(--brand-accent); font-weight: 700; }
-      .book-status.late { color: var(--danger); font-weight: 700; }
-      .book-row details { margin-top: 6px; }
-      .book-row summary {
-        cursor: pointer;
-        font-size: 13px;
-        color: var(--ink-faint);
-        min-height: 32px;
-        display: flex;
-        align-items: center;
+      .bk-summary strong { color: var(--text); font-variant-numeric: tabular-nums; }
+      .bk-summary .is-late strong { color: var(--danger); }
+      .bk-summary .is-lost strong { color: var(--warn); }
+
+      /* Fixed proportions. Without them the browser gave the title column
+         every spare pixel and left the due date stranded a third of a screen
+         from the buttons that act on it. */
+      /* Bounded to the wide layout on purpose. Below 700px the panel's rows
+         become blocks, and an id-qualified width beats the `width: 100%` that
+         does it — which left every title wrapping one word per line. */
+      @media (min-width: 701px) {
+        #library-list th:nth-child(1), #library-list td:nth-child(1) { width: 38%; }
+        #library-list th:nth-child(2), #library-list td:nth-child(2) { width: 18%; }
+        #library-list th:nth-child(3), #library-list td:nth-child(3) { width: 12%; }
       }
-      .book-actions { margin-top: 8px; }
+      .bk-actions { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+
+      /* The page had no visually-hidden class; the library table is the first
+         thing here to need one, for a column heading that would be noise on
+         screen and a missing label off it. */
+      .sr-only {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+      }
       .link-item {
         border: 1px solid var(--border);
         border-radius: 10px;
@@ -574,6 +624,7 @@ import AaltoMark from "../components/AaltoMark.astro";
         .panel tr { border-top: 1px solid var(--border); padding: 12px 0; }
         .panel td { border: 0; padding: 3px 0; }
         .row-actions { text-align: left; margin-top: 10px; }
+        .bk-actions { justify-content: flex-start; margin-top: 10px; }
         /* Clear of the quick-actions trigger, which is fixed to this corner
            and otherwise sits on top of the last row. */
         main { padding-bottom: 96px; }
@@ -1898,6 +1949,22 @@ import AaltoMark from "../components/AaltoMark.astro";
        * esc() exists three screens up, and building nodes means never needing to
        * remember it.
        */
+      /* Where a book is, as one pill. Archived is checked before availability:
+         a book off the shelf for good is not "on the shelf" just because no
+         loan is open against it. */
+      function bookStatus(book) {
+        if (book.status === "unaccounted") return { tone: "unaccounted", label: "Unaccounted for" };
+        if (book.status === "archived") return { tone: "", label: "Archived" };
+        if (book.available) return { tone: "shelf", label: "On the shelf" };
+        if (book.borrower) {
+          const who = book.borrower.name || book.borrower.email;
+          return book.loanState === "overdue"
+            ? { tone: "late", label: who + " · late" }
+            : { tone: "", label: who };
+        }
+        return { tone: "", label: "Not on the shelf" };
+      }
+
       async function loadLibrary() {
         let data;
         try {
@@ -1919,58 +1986,106 @@ import AaltoMark from "../components/AaltoMark.astro";
           return;
         }
 
+        const all = data.books;
+        const counts = {
+          shelf: all.filter((b) => b.available && b.status === "active").length,
+          out: all.filter((b) => b.loanId).length,
+          late: all.filter((b) => b.loanId && b.loanState === "overdue").length,
+          lost: all.filter((b) => b.status === "unaccounted").length,
+        };
+
+        /* The question this tab is opened to answer, before the table that
+           answers it slowly. Only the two that mean somebody has to do
+           something are shown when there is nothing to do. */
+        const summary = document.createElement("p");
+        summary.className = "bk-summary";
+        const stat = (label, value, cls) => {
+          const span = document.createElement("span");
+          if (cls) span.className = cls;
+          const strong = document.createElement("strong");
+          strong.textContent = String(value);
+          span.append(strong, " " + label);
+          return span;
+        };
+        summary.append(stat("on the shelf", counts.shelf));
+        summary.append(stat("out on loan", counts.out));
+        if (counts.late) summary.append(stat("overdue", counts.late, "is-late"));
+        if (counts.lost) summary.append(stat("unaccounted for", counts.lost, "is-lost"));
+        list.append(summary);
+
         /* Anything needing a human sorts to the top: a book nobody can account
            for, then one that is late, then the rest as the server ordered them. */
         const weight = (b) => (b.status === "unaccounted" ? 0 : b.loanState === "overdue" ? 1 : 2);
-        const books = data.books.slice().sort((a, b) => weight(a) - weight(b));
+        const books = all.slice().sort((a, b) => weight(a) - weight(b));
+
+        const table = document.createElement("table");
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        for (const label of ["Book", "Status", "Due back", ""]) {
+          const th = document.createElement("th");
+          if (label) {
+            th.textContent = label;
+          } else {
+            /* The actions column is obvious from its buttons and unnamed on
+               the people table too; the heading exists for a screen reader. */
+            const sr = document.createElement("span");
+            sr.className = "sr-only";
+            sr.textContent = "Actions";
+            th.append(sr);
+          }
+          headRow.append(th);
+        }
+        thead.append(headRow);
+        table.append(thead);
+
+        const tbody = document.createElement("tbody");
 
         for (const book of books) {
-          const row = document.createElement("div");
-          row.className = "book-row"
-            + (book.status === "archived" ? " archived" : "")
-            + (book.status === "unaccounted" ? " unaccounted" : "");
+          const row = document.createElement("tr");
+          row.className = "bk-row" + (book.status === "archived" ? " archived" : "");
 
-          const head = document.createElement("div");
-          head.className = "book-head";
+          const { tone, label } = bookStatus(book);
 
-          const title = document.createElement("strong");
+          /* ── Book ── */
+          const bookCell = document.createElement("td");
+          const linesBox = document.createElement("div");
+          linesBox.className = "member-lines";
+          const title = document.createElement("span");
+          title.className = "member-name";
           title.textContent = book.title;
-          head.append(title);
+          linesBox.append(title);
 
-          const meta = document.createElement("span");
-          meta.className = "book-meta";
-          const bits = [];
-          if (book.author) bits.push(book.author);
-          if (book.notes) bits.push(book.notes);
-          if (book.status === "archived") bits.push("archived");
-          meta.textContent = bits.join(" \u00b7 ");
-          head.append(meta);
-
-          const status = document.createElement("span");
-          status.className = "book-status";
-          if (book.status === "unaccounted") {
-            status.className += " late";
-            status.textContent = "unaccounted for, check the shelf";
-          } else if (book.available) {
-            status.className += " available";
-            status.textContent = "on the shelf";
-          } else if (book.borrower) {
-            if (book.loanState === "overdue") status.className += " late";
-            status.textContent = (book.borrower.name || book.borrower.email)
-              + ", due " + dueLabel(book.dueDate)
-              + (book.loanState === "overdue" ? " (late)" : "");
-          } else {
-            status.textContent = "not on the shelf";
+          if (book.author) {
+            const sub = document.createElement("span");
+            sub.className = "bk-sub";
+            sub.textContent = book.author;
+            linesBox.append(sub);
           }
-          head.append(status);
-          row.append(head);
+
+          /* The note folds away, the way loan history below it already does.
+             It is free text an organizer typed — "shelf by the window, ask Tai
+             first" — and printed in full on every row it was taller than the
+             book it described. */
+          if (book.notes) {
+            const noteBox = document.createElement("details");
+            noteBox.className = "bk-note";
+            const noteSummary = document.createElement("summary");
+            noteSummary.textContent = "Note";
+            noteBox.append(noteSummary);
+            const noteBody = document.createElement("div");
+            noteBody.className = "bk-note-body";
+            noteBody.textContent = book.notes;
+            noteBox.append(noteBody);
+            linesBox.append(noteBox);
+          }
 
           if (book.history && book.history.length) {
             const details = document.createElement("details");
-            const summary = document.createElement("summary");
-            summary.textContent = book.history.length === 1
+            details.className = "bk-history";
+            const summaryEl = document.createElement("summary");
+            summaryEl.textContent = book.history.length === 1
               ? "1 loan" : book.history.length + " loans";
-            details.append(summary);
+            details.append(summaryEl);
             const history = document.createElement("ul");
             for (const loan of book.history) {
               const item = document.createElement("li");
@@ -1980,17 +2095,38 @@ import AaltoMark from "../components/AaltoMark.astro";
               history.append(item);
             }
             details.append(history);
-            row.append(details);
+            linesBox.append(details);
           }
 
+          bookCell.append(linesBox);
+          row.append(bookCell);
+
+          /* ── Status ── */
+          const statusCell = document.createElement("td");
+          const pill = document.createElement("span");
+          pill.className = "pill" + (tone ? " " + tone : "");
+          pill.textContent = label;
+          statusCell.append(pill);
+          row.append(statusCell);
+
+          /* ── Due back ── */
+          const dueCell = document.createElement("td");
+          const due = document.createElement("span");
+          due.className = "bk-due" + (book.loanState === "overdue" ? " late" : "");
+          due.textContent = book.dueDate ? dueLabel(book.dueDate) : "—";
+          dueCell.append(due);
+          row.append(dueCell);
+
+          /* ── Actions ── */
+          const actionsCell = document.createElement("td");
           const actions = document.createElement("div");
-          actions.className = "book-actions row";
+          actions.className = "bk-actions";
 
           if (book.loanId) {
             const back = document.createElement("button");
             back.type = "button";
             back.className = "ghost";
-            back.textContent = "Mark returned";
+            back.textContent = "Return";
             back.addEventListener("click", async () => {
               back.disabled = true;
               const { ok, data: result } = await libraryApi({ action: "return", id: book.id });
@@ -2007,11 +2143,11 @@ import AaltoMark from "../components/AaltoMark.astro";
             const extend = document.createElement("button");
             extend.type = "button";
             extend.className = "ghost";
-            extend.textContent = "Another 4 weeks";
+            extend.textContent = "+4 weeks";
             extend.addEventListener("click", async () => {
               extend.disabled = true;
-              const due = new Date(Date.now() + 28 * 86400000).toISOString().slice(0, 10);
-              const { ok, data: result } = await libraryApi({ action: "set-due", loanId: book.loanId, dueDate: due });
+              const dueDate = new Date(Date.now() + 28 * 86400000).toISOString().slice(0, 10);
+              const { ok, data: result } = await libraryApi({ action: "set-due", loanId: book.loanId, dueDate });
               if (!ok) {
                 extend.disabled = false;
                 return say(document.getElementById("bk-message"), result.error || "Could not move that date.", true);
@@ -2056,7 +2192,7 @@ import AaltoMark from "../components/AaltoMark.astro";
              else on the page, and nothing here uses one. */
           const remove = document.createElement("button");
           remove.type = "button";
-          remove.className = "ghost";
+          remove.className = "ghost danger";
           remove.textContent = "Delete";
           remove.addEventListener("click", async () => {
             if (remove.dataset.armed !== "yes") {
@@ -2079,9 +2215,13 @@ import AaltoMark from "../components/AaltoMark.astro";
           });
           actions.append(remove);
 
-          row.append(actions);
-          list.append(row);
+          actionsCell.append(actions);
+          row.append(actionsCell);
+          tbody.append(row);
         }
+
+        table.append(tbody);
+        list.append(table);
       }
 
       function resetBookForm() {

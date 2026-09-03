@@ -1020,8 +1020,22 @@ import Root from "../components/Root";
   }
 
   /* ── The welcome screen ──
-     Shown for three seconds between a successful sign-in and the app: code
-     rain on a canvas, the message typed over it. */
+     Shown for six seconds between a successful sign-in and the app: film
+     behind, the message typed over it.
+
+     Four layers, and the order is the whole design. The rain paints in a frame
+     with no network; the poster is 91 KB; the film is 1.2 MB and will not have
+     arrived on a first sign-in over mobile data. So each one covers the one
+     before as it becomes available, and if the film never does — slow, blocked,
+     or refused autoplay — what is left is the splash this screen always had.
+
+         .splash            the ground, and the backstop if all else fails
+         .splash-canvas     the rain, instant, no network
+         .splash-video      poster then film, fading in on canplay
+         .splash-falloff    top and bottom, so type never sits on the sky
+         .splash-scrim      centre, because the daylit planet is bright
+         .splash-line       the greeting
+  */
   .splash {
     position: fixed;
     inset: 0;
@@ -1038,6 +1052,112 @@ import Root from "../components/Root";
     width: 100%;
     height: 100%;
     pointer-events: none;
+  }
+  .splash-video {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* cover, not contain: a 16:9 film in a portrait phone would otherwise sit
+       in a letterbox with the rain showing above and below it. */
+    object-fit: cover;
+    pointer-events: none;
+    /* Faded in by the component once the film can actually paint. Until then
+       this is transparent and the rain is what is on screen — a poster that
+       cut in at full opacity would flash a still frame mid-rain. */
+    transition: opacity 600ms var(--ease-out-quart);
+    transform-origin: center center;
+    will-change: transform;
+    animation-name: splash-push;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+  /* A slow push in, the length of the splash. Duration is set inline from
+     SPLASH_MS so the motion and the hold cannot drift apart. */
+  @keyframes splash-push {
+    from { transform: scale(1); }
+    to { transform: scale(1.06); }
+  }
+  .splash-falloff,
+  .splash-scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .splash-falloff {
+    background: linear-gradient(
+      180deg,
+      rgba(5, 7, 10, 0.55),
+      rgba(5, 7, 10, 0) 28%,
+      rgba(5, 7, 10, 0.18) 68%,
+      rgba(5, 7, 10, 0.72)
+    );
+  }
+  .splash-scrim {
+    background: radial-gradient(
+      ellipse 62% 44% at 50% 50%,
+      rgba(5, 7, 10, 0.72),
+      rgba(5, 7, 10, 0) 72%
+    );
+  }
+  /* Bottom edge, filling over the life of the splash. It is the only thing
+     saying how long this lasts, which is what makes six seconds tolerable
+     rather than indefinite. */
+  .splash-progress {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.12);
+    pointer-events: none;
+  }
+  .splash-progress-fill {
+    height: 100%;
+    width: 100%;
+    transform-origin: left;
+    transform: scaleX(0);
+    background: linear-gradient(
+      90deg,
+      rgba(0, 255, 102, 0.35),
+      rgba(216, 255, 232, 0.9)
+    );
+    animation-name: splash-fill;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+  @keyframes splash-fill {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  /* Visible, unlike the supplied component's, which is transparent until it is
+     focused. Six seconds on every sign-in for seven weeks is exactly the thing
+     somebody needs to be able to leave, and a control nobody can see is not
+     one. Quiet enough not to compete with the greeting. */
+  .splash-skip {
+    position: absolute;
+    z-index: 2;
+    right: clamp(12px, 3vw, 28px);
+    bottom: clamp(16px, 4vh, 34px);
+    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    background: rgba(5, 7, 10, 0.6);
+    backdrop-filter: blur(6px);
+    color: rgba(216, 255, 232, 0.82);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .splash-skip:hover {
+    color: #d8ffe8;
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+  .splash-skip:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 3px;
   }
   .splash-line {
     position: relative;
@@ -1057,13 +1177,38 @@ import Root from "../components/Root";
     line-height: 1.4;
     letter-spacing: -0.01em;
     text-align: center;
-    color: #d8ffe8;
-    /* The rain is busy; the glow is what keeps the line legible over it
-       without putting a panel behind the words. */
+    /*
+     * White, not the green this was.
+     *
+     * The green and its glow were chosen for the rain — "the rain is busy; the
+     * glow is what keeps the line legible over it without putting a panel
+     * behind the words" — and that reasoning does not survive the film. Over
+     * photographic footage a green terminal glow reads as an overlay left on by
+     * mistake rather than as typography, and against the bright limb of the
+     * Earth it fights the picture instead of sitting in it. The scrim behind
+     * now does the job the glow was doing, so the shadow only has to be a
+     * shadow. The monospace face stays: that is the product's voice, and it is
+     * the colour that was borrowed from somewhere else.
+     */
+    color: #f2f4f8;
     text-shadow:
-      0 0 12px rgba(0, 255, 102, 0.55),
-      0 0 34px rgba(0, 255, 102, 0.28),
-      0 2px 18px rgba(0, 0, 0, 0.9);
+      0 2px 20px rgba(0, 0, 0, 0.8),
+      0 0 52px rgba(0, 0, 0, 0.55);
+    /* The hero's move: arrives out of focus and settles. Applied to the line
+       rather than to a headline of its own, because the line is the headline. */
+    animation: splash-focus 760ms var(--ease-out-quart) both;
+  }
+  @keyframes splash-focus {
+    from {
+      opacity: 0;
+      filter: blur(10px);
+      transform: translateY(12px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: none;
+    }
   }
   .typewriter-cursor {
     margin-left: 0.08em;
@@ -1085,6 +1230,12 @@ import Root from "../components/Root";
   @media (prefers-reduced-motion: reduce) {
     .splash { animation: none; }
     .typewriter-cursor { animation: none; opacity: 1; }
+    /* A held frame, not a slower film. The component also declines to call
+       play(), so this is the picture rather than a paused video. */
+    .splash-video { animation: none; transform: none; transition: none; }
+    .splash-progress-fill { animation: none; transform: scaleX(1); }
+    /* The line is already legible; it does not need to arrive from anywhere. */
+    .splash-line { animation: none; }
   }
 
   /* ── Shimmering text ──
