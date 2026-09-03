@@ -516,6 +516,9 @@ export const LIBRARY_CSS = `
 .li-booknote summary {
   display: inline-flex; align-items: center; gap: 5px;
   list-style: none; cursor: pointer;
+  /* 15px tall on its text alone, which is a hard thing to hit with a thumb.
+     WCAG 2.2 asks 24; the padding keeps the row from growing to match. */
+  min-height: 24px; padding: 2px 0;
   font-size: 0.75rem; line-height: 1.4;
   color: var(--ink-faint, #8a8f98);
   transition: color 120ms var(--ease-out-quart, ease);
