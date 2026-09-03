@@ -104,6 +104,22 @@ export const GET: APIRoute = async ({ cookies, request }) => {
         deadlines: deadlines.map((d) => ({
           id: d.id,
           title: d.title,
+          /*
+           * description and dueTime are here so the admin list can open an
+           * editor on a row without a second request.
+           *
+           * They are not optional extras. update treats an absent key as
+           * "leave it alone", so a form that could not see these two would
+           * either have to omit them — making it impossible to clear a
+           * description — or send them empty, which silently wipes both the
+           * moment anybody edits a title. Neither is a thing to find out
+           * afterwards.
+           *
+           * Nothing a founder wrote is added by this: both are organizer
+           * copy about the deadline, and this view is already staff-only.
+           */
+          description: d.description,
+          dueTime: d.due_time,
           dueDate: d.due_date,
           sprintWeek: d.sprint_week,
           status: d.status,

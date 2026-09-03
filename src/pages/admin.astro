@@ -916,8 +916,8 @@ import AaltoMark from "../components/AaltoMark.astro";
   .ev-earlier { margin-bottom: 6px; font-size: 0.75rem; }
 
   /* The row being edited, and the form that drops in under it. */
-  .ev-row.is-editing, .pr-row.is-editing { background: rgba(255, 255, 255, 0.04); }
-  .ev-edit, .pr-edit {
+  .ev-row.is-editing, .pr-row.is-editing, .deadline-row.is-editing { background: rgba(255, 255, 255, 0.04); }
+  .ev-edit, .pr-edit, .dl-edit {
     padding: 14px 12px 4px;
     border-bottom: 1px solid var(--border);
     border-left: 2px solid var(--accent);
@@ -1135,7 +1135,11 @@ import AaltoMark from "../components/AaltoMark.astro";
             ten-hour email lands.
           </p>
 
+          <!-- Home for the form. It moves into a row while that deadline is
+               being edited, the same way the dates and week-theme forms do. -->
+          <div id="dl-form-home">
           <form id="add-deadline" class="row">
+            <input type="hidden" id="dl-id" />
             <label>
               <span class="label-text">Title</span>
               <input id="dl-title" required maxlength="200" placeholder="Lifeline pitch to the cohort" />
@@ -1175,8 +1179,10 @@ import AaltoMark from "../components/AaltoMark.astro";
               <span class="label-text">Sprint week (optional)</span>
               <input id="dl-week" type="number" min="1" max="15" placeholder="2" />
             </label>
-            <button type="submit">Add deadline</button>
+            <button type="submit" id="dl-submit">Add deadline</button>
+            <button type="button" id="dl-cancel" class="secondary" hidden>Cancel</button>
           </form>
+          </div>
           <p class="message" id="dl-message" hidden></p>
 
           <div id="deadline-list"></div>
@@ -2007,6 +2013,56 @@ import AaltoMark from "../components/AaltoMark.astro";
       /* The submit handler looks this up again locally; the row buttons are
          rendered outside it and need their own reference. */
       const dlMessage = document.getElementById("dl-message");
+      const deadlineForm = document.getElementById("add-deadline");
+      const dlFormHome = document.getElementById("dl-form-home");
+      const dlId = document.getElementById("dl-id");
+      const dlSubmit = document.getElementById("dl-submit");
+      const dlCancel = document.getElementById("dl-cancel");
+
+      /* Which deadline the form is sitting in, or null when it is at home
+         adding a new one. */
+      let editingDeadlineId = null;
+
+      /*
+       * Home the form before loadDeadlines empties the list.
+       *
+       * `deadlineList.textContent = ""` drops the whole subtree, and while a
+       * row is being edited the live form is inside it — so a reload mid-edit
+       * would take the form and everything typed into it. Same hazard as the
+       * dates and week-theme lists, same one-line answer.
+       */
+      function homeDeadlineForm() {
+        if (deadlineForm.parentElement !== dlFormHome) dlFormHome.appendChild(deadlineForm);
+      }
+
+      /** Back to "add a new one", wherever the form happens to be. */
+      function resetDeadlineForm() {
+        editingDeadlineId = null;
+        dlId.value = "";
+        document.getElementById("dl-title").value = "";
+        document.getElementById("dl-description").value = "";
+        document.getElementById("dl-time").value = "";
+        document.getElementById("dl-week").value = "";
+        setDeadlineDue("");
+        dlSubmit.textContent = "Add deadline";
+        dlCancel.hidden = true;
+        homeDeadlineForm();
+      }
+
+      /*
+       * The due date is a hidden input with a custom control painting it, so
+       * writing the value is only half of it — the trigger keeps whatever text
+       * it last drew. paintTrigger lives inside initDatePicker's closure and
+       * cannot be called from here, so this does the same two things it does.
+       */
+      function setDeadlineDue(iso) {
+        const due = document.getElementById("dl-due");
+        const label = document.getElementById("dl-due-value");
+        const trigger = document.querySelector('[data-for="dl-due"] [data-dp-trigger]');
+        due.value = iso || "";
+        if (label) label.textContent = iso ? dpLabel(iso) : "Pick a date";
+        if (trigger) trigger.dataset.empty = iso ? "false" : "true";
+      }
 
 
       async function libraryApi(body) {
@@ -2383,16 +2439,28 @@ import AaltoMark from "../components/AaltoMark.astro";
         return day + " " + d + " " + mon;
       }
 
+      /* The last payload, kept so the list can be redrawn without asking the
+         server again — opening the editor on a row is a redraw, not new data,
+         and renderKeepingStill has to measure the DOM synchronously either
+         side of it. */
+      let deadlineData = null;
+
       async function loadDeadlines() {
-        let data;
         try {
           const res = await fetch("/api/deadlines?view=status");
           if (!res.ok) return;
-          data = await res.json();
+          deadlineData = await res.json();
         } catch {
           return;
         }
+        renderDeadlines();
+      }
 
+      function renderDeadlines() {
+        const data = deadlineData;
+        if (!data) return;
+
+        homeDeadlineForm();
         deadlineList.textContent = "";
         if (!data.deadlines.length) {
           const empty = document.createElement("p");
@@ -2446,6 +2514,36 @@ import AaltoMark from "../components/AaltoMark.astro";
           const actions = document.createElement("div");
           actions.className = "deadline-actions";
 
+          /*
+           * Editing, which the API has always supported and the page never
+           * offered: Archive and Delete were the only two things you could do
+           * to a deadline once it existed, so a typo in a title or a date set
+           * a day out meant deleting it and typing the whole thing again —
+           * and deleting takes every founder's completion with it.
+           */
+          const edit = document.createElement("button");
+          edit.className = "ghost";
+          edit.dataset.editDeadline = d.id;
+          edit.textContent = editingDeadlineId === d.id ? "Editing" : "Edit";
+          edit.addEventListener("click", () => {
+            dlId.value = d.id;
+            document.getElementById("dl-title").value = d.title;
+            document.getElementById("dl-description").value = d.description || "";
+            document.getElementById("dl-time").value = d.dueTime || "";
+            document.getElementById("dl-week").value = d.sprintWeek == null ? "" : String(d.sprintWeek);
+            setDeadlineDue(d.dueDate);
+            dlSubmit.textContent = "Save changes";
+            dlCancel.hidden = false;
+            say(dlMessage, "", false);
+            dlMessage.hidden = true;
+            editingDeadlineId = d.id;
+            /* The form comes to the row rather than the row sending you up to
+               the form, and the row keeps its place across the redraw. */
+            renderKeepingStill('[data-edit-deadline="' + CSS.escape(d.id) + '"]', renderDeadlines);
+            document.getElementById("dl-title").focus({ preventScroll: true });
+          });
+          actions.append(edit);
+
           const archive = document.createElement("button");
           archive.className = "ghost";
           archive.textContent = d.status === "archived" ? "Restore" : "Archive";
@@ -2487,12 +2585,25 @@ import AaltoMark from "../components/AaltoMark.astro";
             remove.disabled = false;
             if (!ok) return alert(body.error || "Could not delete this deadline.");
             say(dlMessage, "Deleted \u201c" + d.title + "\u201d. It is gone from the founders' list too.", false);
+            /* If this is the row the editor is open on, the form has to come
+               home before the redraw takes the slot it is sitting in. */
+            if (editingDeadlineId === d.id) resetDeadlineForm();
             loadDeadlines();
           });
 
           actions.append(archive, remove);
           row.append(actions);
           deadlineList.append(row);
+
+          /* The form is moved in here, under the row it belongs to. Only ever
+             one of these, because only one row can be open at a time. */
+          if (editingDeadlineId === d.id) {
+            row.classList.add("is-editing");
+            const slot = document.createElement("div");
+            slot.className = "dl-edit";
+            deadlineList.append(slot);
+            slot.appendChild(deadlineForm);
+          }
         }
       }
 
@@ -2762,8 +2873,14 @@ import AaltoMark from "../components/AaltoMark.astro";
            which field. */
         if (!due.value) return say(message, "Pick a due date.", true);
 
+        /* One form, two jobs, told apart by whether a row opened it. Editing
+           sends every field rather than a diff: the API treats an absent key
+           as "leave it alone", so clearing a description would otherwise be
+           impossible \u2014 it would read as no change rather than as empty. */
+        const editing = !!dlId.value;
         const { ok, data } = await deadlineApi({
-          action: "create",
+          action: editing ? "update" : "create",
+          ...(editing ? { id: dlId.value } : {}),
           title: title.value,
           description: description.value,
           dueDate: due.value,
@@ -2772,14 +2889,19 @@ import AaltoMark from "../components/AaltoMark.astro";
           sprintWeek: week.value === "" ? null : Number(week.value),
         });
 
-        if (!ok) return say(message, data.error || "Could not add this deadline.", true);
+        if (!ok) {
+          return say(message, data.error || (editing ? "Could not save this deadline." : "Could not add this deadline."), true);
+        }
 
-        say(message, "Added \u201c" + title.value.trim() + "\u201d.", false);
-        title.value = "";
-        description.value = "";
-        time.value = "";
-        week.value = "";
+        say(message, (editing ? "Saved \u201c" : "Added \u201c") + title.value.trim() + "\u201d.", false);
+        resetDeadlineForm();
         loadDeadlines();
+      });
+
+      dlCancel.addEventListener("click", () => {
+        resetDeadlineForm();
+        dlMessage.hidden = true;
+        renderDeadlines();
       });
 
       /*
