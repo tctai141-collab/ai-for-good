@@ -159,6 +159,23 @@ export function startSession(
     // decides whether it still means anything. A cookie outliving its session
     // simply stops authenticating.
     maxAge: SESSION_ABSOLUTE_DAYS * 24 * 60 * 60,
+    /*
+     * The same deadline again, the older way, and it is not redundant in
+     * practice.
+     *
+     * RFC 6265 says Max-Age wins where both are given, so for a browser that
+     * follows it this changes nothing. It is here for the one that reportedly
+     * does not: a founder signed into the installed iOS app, force-quit it,
+     * reopened it and was asked to sign in again — the behaviour of a session
+     * cookie, not of one with fourteen days on it. WebKit has a long history
+     * of mishandling Max-Age without Expires in home-screen web apps.
+     *
+     * Stated honestly: this is a mitigation, not a diagnosis. The other
+     * candidate is iOS never flushing the cookie to disk before the kill, which
+     * this would not fix. It costs one attribute and removes one of the two
+     * suspects, which is worth doing before twenty people sign in at once.
+     */
+    expires: new Date(Date.now() + SESSION_ABSOLUTE_DAYS * 24 * 60 * 60 * 1000),
     secure: wantsSecureCookie(request),
   });
   // Opportunistic cleanup; there is no scheduler on a single-instance deploy.

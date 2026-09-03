@@ -81,7 +81,7 @@ const ORGANIZER: Step[] = [
 const INSTALL: Step = {
   title: "Put it on your home screen",
   body:
-    "Sprint Buddy is a website, so it lives in a tab among forty others. On iPhone, tap Share and choose Add to Home Screen; on Android, open the browser menu and choose Install app. It becomes an icon like any other and opens full screen. Do it now rather than later: an installed app has its own sign-in, so it will ask for your password once more the first time you open it.",
+    "Open this in Safari or Chrome first if you tapped through from your email. Then choose Add to Home Screen \u2014 on iPhone it is under Share \u2014 and it opens like any other app. It will ask you to sign in once more: the installed app keeps its own login.",
 };
 
 /**
@@ -98,7 +98,15 @@ function installable(): boolean {
     if ((navigator as { standalone?: boolean }).standalone === true) return false;
     if (window.matchMedia("(display-mode: standalone)").matches) return false;
     /* A phone or a tablet. On a laptop there is no share sheet and no install
-       item, so the step would be about somebody else's device. */
+       item, so the step would be about somebody else's device.
+
+       This asks about the device when the real question is the browser, and
+       the gap is a live one here rather than a hypothetical: founders arrive
+       through an emailed setup link, which on a phone opens inside the mail
+       client's own webview, where the pointer is coarse and Add to Home Screen
+       does not exist. Sniffing for those webviews is a losing game, so the
+       copy opens by telling them to move to Safari or Chrome first, which is
+       true advice in that case and harmless in every other. */
     return window.matchMedia("(pointer: coarse)").matches;
   } catch {
     /* Nothing here is worth falling over for. One step fewer is the safe

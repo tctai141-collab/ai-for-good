@@ -201,7 +201,16 @@ describe("telling people it exists", () => {
   test("the walkthrough carries the instruction", () => {
     // Safari has no install prompt. Unsaid, this feature is undiscoverable.
     expect(onb).toContain("Add to Home Screen");
-    expect(onb).toContain("Install app");
+  });
+
+  test("it sends them to a browser that can actually install", () => {
+    /*
+     * Founders arrive through an emailed setup link, which on a phone opens
+     * inside the mail client's own webview — coarse pointer, no Add to Home
+     * Screen anywhere in its share sheet. Sniffing for those webviews is a
+     * losing game; saying it in the first sentence is not.
+     */
+    expect(onb).toContain("Safari or Chrome");
   });
 
   test("it warns about the second sign-in", () => {
@@ -210,7 +219,36 @@ describe("telling people it exists", () => {
      * tap on the new icon shows a login screen. Said here it is a sentence;
      * unsaid it is twenty founders thinking the app is broken on day one.
      */
-    expect(onb).toContain("ask for your password once more");
+    expect(onb).toContain("sign in once more");
+  });
+
+  test("no step can clip the only way out of the dialog", () => {
+    /*
+     * The install step is the last one, and the last step renders no Skip. A
+     * native <dialog> ignores a backdrop click and a phone has no Escape key,
+     * so if .onb clips its footer at max-height the founder is shut inside a
+     * modal with the page inert behind it. A phone in landscape is about 390px
+     * tall and gets there. It scrolls now; this is here so it keeps scrolling.
+     */
+    /* Comments stripped first: the rule carries a note explaining why it is no
+       longer `overflow: hidden`, and a check that cannot tell a prohibition
+       from its violation is not a check. */
+    const css = readFileSync("src/pages/index.astro", "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const onbRule = css.slice(css.indexOf("\n  .onb {"), css.indexOf(".onb::backdrop"));
+    expect(onbRule).toContain("max-height");
+    expect(onbRule).toContain("overflow-y: auto");
+    expect(onbRule).not.toMatch(/overflow:\s*hidden/);
+  });
+
+  test("the install step is not wildly longer than the ones around it", () => {
+    /*
+     * It was 372 characters against a previous longest of 199, which is what
+     * made the clipping certain rather than possible. Scrolling fixed the
+     * trap; this keeps the copy in family with the rest of the walkthrough.
+     */
+    const bodies = [...onb.matchAll(/body:\s*\n?\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!.length);
+    expect(bodies.length).toBeGreaterThan(5);
+    expect(Math.max(...bodies)).toBeLessThan(300);
   });
 
   test("it is added to the existing steps, not swapped in for one", () => {

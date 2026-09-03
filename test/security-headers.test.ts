@@ -65,6 +65,42 @@ describe("security headers", () => {
   });
 });
 
+describe("nothing rendered here is written down", () => {
+  /*
+   * Every response the middleware touches is server-rendered and specific to
+   * whoever asked for it. Before this, only /api/health said so and the other
+   * twenty-nine routes sent no caching directive at all, leaving it to the
+   * browser's heuristics and to whatever proxy is in front — which in
+   * production is Cloudflare, one dashboard toggle away from caching them.
+   */
+  test("an API response carrying somebody's data is not cacheable", async () => {
+    const res = await get(h, "/api/session");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  test("nor is a page", async () => {
+    // /report is a founder's own profile and /admin is the cohort; the login
+    // page is where a shared machine's next user presses Back.
+    for (const path of ["/", "/admin"]) {
+      const res = await get(h, path);
+      expect(`${path}: ${res.headers.get("cache-control")}`).toBe(`${path}: no-store`);
+    }
+  });
+
+  test("static files keep their caching", async () => {
+    /*
+     * They never reach the middleware — the node adapter serves them before
+     * Astro is involved — and they must stay cacheable or every launch of the
+     * installed app refetches the fonts. This asserts the boundary, not the
+     * header: if a future change routes static files through the middleware,
+     * no-store would land on them too and this fails.
+     */
+    const res = await get(h, "/favicon.svg");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).not.toBe("no-store");
+  });
+});
+
 describe("what reaches the browser", () => {
   const bundle = () => {
     const dir = "dist/client/_astro";
