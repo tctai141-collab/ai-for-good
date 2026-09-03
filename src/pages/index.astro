@@ -282,13 +282,13 @@ import Root from "../components/Root";
       radial-gradient(circle at 24% 48%, rgba(255, 255, 255, 0.13), transparent 18rem),
       var(--color-bg);
   }
-  /* The kinetic lattice. Sits under the page's own gradients and the sign-in
-     card, and can never intercept a click on the form.
+  /* The wave field. Sits under the page's own gradients and the sign-in card,
+     and can never intercept a click on the form.
 
      Fixed rather than absolute: the canvas is sized to the viewport, so
      anchoring it to the scrolling box would leave it misplaced the moment the
      login screen is taller than the window. */
-  .kinetic-grid {
+  .waves-field {
     position: fixed;
     inset: 0;
     z-index: -1;
