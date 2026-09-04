@@ -210,136 +210,136 @@ const ITEMS_ROUND_A: WorkingGeniusItem[] = [
   {
     id: "wi-a",
     round: "a",
-    prompt: "An unplanned afternoon opens up. Where does your attention actually go?",
+    prompt: "A free afternoon, nothing booked. What do you do with it?",
     options: [
-      { id: "wonder", label: "Circling a question about the business you have not had time to sit with." },
-      { id: "invention", label: "Sketching something that does not exist yet, to see whether it could." },
+      { id: "wonder", label: "Sit with a question that has been nagging me." },
+      { id: "invention", label: "Come up with something new." },
     ],
   },
   {
     id: "wd-a",
     round: "a",
-    prompt: "Someone drops a finished plan in front of you. What do you actually do first?",
+    prompt: "Someone hands you a finished plan. What do you do first?",
     options: [
-      { id: "wonder", label: "Ask what larger problem this is really meant to solve." },
-      { id: "discernment", label: "Start feeling out which parts of it will not hold." },
+      { id: "wonder", label: "I ask what problem it is really for." },
+      { id: "discernment", label: "I look for the parts that will not work." },
     ],
   },
   {
     id: "wg-a",
     round: "a",
-    prompt: "The room has gone quiet on something difficult. What do you find yourself doing?",
+    prompt: "The room goes quiet on something hard. What do you do?",
     options: [
-      { id: "wonder", label: "Naming the question everyone is circling and nobody has said." },
-      { id: "galvanizing", label: "Getting people moving again on something concrete." },
+      { id: "wonder", label: "I say the question nobody has asked." },
+      { id: "galvanizing", label: "I get people moving again." },
     ],
   },
   {
     id: "we-a",
     round: "a",
-    prompt: "A teammate is stuck and says so. What do you end up doing?",
+    prompt: "A teammate says they are stuck. What do you do?",
     options: [
-      { id: "wonder", label: "Working out with them what they are actually solving for." },
-      { id: "enablement", label: "Taking a piece of it off their plate so they can move." },
+      { id: "wonder", label: "I help them work out what they are really solving." },
+      { id: "enablement", label: "I take part of it off their hands." },
     ],
   },
   {
     id: "wt-a",
     round: "a",
-    prompt: "There is an open question on your list and an unfinished task. It is four in the afternoon. Which do you actually pick up?",
+    prompt: "An open question, and a job to finish. Which do you pick up?",
     options: [
       { id: "wonder", label: "The question." },
-      { id: "tenacity", label: "The task." },
+      { id: "tenacity", label: "The job." },
     ],
   },
   {
     id: "id-a",
     round: "a",
-    prompt: "Three half-formed concepts are on the table. What do you end up contributing?",
+    prompt: "Three rough ideas are on the table. What do you add?",
     options: [
-      { id: "invention", label: "A fourth one, genuinely different from the other three." },
-      { id: "discernment", label: "A read on which of the three is actually ready." },
+      { id: "invention", label: "I add a fourth, different from all of them." },
+      { id: "discernment", label: "I say which of the three is any good." },
     ],
   },
   {
     id: "ig-a",
     round: "a",
-    prompt: "The idea is good and everyone agrees. What do you do next without being asked?",
+    prompt: "Everyone likes the idea. What do you do next?",
     options: [
-      { id: "invention", label: "Push it further, into something sharper and stranger." },
-      { id: "galvanizing", label: "Start getting people behind it." },
+      { id: "invention", label: "Make it better." },
+      { id: "galvanizing", label: "Get people behind it." },
     ],
   },
   {
     id: "ie-a",
     round: "a",
-    prompt: "The team is halfway through building it and it is going slowly. What do you actually do?",
+    prompt: "The build is going slowly. What do you do?",
     options: [
-      { id: "invention", label: "Start reworking the approach, because there is a better one." },
-      { id: "enablement", label: "Get people what they need to keep going with this one." },
+      { id: "invention", label: "I look for a better way to do it." },
+      { id: "enablement", label: "I get people what they need to keep going." },
     ],
   },
   {
     id: "it-a",
     round: "a",
-    prompt: "Two jobs need doing and you can only take one. Which do you take?",
+    prompt: "Two jobs, and you can only take one. Which do you take?",
     options: [
-      { id: "invention", label: "Working out what the thing should be." },
-      { id: "tenacity", label: "Getting the thing out of the door." },
+      { id: "invention", label: "Working out what to build." },
+      { id: "tenacity", label: "Getting it shipped." },
     ],
   },
   {
     id: "dg-a",
     round: "a",
-    prompt: "The team is split between two options and the meeting is nearly over. What do you end up doing?",
+    prompt: "The team is split and the meeting is nearly over. What do you do?",
     options: [
-      { id: "discernment", label: "Working out which one is actually right." },
-      { id: "galvanizing", label: "Getting everyone committed to one so it moves." },
+      { id: "discernment", label: "I work out which option is right." },
+      { id: "galvanizing", label: "I get everyone behind one so it moves." },
     ],
   },
   {
     id: "de-a",
     round: "a",
-    prompt: "A plan lands on your desk from someone else. What is your first move?",
+    prompt: "A plan arrives from someone else. What is your first move?",
     options: [
-      { id: "discernment", label: "Testing whether it holds up." },
-      { id: "enablement", label: "Asking the person what they need to make it work." },
+      { id: "discernment", label: "I check whether it holds up." },
+      { id: "enablement", label: "I ask what they need to make it work." },
     ],
   },
   {
     id: "dt-a",
     round: "a",
-    prompt: "It is late in a project and things are ragged. Which role do you actually end up in?",
+    prompt: "Late in a project, things are ragged. Which job do you end up in?",
     options: [
-      { id: "discernment", label: "The one who spots what is off before it ships." },
-      { id: "tenacity", label: "The one who drives it over the line." },
+      { id: "discernment", label: "I catch what is wrong before it ships." },
+      { id: "tenacity", label: "I push it over the line." },
     ],
   },
   {
     id: "ge-a",
     round: "a",
-    prompt: "The team's momentum has died halfway through. What do you actually end up doing?",
+    prompt: "Momentum has died halfway through. What do you do?",
     options: [
-      { id: "galvanizing", label: "Pulling everyone together to re-align on why this matters." },
-      { id: "enablement", label: "Putting your head down and clearing whatever is blocking them." },
+      { id: "galvanizing", label: "I get everyone going again." },
+      { id: "enablement", label: "I clear whatever is blocking them." },
     ],
   },
   {
     id: "gt-a",
     round: "a",
-    prompt: "Two weeks to the demo and it is not ready. What do you find yourself doing?",
+    prompt: "Two weeks to the demo and it is not ready. What do you do?",
     options: [
-      { id: "galvanizing", label: "Getting everyone aligned and moving in the same direction." },
-      { id: "tenacity", label: "Personally making sure the remaining pieces get finished." },
+      { id: "galvanizing", label: "I rally the team." },
+      { id: "tenacity", label: "I finish the missing pieces myself." },
     ],
   },
   {
     id: "et-a",
     round: "a",
-    prompt: "The last ten percent is all that is left and everyone is tired. What happens?",
+    prompt: "The last ten percent, and everyone is tired. What happens?",
     options: [
-      { id: "enablement", label: "You back whoever is carrying it and make their part easier." },
-      { id: "tenacity", label: "You pick it up and carry it yourself." },
+      { id: "enablement", label: "I back whoever is carrying it." },
+      { id: "tenacity", label: "I carry it." },
     ],
   },
 ];
@@ -348,37 +348,37 @@ const ITEMS_ROUND_B: WorkingGeniusItem[] = [
   {
     id: "wi-b",
     round: "b",
-    prompt: "You are given a blank page and an hour. What do you actually end up doing with it?",
+    prompt: "A blank page and an hour. What do you do with it?",
     options: [
-      { id: "invention", label: "Filling it with something that was not there before." },
-      { id: "wonder", label: "Turning over what is worth putting on it at all." },
+      { id: "invention", label: "I fill it with something new." },
+      { id: "wonder", label: "I think about what is worth putting on it." },
     ],
   },
   {
     id: "wd-b",
     round: "b",
-    prompt: "You have read the same document twice. What were you actually doing on the second pass?",
+    prompt: "You read the same page twice. What were you doing?",
     options: [
-      { id: "discernment", label: "Weighing whether the answer in it is any good." },
-      { id: "wonder", label: "Following a question it opened up and does not answer." },
+      { id: "discernment", label: "I was weighing whether it is any good." },
+      { id: "wonder", label: "It opened a question I am still chasing." },
     ],
   },
   {
     id: "wg-b",
     round: "b",
-    prompt: "Monday morning, nothing forced on the calendar. What do you actually spend it on?",
+    prompt: "Monday morning, nothing in the calendar. What do you do?",
     options: [
-      { id: "galvanizing", label: "Getting everyone moving in one direction for the week." },
-      { id: "wonder", label: "Working out what the team is missing." },
+      { id: "galvanizing", label: "I get the team pointed the same way." },
+      { id: "wonder", label: "I think about what we are missing." },
     ],
   },
   {
     id: "we-b",
     round: "b",
-    prompt: "Think of a week you finished feeling good about. What had you actually been doing?",
+    prompt: "A week you finished feeling good about. What had you been doing?",
     options: [
-      { id: "enablement", label: "Being the person who made it possible for someone else to finish." },
-      { id: "wonder", label: "Noticing the thing nobody else had noticed." },
+      { id: "enablement", label: "Helping someone else get their thing done." },
+      { id: "wonder", label: "Noticing something nobody else had." },
     ],
   },
   {
@@ -386,95 +386,95 @@ const ITEMS_ROUND_B: WorkingGeniusItem[] = [
     round: "b",
     prompt: "It is Friday. What has to have happened for the week to feel worth it?",
     options: [
-      { id: "tenacity", label: "Something was closed out completely." },
-      { id: "wonder", label: "Something worth chasing was opened up." },
+      { id: "tenacity", label: "Something got finished." },
+      { id: "wonder", label: "Something interesting opened up." },
     ],
   },
   {
     id: "id-b",
     round: "b",
-    prompt: "In a review, what do people actually get from you?",
+    prompt: "In a review, what do you end up contributing?",
     options: [
-      { id: "discernment", label: "A read on what will and will not land." },
-      { id: "invention", label: "The different approach nobody had put forward." },
+      { id: "discernment", label: "A call on what will work and what will not." },
+      { id: "invention", label: "An idea nobody had put forward." },
     ],
   },
   {
     id: "ig-b",
     round: "b",
-    prompt: "You lose track of time. Which one were you doing?",
+    prompt: "You lose track of time. What were you doing?",
     options: [
-      { id: "galvanizing", label: "Getting people fired up about an idea." },
-      { id: "invention", label: "Coming up with the idea in the first place." },
+      { id: "galvanizing", label: "Getting people excited about an idea." },
+      { id: "invention", label: "Having the idea." },
     ],
   },
   {
     id: "ie-b",
     round: "b",
-    prompt: "People come to you. What do they usually come for?",
+    prompt: "People come to you. What for?",
     options: [
-      { id: "enablement", label: "Help getting something over a hump." },
-      { id: "invention", label: "A way of doing it that nobody has tried." },
+      { id: "enablement", label: "Help getting past something." },
+      { id: "invention", label: "A different way to do it." },
     ],
   },
   {
     id: "it-b",
     round: "b",
-    prompt: "You have been at the same thing for three hours without noticing. What is it?",
+    prompt: "Three hours gone without noticing. What were you doing?",
     options: [
-      { id: "tenacity", label: "Grinding out the last details until it is actually done." },
-      { id: "invention", label: "Making something up that did not exist this morning." },
+      { id: "tenacity", label: "Finishing the last details." },
+      { id: "invention", label: "Making something that was not there this morning." },
     ],
   },
   {
     id: "dg-b",
     round: "b",
-    prompt: "A decision gets made in a meeting. Afterwards, what was your actual contribution?",
+    prompt: "A decision got made in a meeting. What had you contributed?",
     options: [
-      { id: "galvanizing", label: "The push that got it moving." },
-      { id: "discernment", label: "The read on what was actually true." },
+      { id: "galvanizing", label: "I got it moving." },
+      { id: "discernment", label: "I said what was true." },
     ],
   },
   {
     id: "de-b",
     round: "b",
-    prompt: "Something worked. Which part of it are you actually pleased about?",
+    prompt: "Something worked. What do you feel best about?",
     options: [
-      { id: "enablement", label: "That you were the reason it worked." },
-      { id: "discernment", label: "That you had called it correctly." },
+      { id: "enablement", label: "That I helped make it happen." },
+      { id: "discernment", label: "That I called it right." },
     ],
   },
   {
     id: "dt-b",
     round: "b",
-    prompt: "A hard project needs someone in each of these roles and you take one. Which do you end up in?",
+    prompt: "A hard project. Which do you take on?",
     options: [
-      { id: "tenacity", label: "Making certain it gets finished." },
-      { id: "discernment", label: "Making sure the judgment calls are right." },
+      { id: "tenacity", label: "Making sure it gets finished." },
+      { id: "discernment", label: "Making sure the calls are right." },
     ],
   },
   {
     id: "ge-b",
     round: "b",
-    prompt: "Think of a team you actually helped. What did you do?",
+    prompt: "A team you helped. What had you done?",
     options: [
-      { id: "enablement", label: "Took the friction out of the way." },
-      { id: "galvanizing", label: "Put urgency into the room." },
+      { id: "enablement", label: "Cleared things out of their way." },
+      { id: "galvanizing", label: "Brought the energy." },
     ],
   },
   {
     id: "gt-b",
     round: "b",
-    prompt: "A long push, week six of eight. What are you actually doing?",
+    prompt: "Week six of eight on a long push. What do you do?",
     options: [
-      { id: "tenacity", label: "Still going, keeping the effort up to the end." },
-      { id: "galvanizing", label: "Getting the energy back into the room." },
+      { id: "tenacity", label: "I am still at it." },
+      { id: "galvanizing", label: "I am getting the energy back up." },
     ],
   },
   {
     id: "et-b",
     round: "b",
-    prompt: "It is over. What do you actually check first?",
+    prompt: "It is finished. What do you check first?",
     options: [
       { id: "tenacity", label: "That it got done." },
       { id: "enablement", label: "That everyone had what they needed." },
@@ -537,8 +537,18 @@ export const INSTRUMENT_PREAMBLE =
  *        order are untouched, so afs-1 rows still score identically and remain
  *        comparable; what changed is what the founder was asked, which is
  *        enough to make the two banks different instruments.
+ * afs-3: the same items in plainer words. afs-2 read as written rather than
+ *        spoken — "circling a question you have not had time to sit with",
+ *        "something sharper and stranger" — and twenty of its thirty prompts
+ *        opened with some version of "what do you actually do", which is a tic
+ *        rather than a question. The behavioural framing afs-2 exists for is
+ *        kept, because a tester read the bank before it as aspirational and
+ *        answered for the person they would like to be; it is carried by
+ *        "what do you do" and "what were you doing" now instead of by the word
+ *        actually. Pairings, ids and order untouched again, so afs-1 and afs-2
+ *        rows still score identically.
  */
-export const INSTRUMENT_VERSION = "afs-2";
+export const INSTRUMENT_VERSION = "afs-3";
 
 /* ---------------------------------------------------------------- scoring -- */
 

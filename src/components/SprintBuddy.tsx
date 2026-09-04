@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import { checkinLocked, checkinOpensLabel } from "../lib/checkin-window";
+import { workingGeniusLocked, workingGeniusOpensLabel } from "../lib/working-genius-window";
 import BugReport from "./BugReport";
 import ProgrammeTimeline from "./ProgrammeTimeline";
 import Wishes from "./Wishes";
@@ -2383,7 +2384,10 @@ function Reflections({
    * said yes, including a retake: consent is to a particular arrangement, and
    * the arrangement is the same every time it is asked.
    */
-  const askWorkingGenius = () => setWgConsenting(true);
+  /* Held closed until the cohort has been shown what it is. The server
+     refuses the save as well — this only spares them thirty questions and an
+     error at the end of them. */
+  const askWorkingGenius = () => { if (!workingGeniusLocked()) setWgConsenting(true); };
 
   const startWorkingGenius = () => {
     setWgConsenting(false);
@@ -2509,7 +2513,15 @@ function Reflections({
             </h2>
           </div>
           {wgResult ? (
-            canRetake ? (
+            workingGeniusLocked() ? (
+              /* Before anything else, including the retake window. Somebody
+                 holding a result from the earlier six-question version is
+                 inside a retake window right now, and the honest answer to
+                 "when can I do this" is the hold, not the window after it. */
+              <span style={{ fontSize: 12.5, color: C.faint, textAlign: "right", lineHeight: 1.45 }}>
+                Opens {workingGeniusOpensLabel()}
+              </span>
+            ) : canRetake ? (
               <button
                 type="button"
                 onClick={askWorkingGenius}
@@ -2536,7 +2548,9 @@ function Reflections({
             )
           ) : (
             <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-              Thirty either-or questions. About six minutes.
+              {workingGeniusLocked()
+                ? `Opens ${workingGeniusOpensLabel()}.`
+                : "Thirty either-or questions. About six minutes."}
             </span>
           )}
         </div>
@@ -2735,15 +2749,25 @@ function Reflections({
               </p>
             )}
             <div>
-              <button
-                type="button"
-                className="btn-metal"
-                onClick={askWorkingGenius}
-                disabled={!userEmail}
-                style={{ padding: "12px 22px", fontSize: 14.5, fontWeight: 700 }}
-              >
-                {wgLegacy ? "Retake it properly" : "Start"}
-              </button>
+              {workingGeniusLocked() ? (
+                /* Not hidden. Somebody told this is part of the programme, who
+                   cannot find it, concludes it is broken — and the date is the
+                   answer to the question they would otherwise have to ask. */
+                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: C.faint }}>
+                  Opens {workingGeniusOpensLabel()}, once the cohort has been
+                  through what the six types are.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-metal"
+                  onClick={askWorkingGenius}
+                  disabled={!userEmail}
+                  style={{ padding: "12px 22px", fontSize: 14.5, fontWeight: 700 }}
+                >
+                  {wgLegacy ? "Retake it properly" : "Start"}
+                </button>
+              )}
             </div>
           </div>
         )}
