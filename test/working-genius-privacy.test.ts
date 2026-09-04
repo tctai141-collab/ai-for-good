@@ -292,10 +292,25 @@ describe("the printable report", () => {
     const after = h.db().query("SELECT COUNT(*) AS n FROM working_genius").get() as { n: number };
     expect(after.n).toBe(before.n);
 
+    /*
+     * A broad sweep for anything that looks like a stored document, because
+     * the leak this guards against would arrive as a new table nobody
+     * mentioned rather than as a change to an existing one.
+     *
+     * bug_reports is excluded by name. It holds what somebody typed about the
+     * software being broken and has no connection to a working-style result —
+     * it only matches because "report" is a word two unrelated features use.
+     * The exception is one name, not a loosened pattern, so the next table
+     * called something_report still fails this.
+     */
     const tables = h.db()
       .query("SELECT name FROM sqlite_master WHERE type = 'table'")
       .all() as Array<{ name: string }>;
-    expect(tables.map((t) => t.name).filter((n) => /report|pdf/i.test(n))).toEqual([]);
+    const documentish = tables
+      .map((t) => t.name)
+      .filter((n) => /report|pdf/i.test(n))
+      .filter((n) => n !== "bug_reports");
+    expect(documentish).toEqual([]);
   });
 });
 

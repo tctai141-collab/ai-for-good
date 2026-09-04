@@ -620,6 +620,17 @@ export function deleteUser(email: string): void {
       { $email: email },
     );
     db.run("DELETE FROM book_loans WHERE user_email = $email", { $email: email });
+    /*
+     * Bug reports outlive their reporter, so erasure has to reach into them
+     * rather than take them.
+     *
+     * from_email is SET NULL by the constraint, which removes the identifier.
+     * from_name is an ordinary column and the constraint knows nothing about
+     * it, so without this line the row would keep saying who filed it after
+     * the account was erased — the name is the part that makes it personal
+     * data. The report and everything technical in it stays.
+     */
+    db.run("UPDATE bug_reports SET from_name = '' WHERE from_email = $email", { $email: email });
     // sessions and invites cascade, but being explicit costs nothing and keeps
     // the intent readable next to the rest.
     db.run("DELETE FROM sessions WHERE user_email = $email", { $email: email });
@@ -1777,6 +1788,92 @@ export function addWishReply(
   );
   // Answering is what marks it answered; there is no separate button to forget.
   db.run("UPDATE wishes SET status = 'answered' WHERE id = $wish", { $wish: wishId });
+}
+
+// --- bug reports ---
+
+export const BUG_STATUSES = ["new", "fixing", "done", "wont_fix", "need_info"] as const;
+export type BugStatus = (typeof BUG_STATUSES)[number];
+
+export type BugReportRow = {
+  id: string;
+  /** Null once the reporter's account has been erased. The report stays. */
+  fromEmail: string | null;
+  fromName: string;
+  body: string;
+  page: string;
+  userAgent: string;
+  status: BugStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Every report, in the order somebody triaging wants them.
+ *
+ * Untriaged first, then whatever is still open, and the closed ones last —
+ * the same shape as listWishesFor, which sorts answered wishes below the rest
+ * rather than filtering them out. Newest first inside each band.
+ *
+ * from_name is stored on the row rather than joined from users, because the
+ * whole point of SET NULL is that the report outlives the account. A join
+ * would give back an empty name for exactly the rows where the column is
+ * doing its job.
+ */
+export function listBugReports(): BugReportRow[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT id, from_email AS fromEmail, from_name AS fromName, body,
+              page, user_agent AS userAgent, status,
+              created_at AS createdAt, updated_at AS updatedAt
+         FROM bug_reports
+        ORDER BY status != 'new',
+                 status IN ('done', 'wont_fix'),
+                 created_at DESC`,
+    )
+    .all() as BugReportRow[];
+}
+
+export function createBugReport(
+  id: string, fromEmail: string, fromName: string, body: string, page: string, userAgent: string,
+): void {
+  const db = getDb();
+  db.run(
+    `INSERT INTO bug_reports (id, from_email, from_name, body, page, user_agent)
+     VALUES ($id, $from, $name, $body, $page, $ua)`,
+    { $id: id, $from: fromEmail, $name: fromName, $body: body.trim(), $page: page, $ua: userAgent },
+  );
+}
+
+export function getBugReport(id: string): BugReportRow | null {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT id, from_email AS fromEmail, from_name AS fromName, body,
+              page, user_agent AS userAgent, status,
+              created_at AS createdAt, updated_at AS updatedAt
+         FROM bug_reports WHERE id = $id`,
+    )
+    .get({ $id: id }) as BugReportRow | null;
+}
+
+/** Moves one report, and stamps when it moved. */
+export function setBugStatus(id: string, status: BugStatus): void {
+  const db = getDb();
+  db.run(
+    "UPDATE bug_reports SET status = $status, updated_at = datetime('now') WHERE id = $id",
+    { $id: id, $status: status },
+  );
+}
+
+/** How many this person has filed since a moment. Drives the rate limit. */
+export function countBugReportsSince(email: string, isoTimestamp: string): number {
+  const db = getDb();
+  const row = db
+    .query("SELECT COUNT(*) AS n FROM bug_reports WHERE from_email = $email AND created_at >= $since")
+    .get({ $email: email, $since: isoTimestamp }) as { n: number };
+  return row.n;
 }
 
 export type ProgrammeEventRow = {

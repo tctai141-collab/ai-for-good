@@ -23,6 +23,7 @@ sees it.
 | Working-style assessment: your thirty answers, scores and bands | Your own reflection. **Nobody else can read it, including organizers** | Until you retake it, or the account goes |
 | Session records | Staying signed in. Stored as SHA-256, never the cookie value | 24h idle / 14d absolute, then purged |
 | Invite and reset tokens | Account setup. Stored as SHA-256 | 14 days, single use |
+| Bug reports you file | Fixing the software. Includes the screen you were on and which browser you used | Life of the deployment. Your name and the link to your account are removed when the account goes; the description of the fault stays |
 | Admin audit log | Accountability for organizer actions, including reading a shared conversation | Life of the deployment |
 
 **Not held:** payment details, location, tracking or analytics cookies, IP
@@ -109,9 +110,19 @@ came from.
 
 - **A copy of your data** — `GET /api/account` returns everything held about
   you as JSON. No credentials, nobody else's data.
-- **Deletion** — from your account settings, or ask an organizer. Removes you
-  from all ten tables that reference you, in one transaction, with your sessions
-  invalidated immediately.
+- **Deletion** — from your account settings, or ask an organizer. Everything
+  that is *about* you goes, in one transaction, with your sessions invalidated
+  immediately: conversations, check-ins, decisions, visits, your working-style
+  answers, deadline completions, wishes, loans and tokens.
+
+  Three things are records of something other than you, and those survive with
+  every link to you removed rather than being destroyed: a book you added to
+  the office shelf, a programme event you created, and a bug you reported. In
+  each case your name and the reference to your account are cleared and the
+  thing itself remains — the shelf keeps the book, the calendar keeps the
+  session, and the team keeps the knowledge that something is broken. Anything
+  you typed into a bug report stays with it, so do not put anything personal in
+  one.
 - **Correction, objection, complaint** — email the address above. You may also
   complain to the Finnish Data Protection Ombudsman (tietosuoja.fi).
 

@@ -337,6 +337,41 @@ Founder Sprint and this was addressed to you.`,
   });
 }
 
+/**
+ * Tells the organizers something is broken.
+ *
+ * The screen and the browser are in the email rather than only in the admin
+ * tab, because the first question anybody asks about a bug report is "where,
+ * and on what" and the answer being one click away is not the same as it
+ * being in front of you. They are also the two lines that decide whether it is
+ * worth opening a laptop now or after lunch.
+ *
+ * Both came from the reporter's browser. They are printed as received and
+ * nothing here reads them.
+ */
+export function sendBugReportEmail(
+  to: string, fromName: string, body: string, page: string, userAgent: string, link: string,
+): Promise<void> {
+  const context = [
+    page ? `Screen: ${page}` : "",
+    userAgent ? `Browser: ${userAgent}` : "",
+  ].filter(Boolean).join("\n");
+
+  return send({
+    to,
+    subject: `${fromName} reported a bug`,
+    text: `${fromName} reported this through Sprint Buddy:
+
+${body}
+${context ? `\n${context}\n` : ""}
+Triage it here: ${link}
+
+---
+You are receiving this because you are an organizer on the Aalto Founder
+Sprint.`,
+  });
+}
+
 /** Tells a founder their wish was answered. */
 export function sendWishReplyEmail(
   to: string, answeredBy: string, body: string, link: string,
