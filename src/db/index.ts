@@ -2080,6 +2080,30 @@ export function recordReminder(deadlineId: string, userEmail: string, kind: Remi
   );
 }
 
+/**
+ * The founders who have ticked one off, newest first by name.
+ *
+ * The mirror of foundersBehindOn, and the half that was missing: the admin
+ * list could say how many had done it and name only the ones who had not,
+ * which answers "who do I chase" and not "did the person I just spoke to
+ * actually do it".
+ *
+ * Task status only. This joins completions to names and never touches
+ * anything a founder wrote, which is the same line foundersBehindOn holds.
+ */
+export function foundersDoneOn(deadlineId: string): { email: string; name: string }[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT u.email, u.name
+       FROM users u
+       JOIN deadline_completions c ON c.user_email = u.email
+       WHERE u.role = 'founder' AND c.deadline_id = $id
+       ORDER BY u.name ASC`,
+    )
+    .all({ $id: deadlineId }) as { email: string; name: string }[];
+}
+
 export function foundersBehindOn(deadlineId: string): { email: string; name: string }[] {
   const db = getDb();
   return db

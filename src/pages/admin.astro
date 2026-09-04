@@ -363,6 +363,24 @@ import AaltoMark from "../components/AaltoMark.astro";
         display: flex;
         align-items: center;
       }
+      .dl-tally { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; }
+      .dl-who summary {
+        cursor: pointer; list-style: none;
+        display: inline-flex; align-items: center; gap: 6px;
+        min-height: 24px; font-size: 0.8125rem; color: var(--muted);
+      }
+      .dl-who summary::-webkit-details-marker { display: none; }
+      /* A tick and a hollow ring rather than two words: the counts are the
+         thing being read, and the mark says which is which at a glance. */
+      .dl-who.is-done summary::before { content: "\2713"; color: var(--ok); font-weight: 800; }
+      .dl-who.is-behind summary::before { content: "\25CB"; color: var(--muted); }
+      .dl-who summary:hover { color: var(--sub); }
+      .dl-who summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+      .dl-names {
+        margin: 6px 0 0; max-width: 80ch;
+        font-size: 0.8125rem; line-height: 1.6; color: var(--muted);
+        overflow-wrap: anywhere;
+      }
       .deadline-actions { margin-top: 8px; }
       /* ── The library table ──
          This was a stack of divs: the borrower's name, the due date and five
@@ -2557,17 +2575,42 @@ import AaltoMark from "../components/AaltoMark.astro";
           head.append(title, meta, count);
           row.append(head);
 
-          if (d.behind.length > 0 && d.status === "active") {
+          /*
+           * Both lists, side by side, and both openable.
+           *
+           * Only the people who had *not* done it were ever named. That
+           * answers "who do I chase" and leaves the other question — did the
+           * person I just spoke to actually tick it off — needing a count on
+           * your fingers. The two are the same fact from opposite ends and
+           * both belong here.
+           *
+           * Shown for archived deadlines too. The chase is over by then, but
+           * who finished it is the record of what happened, which is the
+           * reason archive keeps completions rather than dropping them.
+           *
+           * textContent throughout, so a name is text and never markup.
+           */
+          const tally = document.createElement("div");
+          tally.className = "dl-tally";
+
+          const nameList = function (label, people, tone) {
+            if (!people.length) return null;
             const details = document.createElement("details");
+            details.className = "dl-who is-" + tone;
             const summary = document.createElement("summary");
-            summary.textContent = d.behind.length + " not done yet";
+            summary.textContent = people.length + " " + label;
             const names = document.createElement("p");
-            names.className = "note";
-            names.style.margin = "6px 0 0";
-            names.textContent = d.behind.map((f) => f.name).join(", ");
+            names.className = "dl-names";
+            names.textContent = people.map((f) => f.name).join(", ");
             details.append(summary, names);
-            row.append(details);
-          }
+            return details;
+          };
+
+          const doneList = nameList("done", d.done || [], "done");
+          const behindList = nameList("not done yet", d.behind || [], "behind");
+          if (doneList) tally.append(doneList);
+          if (behindList) tally.append(behindList);
+          if (tally.children.length) row.append(tally);
 
           const actions = document.createElement("div");
           actions.className = "deadline-actions";

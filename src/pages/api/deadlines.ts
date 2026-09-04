@@ -6,6 +6,7 @@ import {
   deadlineCompletionCounts,
   deleteDeadline,
   foundersBehindOn,
+  foundersDoneOn,
   getDeadline,
   listActiveDeadlines,
   listAllDeadlines,
@@ -126,7 +127,16 @@ export const GET: APIRoute = async ({ cookies, request }) => {
           sprintWeek: d.sprint_week,
           status: d.status,
           doneCount: counts[d.id] ?? 0,
-          // Names only — never anything they wrote.
+          /*
+           * Both halves, named. The count said how many were done and the list
+           * named only those who were not, which answers "who do I chase" and
+           * leaves "did the person I just spoke to actually tick it off"
+           * unanswerable without counting.
+           *
+           * Names only — never anything they wrote. Same line as before,
+           * drawn around a second list.
+           */
+          done: foundersDoneOn(d.id).map((f) => ({ email: f.email, name: f.name })),
           behind: foundersBehindOn(d.id).map((f) => ({ email: f.email, name: f.name })),
         })),
       });

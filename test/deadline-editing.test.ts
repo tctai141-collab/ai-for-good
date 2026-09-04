@@ -79,8 +79,13 @@ describe("the list an organizer edits from carries everything the form needs", (
      */
     const [row] = await statusList();
     expect(Object.keys(row!).sort()).toEqual(
-      ["behind", "description", "doneCount", "dueDate", "dueTime", "id", "sprintWeek", "status", "title"],
+      ["behind", "description", "done", "doneCount", "dueDate", "dueTime", "id", "sprintWeek", "status", "title"],
     );
+    /* `done` joined `behind` deliberately: the list named only the founders
+       who had *not* ticked it off, so an organizer could see who to chase and
+       not who had already finished. It is the same class of fact as `behind` —
+       names and a tick — and this assertion exists so that adding one is a
+       decision somebody made rather than something that arrived. */
   });
 });
 
