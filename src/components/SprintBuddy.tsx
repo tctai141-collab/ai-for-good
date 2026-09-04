@@ -4114,9 +4114,10 @@ ${OSK_CSS}
     gap: 8px;
     min-width: 0;
   }
-  /* Only the first row shares its line with the expand-sidebar button, which
-     floats over this corner. The deadline row below it gets the full width. */
-  .mobile-actions-row:first-child { padding-left: 48px; }
+  /* This row used to start 48px in, to clear the expand-sidebar button that
+     floated over the corner. That button is in the rail now and this strip
+     already begins after the rail, so the indent was holding space against
+     nothing and leaving the check-in pill hanging in from the edge. */
 }
 .mobile-actions-checkin {
   flex: 0 0 auto;
@@ -4205,16 +4206,28 @@ ${OSK_CSS}
   0%, 100% { opacity: 0.45; transform: scale(0.85); }
   50%      { opacity: 1;    transform: scale(1.15); }
 }
-@media (max-width: 700px) {
-  .sidebar-collapse-button {
-    position: fixed!important;
-    top: 12px!important;
-    left: 12px!important;
-    z-index: 80!important;
-    background: var(--surface-card)!important;
-    opacity: 1!important;
-  }
-}
+/*
+ * There was a rule here pinning .sidebar-collapse-button to the top-left
+ * corner of the viewport on a phone — position: fixed, z-index: 80.
+ *
+ * It belonged to a design that no longer exists. The sidebar used to collapse
+ * to zero width, which left nothing on screen to reopen it with, so the button
+ * was lifted out of the layout and floated over the page. The rail replaced
+ * that: below 700px the sidebar collapses to a 48px column and this button is
+ * the first thing in it, which is why the comment on railWidth says it "cannot
+ * go back to zero width". The floating rule survived the redesign.
+ *
+ * What it did on a phone: the button is 40px wide and was pinned at left 12,
+ * so it spanned 12–52px across a rail that ends at 48 — over the rail, across
+ * the edge of the content, and above all of it at z-index 80. Reported as the
+ * cohort view having a button sitting on top of everything, and organizers saw
+ * it worst because MobileActions renders for founders only, so nothing else on
+ * their screen made room for it.
+ *
+ * Nothing replaces it. Measured with the rail rendering: the button is
+ * position: relative, sits wholly inside the sidebar, and main starts after
+ * it — which is what it should have been doing all along.
+ */
 @media (prefers-reduced-motion: reduce) {
   .pulse-dot, .rise { animation: none!important; }
 }
