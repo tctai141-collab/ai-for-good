@@ -29,7 +29,7 @@ const MAX_DESCRIPTION = 2_000;
  * The rate limit above slows a loop down; this stops it. Deadlines already
  * carried a cap for the same reason — the database is a file on a 1 GB disk,
  * and unbounded rows from a stolen organizer session is the cheapest way to
- * take the whole thing down. A fifteen-week programme with four things a day
+ * take the whole thing down. A thirteen-week programme with four things a day
  * would not reach a quarter of this.
  */
 const MAX_EVENTS = 2_000;

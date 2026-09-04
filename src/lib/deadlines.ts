@@ -99,7 +99,7 @@ export type ProgressInput = { dueDate: string; done: boolean; dueTime?: string |
  * anything already finished ahead of time, so working early raises the ratio
  * instead of lowering it.
  *
- * Counting the whole 15-week sprint would show a founder "1 of 15" in week one
+ * Counting the whole 13-week sprint would show a founder "1 of 13" in week one
  * and read as permanent failure. The cohort heatmap had exactly this bug —
  * everyone flagged as needing attention before the sprint began — and it was
  * fixed there for the same reason.

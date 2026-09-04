@@ -381,7 +381,10 @@ type CohortData = {
   mapWithheld: number;
 };
 
-const WEEKS = Array.from({ length: 15 }, (_, i) => `W${i + 1}`);
+/* Column labels for the heatmap, built from the length the server reports
+   rather than a number written here. It was a fixed 15 while the programme was
+   13, so two columns were drawn that no check-in could ever land in. */
+const weekLabels = (total: number) => Array.from({ length: total }, (_, i) => `W${i + 1}`);
 /* The cohort is loaded from /api/cohort. The hackathon build shipped eight
    hardcoded fictional founders here, complete with invented coaching notes —
    fine for a demo, misleading in front of a real operating team. */
@@ -576,11 +579,23 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
   // about; the server recomputes it properly on the next load. The increment
   // lands on the *current* sprint week — it used to always hit arc[5],
   // attributing everything to week six regardless of the date.
-  const currentWeekIndex = Math.max(0, Math.min(14, (initialData?.week ?? 1) - 1));
+  /*
+   * The arc is as long as the programme, and the programme's length lives on
+   * the server. An arc already in hand was built there, so its length is the
+   * authoritative answer; the fallback is only for a founder whose first
+   * themed sentence is also their first theme, and the server recomputes the
+   * whole set on the next load either way.
+   *
+   * This was a flat 15 while the server built 13, which would have rendered a
+   * two-cell-longer arc until the next reload.
+   */
+  const arcLength = (existing: ThemeArc[]) => existing[0]?.arc.length ?? 13;
   const bumpTheme = (name: string) => setThemes((prev) => {
+    const total = arcLength(prev);
+    const currentWeekIndex = Math.max(0, Math.min(total - 1, (initialData?.week ?? 1) - 1));
     const i = prev.findIndex((t) => t.name === name);
     if (i === -1) {
-      const arc = Array(15).fill(0);
+      const arc = Array(total).fill(0);
       arc[currentWeekIndex] = 1;
       return [...prev, { name, arc }];
     }
@@ -3408,6 +3423,10 @@ function WorkingGeniusMap({ rows, withheld }: { rows: WorkingGeniusMapRow[]; wit
 function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort: CohortData | null; loading: boolean }) {
   const teams = cohort?.teams ?? [];
   const week = cohort?.week ?? 1;
+  /* The programme's real length, from the same constant the server validates
+     against. TOTAL_WEEKS lives on the server; this is the value it sends. */
+  const totalWeeks = cohort?.totalWeeks ?? 13;
+  const WEEKS = weekLabels(totalWeeks);
 
   /*
    * Whoever needs attention first, then whoever has gone quiet, then the rest
@@ -3492,7 +3511,7 @@ function Cohort({ onPick, cohort, loading }: { onPick: (t: Team) => void; cohort
         position.
       */}
       <div style={{ overflowX: "auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "11rem repeat(15, 24px)", alignItems: "center", gap: 3, minWidth: 540 }}>
+        <div style={{ display: "grid", gridTemplateColumns: `11rem repeat(${totalWeeks}, 24px)`, alignItems: "center", gap: 3, minWidth: 540 }}>
           <div />
           {WEEKS.map((w, i) => (
             <div

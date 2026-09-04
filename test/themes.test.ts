@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { get, post, startServer, twoFounders, type Harness, type Session } from "./helpers/harness";
+import { TOTAL_WEEKS } from "../src/lib/sprint-calendar";
 
 /**
  * H-5 — the Reflections page told every founder the same invented thing.
@@ -106,7 +107,10 @@ describe("themes are real, not invented", () => {
 
     expect(typeof week).toBe("number");
     const runway = themes.find((t: { name: string }) => t.name === "runway");
-    expect(runway.arc).toHaveLength(15);
+    /* As long as the programme, read from the same constant the server builds
+       it from — not a number written here that has to be remembered when the
+       cohort's dates change. */
+    expect(runway.arc).toHaveLength(TOTAL_WEEKS);
 
     // Everything was written now, so all the weight sits in the current week —
     // and specifically not in index 5, which the old bumpTheme always used.

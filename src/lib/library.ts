@@ -19,7 +19,7 @@ import { dueInstant } from "./deadlines";
  * Four weeks.
  *
  * Long enough to actually read a business book alongside a sprint, short
- * enough that it comes back inside the fifteen-week programme. Organizers can
+ * enough that it comes back inside the thirteen-week programme. Organizers can
  * move any individual loan's date; this is only where it starts.
  */
 export const LOAN_DAYS = 28;
