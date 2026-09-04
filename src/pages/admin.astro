@@ -1177,6 +1177,8 @@ import AaltoMark from "../components/AaltoMark.astro";
             </label>
             <label>
               <span class="label-text">Sprint week (optional)</span>
+              <!-- max is set from the programme length once /api/programme answers; the
+                   attribute here is only a floor for the moment before that lands. -->
               <input id="dl-week" type="number" min="1" max="15" placeholder="2" />
             </label>
             <button type="submit" id="dl-submit">Add deadline</button>
@@ -3081,7 +3083,7 @@ import AaltoMark from "../components/AaltoMark.astro";
          *
          * The list showed the weeks that had something in them, so the way to
          * fill in week nine was to notice it was missing, scroll back up and
-         * pick it out of a dropdown. A fifteen-week programme has fifteen rows
+         * pick it out of a dropdown. A thirteen-week programme has thirteen rows
          * whether or not anybody has written them yet; the empty ones say so
          * and open the same editor.
          */
@@ -3135,6 +3137,11 @@ import AaltoMark from "../components/AaltoMark.astro";
         if (!res.ok) return;
         const data = await res.json();
         totalWeeks = data.totalWeeks || 15;
+        /* The deadline form's week ceiling is the programme's length. Left at a
+           hard 15 it accepted weeks the sprint does not have, and the server
+           then refused them with a message naming a different number. */
+        const weekInput = document.getElementById("dl-week");
+        if (weekInput) weekInput.max = String(totalWeeks);
         programmeWeeks = data.weeks || [];
 
         if (!prWeek.options.length) {
@@ -3426,7 +3433,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           return;
         }
 
-        // Grouped by month so a fifteen-week programme is scannable rather than
+        // Grouped by month so a thirteen-week programme is scannable rather than
         // ninety undifferentiated rows.
         const months = [];
         for (const entry of programmeEvents) {

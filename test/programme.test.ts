@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createFounder, createOrganizer, get, post, startServer, type Harness, type Session } from "./helpers/harness";
+import { TOTAL_WEEKS } from "../src/lib/sprint-calendar";
 
 /**
  * The programme, and what the advisor is told about it.
@@ -188,7 +189,7 @@ describe("what reaches the advisor once the sprint is running", () => {
   test("the current week's content is given, and only that week's", async () => {
     const call = await runningPrompt();
     expect(call.system).toContain(PROGRAMME_HEADER);
-    expect(call.system).toContain("Week 2 of 15");
+    expect(call.system).toContain(`Week 2 of ${TOTAL_WEEKS}`);
     expect(call.system).toContain("Draft the interview guide");
     // Week 1 was saved in the other harness, but even so: one week at a time.
     expect(call.system).not.toContain("Orientation");

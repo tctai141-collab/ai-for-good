@@ -94,7 +94,7 @@ send them individually — never to a shared channel.
 
 ## Running the sprint
 
-**`SPRINT_WEEK`** tells the advisor where the cohort is in the 15-week
+**`SPRINT_WEEK`** tells the advisor where the cohort is in the 13-week
 programme, and it shapes what the AI says. Update it in **Environment** each
 week — it defaults to `1` and does not advance by itself.
 

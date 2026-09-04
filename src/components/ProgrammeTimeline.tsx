@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
  *
  *   The daily scheduler was the wrong shape entirely. It lays out one day in
  *   hourly rows from 6am to 8pm — fifteen empty slots per day, times ninety
- *   days, to show the four things that are actually on. A fifteen-week
+ *   days, to show the four things that are actually on. A thirteen-week
  *   programme is sparse; an hour grid renders mostly nothing. The month grid
  *   and the list, from the second component, are the two views that fit, and
  *   they are the two built here.
@@ -124,7 +124,8 @@ export function timeLabel(event: ProgrammeEvent): string {
 export default function ProgrammeTimeline({ today = isoDay(new Date()) }: { today?: string }) {
   const [events, setEvents] = useState<ProgrammeEvent[] | null>(null);
   const [startDate, setStartDate] = useState<string | null>(null);
-  const [totalWeeks, setTotalWeeks] = useState(15);
+  /* Only until /api/programme answers, which it does on mount. */
+  const [totalWeeks, setTotalWeeks] = useState(13);
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<"timeline" | "calendar">("timeline");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -140,7 +141,7 @@ export default function ProgrammeTimeline({ today = isoDay(new Date()) }: { toda
         setEvents((eventData.events as ProgrammeEvent[]) ?? []);
         if (weekData) {
           setStartDate((weekData.startDate as string | null) ?? null);
-          setTotalWeeks((weekData.totalWeeks as number) ?? 15);
+          setTotalWeeks((weekData.totalWeeks as number) ?? 13);
         }
       })
       .catch(() => { if (live) setFailed(true); });

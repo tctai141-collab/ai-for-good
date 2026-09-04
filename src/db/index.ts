@@ -1914,7 +1914,7 @@ export function upsertProgrammeWeek(row: ProgrammeWeekRow): void {
  * upsertProgrammeWeek above already deletes when every field comes in blank,
  * and that stays — but it is not something anybody can find. It was the only
  * way to remove a week, so the admin page had no Remove button on any of the
- * fifteen rows and clearing one meant emptying five fields and pressing Save
+ * thirteen rows and clearing one meant emptying five fields and pressing Save
  * without being told that would do it. Saying it plainly costs one statement.
  */
 export function deleteProgrammeWeek(week: number): void {

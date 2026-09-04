@@ -16,6 +16,7 @@ import {
 } from "../../db/index";
 import { canReadCohort, getSessionUser } from "../../lib/auth";
 import { groupFor, progressFor } from "../../lib/deadlines";
+import { TOTAL_WEEKS } from "../../lib/sprint-calendar";
 import { reportError } from "../../lib/errors";
 import { cap } from "../../lib/limits";
 
@@ -79,7 +80,8 @@ function validDate(value: unknown): string | null {
 function validWeek(value: unknown): number | null | undefined {
   if (value === null || value === undefined || value === "") return null;
   const week = Number(value);
-  if (!Number.isInteger(week) || week < 1 || week > 15) return undefined; // invalid
+  // The bound is the programme length, not a number typed in twice.
+  if (!Number.isInteger(week) || week < 1 || week > TOTAL_WEEKS) return undefined; // invalid
   return week;
 }
 
@@ -216,7 +218,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         }
 
         const sprintWeek = validWeek(body.sprintWeek);
-        if (sprintWeek === undefined) return err("Sprint week must be between 1 and 15.");
+        if (sprintWeek === undefined) return err(`Sprint week must be between 1 and ${TOTAL_WEEKS}.`);
 
         // id, created_at and created_by are all set server-side.
         const created = createDeadline(
@@ -264,7 +266,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         }
         if (body.sprintWeek !== undefined) {
           const week = validWeek(body.sprintWeek);
-          if (week === undefined) return err("Sprint week must be between 1 and 15.");
+          if (week === undefined) return err(`Sprint week must be between 1 and ${TOTAL_WEEKS}.`);
           fields.sprintWeek = week;
         }
         if (body.status !== undefined) {

@@ -1,5 +1,5 @@
 /**
- * Where the cohort is in the 15-week sprint.
+ * Where the cohort is in the sprint.
  *
  * Prefers SPRINT_START_DATE (an ISO date, e.g. 2026-09-08), from which the
  * current week is derived automatically. SPRINT_WEEK remains as a manual
@@ -8,7 +8,24 @@
  * out of step with the programme.
  */
 
-export const TOTAL_WEEKS = 15;
+/*
+ * The length of the programme, in weeks.
+ *
+ * F26 runs Tuesday 8 September to Thursday 3 December 2026, which is 86 days:
+ * twelve whole weeks and two days over. Counting the week of the 8th as week
+ * one, the 3rd falls inside week thirteen, so thirteen is the number of weeks
+ * the cohort is actually in.
+ *
+ * It was 15, from an earlier plan. Nothing broke on that — every API already
+ * derives from this and sends it to the client — but the heatmap drew two
+ * columns nobody could ever reach, week themes offered two rows that would
+ * never be filled, and a deadline could be filed into a week after the end.
+ *
+ * Everything that shows a week count reads this or the totalWeeks the API
+ * sends from it. Anything that hard-codes a number here is a bug waiting for
+ * the next cohort with different dates.
+ */
+export const TOTAL_WEEKS = 13;
 const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 
 function startDate(): Date | null {
