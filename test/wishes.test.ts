@@ -195,7 +195,7 @@ describe("what the interface promises", () => {
   });
 
   test("mentors get the wishes tab", () => {
-    expect(admin).toContain('new Set(["mentor", "shared", "wishes"])');
+    expect(admin).toContain('new Set(["mentor", "shared", "wishes", "bugs"])');
   });
 
   test("dates render without crashing on the SQLite format", () => {

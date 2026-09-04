@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import { checkinLocked, checkinOpensLabel } from "../lib/checkin-window";
+import BugReport from "./BugReport";
 import ProgrammeTimeline from "./ProgrammeTimeline";
 import Wishes from "./Wishes";
 import Assistant from "./Assistant";
@@ -416,7 +417,7 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library";
+type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library" | "bugs";
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
@@ -659,6 +660,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         onReflections={() => setView("reflections")}
         onProgramme={() => setView("programme")}
         onWishes={() => setView("wishes")}
+        onBugs={() => setView("bugs")}
         onDeadlines={() => setView("deadlines")}
         onLibrary={() => setView("library")}
         onAssistant={() => setView("assistant")}
@@ -703,6 +705,9 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         )}
         {view === "wishes" && persona === "founder" && (
           <Scroll><Wishes /></Scroll>
+        )}
+        {view === "bugs" && persona === "founder" && (
+          <Scroll><BugReport /></Scroll>
         )}
         {view === "deadlines" && persona === "founder" && (
           <Scroll><DeadlinesPage state={deadlines} /></Scroll>
@@ -749,6 +754,7 @@ type SidebarProps = {
   onReflections: () => void;
   onProgramme: () => void;
   onWishes: () => void;
+  onBugs: () => void;
   onDeadlines: () => void;
   onLibrary: () => void;
   onAssistant: () => void;
@@ -758,7 +764,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, library, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onDeadlines, onLibrary, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, library, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -1057,6 +1063,13 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             <button onClick={onWishes} className="navitem" style={{ ...navItem, background: view === "wishes" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>✦</Glyph> <span>Ask for something</span>
             </button>
+            {/* Beside "Ask for something", because they are the same gesture
+                pointed at different things: one asks the programme for
+                something, the other tells the people who built this that it is
+                broken. */}
+            <button onClick={onBugs} className="navitem" style={{ ...navItem, background: view === "bugs" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+              <Glyph>⚑</Glyph> <span>Report a bug</span>
+            </button>
             <button onClick={onReflections} className="navitem" style={{ ...navItem, background: view === "reflections" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: view === "reflections" ? 600 : 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>◷</Glyph> <span>Reflections</span>
             </button>
@@ -1171,6 +1184,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           onStartCheckin={onStartCheckin}
           onProgramme={onProgramme}
           onWishes={onWishes}
+          onBugs={onBugs}
           onReflections={onReflections}
           onPickTeam={onPickTeam}
           onSignOut={onSignOut}
@@ -1265,7 +1279,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
  */
 function SidebarRail({
   persona, view, coachTeam, deadlines, checkinDone, width, canAssist,
-  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onDeadlines, onLibrary, onReflections, onAssistant, onPickTeam, onSignOut,
+  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onReflections, onAssistant, onPickTeam, onSignOut,
 }: {
   width: number;
   canAssist: boolean;
@@ -1283,6 +1297,7 @@ function SidebarRail({
   onStartCheckin: () => void;
   onProgramme: () => void;
   onWishes: () => void;
+  onBugs: () => void;
   onReflections: () => void;
   onPickTeam: (team: Team | null) => void;
   onSignOut?: () => void;
@@ -1309,6 +1324,10 @@ function SidebarRail({
         { key: "library", glyph: "▥", label: "Library", on: view === "library", run: onLibrary },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
         { key: "wishes", glyph: "✦", label: "Ask for something", on: view === "wishes", run: onWishes },
+        /* Every founder destination is on the rail — on a phone the rail is the
+           whole navigation, so a page reachable only from the open panel is a
+           page they cannot get to. */
+        { key: "bugs", glyph: "⚑", label: "Report a bug", on: view === "bugs", run: onBugs },
         { key: "reflections", glyph: "◷", label: "Reflections", on: view === "reflections", run: onReflections },
       ]
     : [

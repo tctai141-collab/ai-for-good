@@ -889,6 +889,31 @@ import AaltoMark from "../components/AaltoMark.astro";
     margin: 0; max-width: 68ch;
     font-size: 0.9375rem; line-height: 1.55; white-space: pre-wrap;
   }
+  /* Bug reports: the same list shape as a wish, with a status control where
+     the reply box would be. */
+  .bug-row { padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .bug-row.is-closed { opacity: 0.55; }
+  .bug-row.is-closed:hover { opacity: 1; }
+  .bug-rowhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bug-when {
+    flex: 1; color: var(--muted); font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .bug-status { min-height: 32px; padding: 4px 8px; font-size: 0.8125rem; }
+  .bug-text {
+    margin: 8px 0 0; font-size: 0.9375rem; line-height: 1.55;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .bug-context { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  /* Allowed to wrap and run long: a user-agent string truncated in the middle
+     loses the part that says which browser it is. */
+  .bug-meta {
+    padding: 2px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.02);
+    color: var(--muted); font-size: 0.6875rem; line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
   .wish-reply {
     margin-top: 10px; padding-left: 14px;
     border-left: 2px solid var(--accent);
@@ -1022,6 +1047,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           <button type="button" class="tab" data-tab="weeks">Week themes</button>
           <button type="button" class="tab" data-tab="mentor">This week</button>
           <button type="button" class="tab" data-tab="wishes">Wishes<span id="wish-badge" class="tab-badge" hidden></span></button>
+          <button type="button" class="tab" data-tab="bugs">Bugs<span id="bug-badge" class="tab-badge" hidden></span></button>
           <button type="button" class="tab" data-tab="people">People</button>
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
           <button type="button" class="tab" data-tab="shared">Shared</button>
@@ -1322,6 +1348,34 @@ import AaltoMark from "../components/AaltoMark.astro";
             </p>
             <p class="message" id="wish-message" hidden></p>
             <div id="wish-list"></div>
+          </section>
+        </div>
+
+        <div class="tabpanel" id="tab-bugs" hidden>
+          <section class="panel">
+            <h2>Reported bugs</h2>
+            <p class="note" style="margin-top:0">
+              Anyone signed in can report one — founders from <strong>Report a bug</strong>
+              in their sidebar, and you from the box below. Every report arrives with the
+              screen they were on and the browser they were using, which is usually the
+              difference between reproducing it and guessing.
+            </p>
+            <p class="note" style="margin-top:0">
+              The status is yours to move and is not shown to whoever reported it.
+              <strong>Need more info</strong> is a note to yourself: nothing reaches them,
+              so somebody has to go and ask.
+            </p>
+
+            <form id="bug-form" class="row">
+              <label style="flex:1 1 100%">
+                <span class="label-text">Report one yourself</span>
+                <textarea id="bug-body" rows="3" maxlength="2000" placeholder="The week themes tab shows week 14, which no longer exists."></textarea>
+              </label>
+              <button type="submit">Report it</button>
+            </form>
+            <p class="message" id="bug-message" hidden></p>
+
+            <div id="bug-list"></div>
           </section>
         </div>
 
@@ -1998,6 +2052,8 @@ import AaltoMark from "../components/AaltoMark.astro";
               loadMentor();
               loadShared();
               loadWishes();
+              /* Their name comes off any report they filed; the report stays. */
+              loadBugs();
               loadDeadlines();
               loadLibrary();
             });
@@ -2922,7 +2978,7 @@ import AaltoMark from "../components/AaltoMark.astro";
         /* Hide what a mentor cannot do rather than let them press it and read
            a 403. The server refuses either way; this is so the page is not
            mostly things that do not work. */
-        const allowed = new Set(["mentor", "shared", "wishes"]);
+        const allowed = new Set(["mentor", "shared", "wishes", "bugs"]);
         for (const tab of document.querySelectorAll(".tab")) {
           if (!allowed.has(tab.dataset.tab)) tab.hidden = true;
         }
@@ -3352,6 +3408,143 @@ import AaltoMark from "../components/AaltoMark.astro";
         }
         say(wishMessage, "Replied. They get an email.", false);
         loadWishes();
+      });
+
+      // ---- Bug reports ----------------------------------------------------
+
+      const bugList = document.getElementById("bug-list");
+      const bugMessage = document.getElementById("bug-message");
+      const bugBadge = document.getElementById("bug-badge");
+      const bugBody = document.getElementById("bug-body");
+
+      let bugReports = [];
+
+      /* The five states, in the order a report travels through them. The
+         labels are what an organizer reads; the values are what the column
+         checks against, and the two must not drift. */
+      const BUG_STATUS = [
+        ["new", "New"],
+        ["need_info", "Need more info"],
+        ["fixing", "Fixing"],
+        ["done", "Done"],
+        ["wont_fix", "Won't fix"],
+      ];
+      const BUG_STATUS_LABEL = Object.fromEntries(BUG_STATUS);
+
+      function renderBugs() {
+        /* Untriaged only. A badge counting every report ever filed is a number
+           that only goes up and stops meaning anything — the same reasoning as
+           the wishes badge counting unanswered ones. */
+        const fresh = bugReports.filter(function (b) { return b.status === "new"; }).length;
+        if (bugBadge) {
+          bugBadge.hidden = fresh === 0;
+          bugBadge.textContent = String(fresh);
+        }
+
+        if (!bugReports.length) {
+          bugList.innerHTML = '<p class="note">Nothing reported yet.</p>';
+          return;
+        }
+
+        bugList.innerHTML = bugReports.map(function (bug) {
+          const closed = bug.status === "done" || bug.status === "wont_fix";
+          /* Cleared by deleteUser when the account goes, which is the whole
+             reason the report can outlive the reporter. */
+          const who = bug.fromName ? esc(bug.fromName) : "<em>account removed</em>";
+
+          /* The two lines that make a report actionable. Shown as received and
+             escaped: both came from the reporter's browser. */
+          const context = [
+            bug.page ? '<span class="bug-meta">' + esc(bug.page) + "</span>" : "",
+            bug.userAgent ? '<span class="bug-meta">' + esc(bug.userAgent) + "</span>" : "",
+          ].filter(Boolean).join("");
+
+          const control = myRole === "organizer"
+            ? '<select class="bug-status" data-bug="' + esc(bug.id) + '">' +
+                BUG_STATUS.map(function (pair) {
+                  return '<option value="' + esc(pair[0]) + '"' +
+                    (bug.status === pair[0] ? " selected" : "") + ">" + esc(pair[1]) + "</option>";
+                }).join("") +
+              "</select>"
+            : '<span class="pill">' + esc(BUG_STATUS_LABEL[bug.status] || bug.status) + "</span>";
+
+          return '<article class="bug-row' + (closed ? " is-closed" : "") + '">' +
+            '<div class="bug-rowhead">' +
+              "<strong>" + who + "</strong>" +
+              '<span class="bug-when">' + esc(wishWhen(bug.createdAt)) + "</span>" +
+              control +
+            "</div>" +
+            '<p class="bug-text">' + esc(bug.body) + "</p>" +
+            (context ? '<div class="bug-context">' + context + "</div>" : "") +
+          "</article>";
+        }).join("");
+      }
+
+      async function loadBugs() {
+        let res;
+        try {
+          res = await fetch("/api/bugs");
+        } catch {
+          return say(bugMessage, "Could not reach the server.", true);
+        }
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        bugReports = data.reports || [];
+        renderBugs();
+      }
+
+      /* Delegated, because the rows are rebuilt on every render. */
+      bugList.addEventListener("change", async function (event) {
+        const id = event.target.getAttribute && event.target.getAttribute("data-bug");
+        if (!id) return;
+        const status = event.target.value;
+        event.target.disabled = true;
+        let res;
+        try {
+          res = await fetch("/api/bugs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "update", id: id, status: status }),
+          });
+        } catch {
+          event.target.disabled = false;
+          return say(bugMessage, "Could not reach the server.", true);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          event.target.disabled = false;
+          return say(bugMessage, data.error || "Could not change that.", true);
+        }
+        say(bugMessage, "Moved to " + (BUG_STATUS_LABEL[status] || status) + ".", false);
+        loadBugs();
+      });
+
+      document.getElementById("bug-form").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const text = bugBody.value.trim();
+        if (!text) return say(bugMessage, "Say what went wrong.", true);
+
+        let res;
+        try {
+          res = await fetch("/api/bugs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            /* The same two fields the founder form sends. An organizer filing
+               from /admin is on a screen too, and on some browser. */
+            body: JSON.stringify({
+              body: text,
+              page: location.pathname + location.hash,
+              userAgent: navigator.userAgent,
+            }),
+          });
+        } catch {
+          return say(bugMessage, "Could not reach the server.", true);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return say(bugMessage, data.error || "Could not send that.", true);
+        bugBody.value = "";
+        say(bugMessage, "Reported.", false);
+        loadBugs();
       });
 
       // ---- Programme events ----------------------------------------------
@@ -4625,6 +4818,9 @@ import AaltoMark from "../components/AaltoMark.astro";
         loadMentor();
         loadShared();
         loadWishes();
+        /* Above the mentor return: they read the queue too, and the badge has
+           to be right before anybody opens the tab. */
+        loadBugs();
         if (myRole === "mentor") return;
         loadDeadlines();
         loadLibrary();

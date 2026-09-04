@@ -639,6 +639,46 @@ export function initSchema(db: Database) {
   `);
   db.run("CREATE INDEX IF NOT EXISTS wish_replies_wish ON wish_replies(wish_id)");
 
+  /*
+   * Bug reports: somebody saying the software is wrong.
+   *
+   * Filed by anyone signed in, not just the cohort. A wish is a founder asking
+   * the programme for something, so it comes from the cohort by definition. A
+   * bug is a fact about the software, and an organizer who finds one on /admin
+   * needs somewhere to put it as much as a founder does.
+   *
+   * SET NULL rather than CASCADE, which is where this parts company with
+   * wishes. A wish belongs to the person who asked and goes when they do. A
+   * bug report is knowledge about the product: deleting the account of whoever
+   * happened to find it should not delete the fact that the thing is broken.
+   * The identifier goes and deleteUser clears from_name beside it, so what
+   * survives is the report and not the reporter.
+   *
+   * page and user_agent are the reason this table earns its place. Both are
+   * filled in by the browser at submit and never typed. The bugs that have
+   * cost the most here were ones that only happened on somebody's phone, where
+   * a description is a guess and "iPhone, Safari, on the cohort view" is most
+   * of a diagnosis. Both are client-supplied, so they are evidence and not
+   * proof: capped on the way in, escaped on the way out, never parsed into a
+   * decision.
+   */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bug_reports (
+      id TEXT PRIMARY KEY,
+      from_email TEXT REFERENCES users(email) ON DELETE SET NULL,
+      from_name TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      page TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'new'
+        CHECK(status IN ('new', 'fixing', 'done', 'wont_fix', 'need_info')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  /* Ordered the way the list reads it: untriaged first, newest within that. */
+  db.run("CREATE INDEX IF NOT EXISTS bug_reports_status ON bug_reports(status, created_at)");
+
   // What has already been said to whom, so a reminder is a reminder and not a
   // daily nag. One row per (deadline, founder, kind); the primary key is what
   // makes a second send impossible rather than merely unlikely.
