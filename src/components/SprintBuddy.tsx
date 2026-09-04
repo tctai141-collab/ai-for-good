@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
+import { checkinLocked, checkinOpensLabel } from "../lib/checkin-window";
 import ProgrammeTimeline from "./ProgrammeTimeline";
 import Wishes from "./Wishes";
 import Assistant from "./Assistant";
@@ -535,6 +536,10 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
     return Boolean(last && helsinkiDay(asDate(last)) === helsinkiDay(new Date()));
   }, [checkins, locallyCheckedIn]);
   const startCheckin = () => {
+    /* Held closed until the cohort has been shown what it is. The server
+       refuses it too — this only saves the founder a round trip and a error
+       message they did not need to see. */
+    if (checkinLocked()) return;
     if (checkinDoneToday) return;
     setView("chat");
     setActive({ checkin: true, _t: Date.now() });
@@ -955,7 +960,26 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           <div style={{ flexShrink: 0, marginTop: 14 }}>
           {/* Still one glance from the conversations above it, and still above
               "What's on", which is reference rather than an obligation. */}
-          {checkinDone ? (
+          {checkinLocked() ? (
+            /*
+             * Held closed, and saying so.
+             *
+             * Not hidden: a founder who has been told the check-in is the
+             * daily habit and cannot find it will assume it is broken, or ask.
+             * The row stays where it will be, greyed, with the time it opens
+             * underneath — which is also the answer to the question they would
+             * otherwise have to ask somebody.
+             */
+            <div className="navitem" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "11px 14px", marginBottom: 14, cursor: "default" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 9, width: "100%" }}>
+                <span style={{ flex: 1, textAlign: "left", fontWeight: 600, fontSize: 14, color: C.faint }}>Today's check-in</span>
+                <span aria-hidden="true" style={{ color: C.faint, fontSize: 12, lineHeight: 1, flexShrink: 0 }}>◷</span>
+              </span>
+              <span style={{ fontSize: 11.5, lineHeight: 1.35, color: C.faint, textAlign: "left" }}>
+                Opens {checkinOpensLabel()}
+              </span>
+            </div>
+          ) : checkinDone ? (
             <div className="navitem" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14, color: C.faint, marginBottom: 14, cursor: "default" }}>
               <span style={{ width: 7, height: 7, borderRadius: 9, background: "#7CB893", flexShrink: 0 }} />
               <span style={{ flex: 1, textAlign: "left", textDecoration: "line-through", textDecorationColor: "rgba(124, 184, 147, 0.6)" }}>Today's check-in</span>
@@ -1253,7 +1277,19 @@ function SidebarRail({
   }[] = persona === "founder"
     ? [
         { key: "chat", glyph: "✉", label: "Conversations", on: view === "chat", run: onNew },
-        { key: "checkin", glyph: "◉", label: checkinDone ? "Today's check-in, done" : "Today's check-in", on: false, dot: !checkinDone, run: onStartCheckin },
+        /* On a phone the rail is the whole navigation, so the hold has to be
+           legible here too — no unread dot inviting a tap at something that
+           will not open, and the title says when it will. */
+        {
+          key: "checkin",
+          glyph: "◉",
+          label: checkinLocked()
+            ? `Today's check-in — opens ${checkinOpensLabel()}`
+            : checkinDone ? "Today's check-in, done" : "Today's check-in",
+          on: false,
+          dot: !checkinLocked() && !checkinDone,
+          run: onStartCheckin,
+        },
         { key: "deadlines", glyph: "◱", label: "Deadlines", on: view === "deadlines", run: onDeadlines },
         { key: "library", glyph: "▥", label: "Library", on: view === "library", run: onLibrary },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
@@ -2051,7 +2087,13 @@ function MobileActions({
   return (
     <div className="mobile-actions">
       <div className="mobile-actions-row">
-        {checkinDone ? (
+        {checkinLocked() ? (
+          /* Same shape as the done state — a statement rather than a control,
+             so nothing on the strip invites a tap that cannot work. */
+          <span className="mobile-actions-done">
+            <span aria-hidden="true">◷</span> Check-in opens {checkinOpensLabel()}
+          </span>
+        ) : checkinDone ? (
           <span className="mobile-actions-done">
             <span aria-hidden="true">✓</span> Checked in
           </span>
@@ -2121,8 +2163,12 @@ function EmptyState({ firstRun }: { firstRun: boolean }) {
         </p>
         <p style={{ margin: "8px 0 0", fontSize: 14.5, lineHeight: 1.6, color: C.sub }}>
           <strong style={{ color: C.ink }}>Nothing here is read by the team</strong> unless
-          you share a conversation on purpose. Start anywhere, or use today&rsquo;s
-          check-in.
+          you share a conversation on purpose.{" "}
+          {/* Pointing at the check-in while it is held closed sends the reader
+              to a row that will not open. Say when instead. */}
+          {checkinLocked()
+            ? <>Start anywhere. The daily check-in opens {checkinOpensLabel()}.</>
+            : <>Start anywhere, or use today&rsquo;s check-in.</>}
         </p>
       </div>
     </div>
