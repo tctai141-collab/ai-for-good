@@ -767,9 +767,37 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
    * page sideways. Expanding in place would reflow the conversation under the
    * reader's eyes every time the pointer crossed the left edge, which is worse
    * than not expanding at all.
+   *
+   * Which is fine while there is a pointer. On a phone there is not, and the
+   * browser synthesises the mouse events anyway: one tap near the rail fires
+   * mouseover, the 304px panel opens over the content at the top-left corner
+   * at z-index 60, and the mouseout that would close it may never arrive
+   * because nothing is hovering. Measured: 240px of the page underneath it,
+   * carrying the cohort list, which is what an organizer reported as the
+   * cohort view sitting on top of everything.
+   *
+   * So peek is a hover affordance and asks whether hover exists. Where it does
+   * not, the rail is the whole story — the icons stay visible and clickable,
+   * which is the point of a rail, and tapping one is how you get there.
    */
   const [peek, setPeek] = useState(false);
   useEffect(() => { if (open) setPeek(false); }, [open]);
+
+  /* (hover: hover) rather than a touch sniff: what this needs to know is
+     whether a pointer can rest on something without committing to a tap, and
+     that is the question the media feature actually answers. A laptop with a
+     touchscreen still hovers; a phone never does. */
+  const [canHover, setCanHover] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(hover: hover)");
+    const apply = () => {
+      setCanHover(media.matches);
+      if (!media.matches) setPeek(false);
+    };
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
 
   /*
    * Narrower on a phone.
@@ -1083,7 +1111,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
         borderRight: `1px solid var(--line-strong)`,
         transition: "width 220ms cubic-bezier(0.25, 1, 0.5, 1)",
       }}
-      onMouseEnter={() => { if (!open) setPeek(true); }}
+      onMouseEnter={() => { if (!open && canHover) setPeek(true); }}
       onMouseLeave={() => setPeek(false)}
     >
       {open ? panel : (
