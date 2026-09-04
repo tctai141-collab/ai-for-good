@@ -29,7 +29,10 @@ async function chat(body: Record<string, unknown>) {
 }
 
 beforeAll(async () => {
-  h = await startServer();
+  /* The check-in is held closed until 9 September; two tests below drive a
+     real one to prove its framing never reaches the cached prefix, so this
+     server stands on the far side of the hold. */
+  h = await startServer({ checkinOpen: true });
   organizer = await createOrganizer(h, "organizer@example.test");
   founder = await createFounder(h, organizer, "founder@example.test", "Aino", "founder-password-11");
 });

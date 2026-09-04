@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { readJsonBody } from "../../lib/limits";
 import { buildCheckinPrompt } from "../../lib/prompts/checkin";
+import { CHECKIN_OPENS_AT, checkinLocked, checkinOpensLabel } from "../../lib/checkin-window";
 import { getLastCheckin, upsertCheckin } from "../../db";
 import { advisorReply, advisorReplyStream } from "../../lib/ai";
 import { getSessionUser } from "../../lib/auth";
@@ -170,6 +171,26 @@ export const POST: APIRoute = async ({ cookies, request }) => {
 
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return Response.json({ error: "messages array required" }, { status: 400 });
+    }
+
+    /*
+     * The check-in is held closed until the cohort has been walked through it.
+     *
+     * Enforced here and not only on the button. The button is the courtesy;
+     * this is the rule. Without it the hold is a disabled control in a browser
+     * anybody can open the console on, and — more to the point — a stale tab
+     * left open from before the lock would still post a check-in and write a
+     * row that the dashboard would count.
+     *
+     * Only `kind: "checkin"` is held. Ordinary conversation with the advisor
+     * is not affected, which is deliberate: the hold is on the daily ritual,
+     * not on the founder's access to the thing.
+     */
+    if (body.kind === "checkin" && checkinLocked()) {
+      return Response.json(
+        { error: `The daily check-in opens on ${checkinOpensLabel()}.`, opensAt: CHECKIN_OPENS_AT },
+        { status: 423 },
+      );
     }
 
     // Every call here costs money on a metered API, and any authenticated

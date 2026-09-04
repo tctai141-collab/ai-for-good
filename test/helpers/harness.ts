@@ -117,7 +117,7 @@ class PortTaken extends Error {}
  * times running would mean something other than chance.
  */
 export async function startServer(
-  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string } = {},
+  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string; checkinOpen?: boolean } = {},
 ): Promise<Harness> {
   let last: unknown;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -132,7 +132,7 @@ export async function startServer(
 }
 
 async function startServerOnce(
-  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string } = {},
+  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string; checkinOpen?: boolean } = {},
 ): Promise<Harness> {
   const port = await reservePort();
   const emailEnabled = options.email !== false;
@@ -227,6 +227,16 @@ async function startServerOnce(
       // Future by default, which is the state the app is actually in and the
       // one that produced a bug. Tests that need a running sprint say so.
       SPRINT_START_DATE: options.sprintStartDate ?? "2026-09-09",
+      /*
+       * Stands the server on the far side of the check-in hold.
+       *
+       * Only the suites that drive a real check-in through /api/chat need it —
+       * they assert that the check-in framing, which carries the current
+       * server time, never lands in the cached prompt prefix, and the hold
+       * otherwise refuses the request before the model is reached. Everything
+       * else runs with the hold on, which is what production has.
+       */
+      ...(options.checkinOpen ? { CHECKIN_OPENS_AT_OVERRIDE: "0" } : {}),
       // Omitted entirely when a test needs the unconfigured case.
       ...(emailEnabled
         ? {
