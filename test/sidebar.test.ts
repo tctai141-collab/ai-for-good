@@ -101,7 +101,14 @@ describe("peeking does not move the page", () => {
   });
 
   test("peek only ever opens from the collapsed state", () => {
-    expect(app).toContain("onMouseEnter={() => { if (!open) setPeek(true); }}");
+    /* The !open half is what this test is about and has not changed. The
+       guard gained a second condition — see sidebar-peek.test.ts: a tap on a
+       phone synthesises the hover that opened this panel over the page, so it
+       now also asks whether the device hovers at all. Written as two
+       assertions rather than one literal so that adding a third condition
+       later does not read as this rule being broken. */
+    expect(app).toMatch(/onMouseEnter=\{\(\) => \{ if \(!open[^)]*\) setPeek\(true\); \}\}/);
+    expect(app).toContain("if (!open && canHover) setPeek(true)");
   });
 });
 
