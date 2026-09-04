@@ -307,10 +307,12 @@ describe("items ask what happens, not what you would like", () => {
   });
 
   test("the version is bumped, because the founder was asked something else", () => {
-    // The pairings and ids are untouched, so afs-1 rows still score the same
-    // and stay comparable. What changed is the wording, which is enough to
-    // make the two banks different instruments.
-    expect(INSTRUMENT_VERSION).toBe("afs-2");
+    /* The pairings and ids are untouched, so older rows still score the same
+       and stay comparable. What changed is the wording, which is enough to
+       make the banks different instruments — twice now: afs-2 moved off "you
+       would rather", and afs-3 said the same things in plainer words and took
+       out the "what do you actually do" tic that opened two thirds of them. */
+    expect(INSTRUMENT_VERSION).toBe("afs-3");
   });
 
   test("no em dashes anywhere in the bank", () => {

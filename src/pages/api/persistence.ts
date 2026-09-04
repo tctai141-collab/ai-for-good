@@ -23,6 +23,9 @@ import {
 } from "../../db/index";
 import { TOTAL_WEEKS, currentSprintWeek, weekForDateClamped } from "../../lib/sprint-calendar";
 import {
+  WORKING_GENIUS_OPENS_AT, workingGeniusLocked, workingGeniusOpensLabel,
+} from "../../lib/working-genius-window";
+import {
   INSTRUMENT_VERSION,
   WORKING_GENIUS_ITEMS,
   nextRetakeDate,
@@ -259,6 +262,30 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       case "save-working-genius": {
         const authError = requireSelf(session, body.userEmail);
         if (authError) return err(authError, authError === "forbidden" ? 403 : 401);
+
+        /*
+         * Held closed until the cohort has been walked through it.
+         *
+         * Enforced here and not only on the button, for the same reason as the
+         * check-in: a tab left open from before the hold would otherwise still
+         * post a set of answers, and this one is worse than a stray check-in —
+         * the result is kept, banded, and shown on the team map to everybody
+         * running the programme. Thirty either-or questions answered before
+         * anybody has said what the six types are is thirty guesses wearing a
+         * result's clothes.
+         *
+         * 423 rather than 403: it is not about who they are, and it stops
+         * being true at a known moment, which the body carries.
+         */
+        if (workingGeniusLocked()) {
+          return json(
+            {
+              error: `The working-style assessment opens on ${workingGeniusOpensLabel()}.`,
+              opensAt: WORKING_GENIUS_OPENS_AT,
+            },
+            423,
+          );
+        }
         if (!body.userEmail || !body.workingGeniusResponses) {
           return err("workingGeniusResponses + userEmail required");
         }

@@ -117,7 +117,7 @@ class PortTaken extends Error {}
  * times running would mean something other than chance.
  */
 export async function startServer(
-  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string; checkinOpen?: boolean } = {},
+  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string; checkinOpen?: boolean; workingGeniusOpen?: boolean } = {},
 ): Promise<Harness> {
   let last: unknown;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -132,7 +132,7 @@ export async function startServer(
 }
 
 async function startServerOnce(
-  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string; checkinOpen?: boolean } = {},
+  options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string; checkinOpen?: boolean; workingGeniusOpen?: boolean } = {},
 ): Promise<Harness> {
   const port = await reservePort();
   const emailEnabled = options.email !== false;
@@ -237,6 +237,16 @@ async function startServerOnce(
        * else runs with the hold on, which is what production has.
        */
       ...(options.checkinOpen ? { CHECKIN_OPENS_AT_OVERRIDE: "0" } : {}),
+      /*
+       * Stands the server past the working-style hold.
+       *
+       * Several suites take the assessment end to end — privacy, retakes, the
+       * team map — and every one needs the save to reach the database. On by
+       * default here, because the hold is a launch-week decision and not the
+       * behaviour those suites are about; the tests that care about the hold
+       * itself leave it off and assert the 423.
+       */
+      ...(options.workingGeniusOpen === false ? {} : { WORKING_GENIUS_OPENS_AT_OVERRIDE: "0" }),
       // Omitted entirely when a test needs the unconfigured case.
       ...(emailEnabled
         ? {
