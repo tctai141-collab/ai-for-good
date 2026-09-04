@@ -71,6 +71,25 @@ const STARTUP_TIPS = [
 export default function App() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [buddyStage, setBuddyStage] = useState<"login" | "docked">("login");
+  /*
+   * Whether the two organizer pills have a mascot to dodge.
+   *
+   * They are pinned from the right to clear the docked mascot in the top-right
+   * corner, and on a phone that mascot is display: none — so the offsets were
+   * dodging something that was not there and walking backwards into the rail
+   * on the left instead. Measured on a 390pt screen: "Cohort view" is 100px
+   * wide at right 248, which puts its left edge at 42, over a rail that is
+   * 48px wide. Both pills sit at z-index 40, so it floated on top of the rail
+   * and stayed there while the page scrolled under it.
+   */
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 700px)");
+    const apply = () => setPhone(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -415,8 +434,11 @@ export default function App() {
           style={{
             position: "fixed",
             top: 18,
-            /* Left of the admin link, which is itself clear of the mascot. */
-            right: 248,
+            /* Left of the admin link. On a desktop that link is itself held
+               clear of the mascot; on a phone there is no mascot, so both sit
+               against the right edge and this one is placed off the admin
+               pill's measured width (109) plus a gap. */
+            right: phone ? 129 : 248,
             zIndex: 40,
             fontSize: 13,
             padding: "6px 12px",
@@ -435,8 +457,10 @@ export default function App() {
           style={{
             position: "fixed",
             top: 18,
-            // Clear of the docked mascot, which sits in the top-right corner.
-            right: 130,
+            /* Clear of the docked mascot, which sits in the top-right corner —
+               and which is display: none on a phone, where the corner is free
+               and the old offset pushed its neighbour onto the rail. */
+            right: phone ? 12 : 130,
             zIndex: 40,
             fontSize: 13,
             padding: "6px 12px",
