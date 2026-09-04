@@ -172,34 +172,35 @@ export function sendDeadlineReminder(
     "due-soon": `Due tomorrow: ${deadline.title}`,
   }[kind];
 
-  const opener = {
-    "overdue": `This one slipped past its date. That happens, and it is worth five
-minutes to either finish it or decide it is not happening.`,
-    "due-10h": `Last call on this one. If it is not going to happen, deciding that now
-is better than finding out tomorrow.`,
-    "due-2d": `Still on your list, and now close enough to plan around.`,
-    "due-3d": `Far enough out to do something about, which is why you are hearing
-about it now rather than the night before.`,
-    "due-soon": `A heads-up rather than a nag.`,
-  }[kind];
-
+  /*
+   * No opener, and nothing about the check-in.
+   *
+   * Each kind used to carry a sentence explaining why this particular email
+   * had arrived — "far enough out to do something about", "a heads-up rather
+   * than a nag" — and every one of them closed by suggesting a check-in. A
+   * founder gets up to four of these per deadline. The subject line and the
+   * date already say everything the reader came for, and the rest was the
+   * email talking about itself.
+   *
+   * The check-in line was wrong twice over: it is an unrelated errand attached
+   * to a reminder about something else, and the check-in is held closed until
+   * the cohort has been shown it, so for now the sentence points at a screen
+   * that will not open.
+   *
+   * What is left is what is due, when, and the one thing that stops the
+   * emails.
+   */
   return send({
     to,
     subject,
     text: `Hi ${name},
 
-${opener}
-
   ${deadline.title}
   ${when}${deadline.description ? `\n  ${deadline.description}` : ""}
 
-Tick it off here when it is done:
+Tick it off here and the reminders stop:
 
 ${appUrl}
-
-Tick it off and you will hear nothing more about it.
-
-While you are there, today's check-in takes two minutes.
 
 The Aalto Founder Sprint team`,
   });
@@ -232,29 +233,29 @@ export function sendBookReminder(
     "overdue": `Overdue: ${book.title}`,
   }[kind];
 
-  const opener = {
-    "due-3d": `The office copy is due back in three days. No rush today, but it is
-easier to put in your bag now than to remember on the day.`,
-    "overdue": `This one is past its date. Somebody else is probably waiting for it,
-so it is worth bringing in this week.`,
-  }[kind];
-
+  /*
+   * Trimmed the same way as the deadline reminder, and for the same reason:
+   * the opener was the email explaining itself. The subject already says which
+   * book and when.
+   *
+   * Two sentences stay because they are things to do rather than things to
+   * read: where the book goes, and that the date can be moved. Somebody who
+   * cannot bring it back this week needs to know the second one exists.
+   */
   return send({
     to,
     subject,
     text: `Hi ${name},
 
-${opener}
-
   ${book.title}
   due ${day}
 
-Bring it back to the office shelf, then mark it returned here:
+Bring it back to the office shelf and mark it returned here; that stops the
+reminders:
 
 ${appUrl}
 
-Mark it returned and you will hear nothing more about it. If you need longer,
-tell an organizer and they will move the date.
+If you need longer, tell an organizer and they will move the date.
 
 The Aalto Founder Sprint team`,
   });
