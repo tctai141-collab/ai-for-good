@@ -193,6 +193,12 @@ describe("the page does not offer what the server will refuse", () => {
      * The date is the answer to the question they would otherwise ask.
      */
     const uses = app.match(/workingGeniusOpensLabel\(\)/g) ?? [];
-    expect(uses.length).toBeGreaterThanOrEqual(3);
+    expect(uses.length).toBeGreaterThanOrEqual(2);
+
+    /* Two, and not more, is the point. There are exactly two states that need
+       a date — holding a result and holding none — and they never render at
+       once. A third use meant the same card printed the date twice about eight
+       lines apart, which is what this floor was quietly permitting. */
+    expect(uses.length).toBe(2);
   });
 });

@@ -165,11 +165,13 @@ export default function ProgrammeTimeline({ today = isoDay(new Date()) }: { toda
         <div>
           <h1 className="pt-title">Programme</h1>
           <p className="pt-sub">
-            {events === null
+            {/* Blank while loading and while empty, both for the same reason:
+                the body below already says it, and a header repeating the
+                sentence directly underneath it reads as a mistake rather than
+                as emphasis. The space holds the line so the title does not jump. */}
+            {events === null || events.length === 0
               ? " "
-              : events.length === 0
-                ? "Nothing scheduled yet."
-                : `${events.length} thing${events.length === 1 ? "" : "s"} in the sprint.`}
+              : `${events.length} thing${events.length === 1 ? "" : "s"} in the sprint.`}
           </p>
         </div>
 

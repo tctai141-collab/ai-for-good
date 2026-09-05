@@ -420,6 +420,20 @@ const splitCheckinPrompt = (prompt: string) => {
 type Persona = "founder" | "coach";
 type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library" | "bugs";
 
+/* What each view is called in the sidebar, so a bug report names the screen
+   the way the person filing it would name it. Keyed by View, so adding a
+   destination without naming it here will not compile. */
+const VIEW_NAMES: Record<View, string> = {
+  chat: "Conversations",
+  reflections: "Reflections",
+  programme: "Programme",
+  wishes: "Ask for something",
+  assistant: "Assistant",
+  deadlines: "Deadlines",
+  library: "Library",
+  bugs: "Report a bug",
+};
+
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
 
 type SprintBuddyProps = {
@@ -435,6 +449,10 @@ type SprintBuddyProps = {
 
 export default function SprintBuddy({ persona, canAssist = false, userEmail, initialData, onSignOut, signOutLabel = "Sign out" }: SprintBuddyProps) {
   const [view, setView] = useState<View>("chat");
+  /* The screen a bug reporter left to come and file. Captured on the way in,
+     because by the time they submit they are on "Report a bug" and that is
+     the one answer nobody needs. */
+  const [bugFrom, setBugFrom] = useState<string>(VIEW_NAMES.chat);
   const [active, setActive] = useState<ActiveTarget>({ fresh: true });
   const [coachTeam, setCoachTeam] = useState<Team | null>(null);
   const [cohort, setCohort] = useState<CohortData | null>(null);
@@ -661,7 +679,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         onReflections={() => setView("reflections")}
         onProgramme={() => setView("programme")}
         onWishes={() => setView("wishes")}
-        onBugs={() => setView("bugs")}
+        onBugs={() => { if (view !== "bugs") setBugFrom(VIEW_NAMES[view]); setView("bugs"); }}
         onDeadlines={() => setView("deadlines")}
         onLibrary={() => setView("library")}
         onAssistant={() => setView("assistant")}
@@ -708,7 +726,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
           <Scroll><Wishes /></Scroll>
         )}
         {view === "bugs" && persona === "founder" && (
-          <Scroll><BugReport /></Scroll>
+          <Scroll><BugReport from={bugFrom} /></Scroll>
         )}
         {view === "deadlines" && persona === "founder" && (
           <Scroll><DeadlinesPage state={deadlines} /></Scroll>
@@ -2547,10 +2565,12 @@ function Reflections({
               <span style={{ fontSize: 12.5, color: C.faint }}>Last one taken</span>
             )
           ) : (
+            /* Not the opening date, even while it is held. The block below
+               carries that, with the reason for it, and a card that states the
+               same date twice about eight lines apart reads as a mistake. This
+               slot describes the thing itself, which is true either way. */
             <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-              {workingGeniusLocked()
-                ? `Opens ${workingGeniusOpensLabel()}.`
-                : "Thirty either-or questions. About six minutes."}
+              Thirty either-or questions. About six minutes.
             </span>
           )}
         </div>

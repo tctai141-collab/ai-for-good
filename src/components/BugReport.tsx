@@ -18,7 +18,17 @@ import { useCallback, useState } from "react";
 
 const MAX = 2000;
 
-export default function BugReport() {
+/**
+ * `from` is the screen the reporter was on when they went looking for this
+ * form, passed in by the app.
+ *
+ * It used to be read here as `location.pathname`, which is honest-looking and
+ * useless: Sprint Buddy is one page, so that string is "/" for every report
+ * ever filed. Worse, the obvious repair — read it at submit — records "Report
+ * a bug" every time, because that is where they are standing by then. The only
+ * screen worth knowing is the one they left.
+ */
+export default function BugReport({ from }: { from?: string }) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
@@ -36,14 +46,11 @@ export default function BugReport() {
           body: text,
           /*
            * The two things nobody would think to include, and the two that
-           * usually decide how long the bug takes to find. The screen is where
-           * they were standing; the browser is the difference between a bug
-           * everybody has and one only iPhones have.
-           *
-           * Read at submit rather than at mount, so it describes where they
-           * were when they hit the button and not where they came in.
+           * usually decide how long the bug takes to find: the screen they came
+           * from, and the browser — the difference between a bug everybody has
+           * and one only iPhones have.
            */
-          page: typeof location === "undefined" ? "" : location.pathname + location.hash,
+          page: from ?? "",
           userAgent: typeof navigator === "undefined" ? "" : navigator.userAgent,
         }),
       });
@@ -59,7 +66,7 @@ export default function BugReport() {
     } finally {
       setSending(false);
     }
-  }, [body, sending]);
+  }, [body, sending, from]);
 
   const left = MAX - body.length;
 
@@ -105,14 +112,14 @@ export default function BugReport() {
         {note && <p className={`bug-note${note.bad ? " is-bad" : ""}`}>{note.text}</p>}
 
         {/*
-          Said before they type, not after they send. Which screen they are on
-          and which browser they use goes with the report, and somebody should
-          know that while deciding what to write rather than discovering it
-          afterwards.
+          Said before they type, not after they send. Which screen they came
+          from and which browser they use goes with the report, and somebody
+          should know that while deciding what to write rather than discovering
+          it afterwards.
         */}
         <p className="bug-fine">
-          Sent with your name, the screen you are on, and which browser you are
-          using. Nothing else from your account goes with it.
+          Sent with your name, the screen you came from, and
+          which browser you are using. Nothing else from your account goes with it.
         </p>
       </div>
     </div>
