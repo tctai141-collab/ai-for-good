@@ -317,11 +317,15 @@ export function LibraryPage({ state }: { state: LibraryState }) {
         <div>
           <h1 className="li-title">Library</h1>
           <p className={`li-sub${overdue ? " is-late" : ""}`}>
-            {overdue > 0
-              ? `${overdue} ${overdue === 1 ? "book is" : "books are"} overdue — please bring ${overdue === 1 ? "it" : "them"} back.`
-              : counts.mine > 0
-                ? `${counts.mine} ${counts.mine === 1 ? "book" : "books"} with you, ${counts.shelf} on the shelf.`
-                : `${counts.shelf} of ${books.length} on the shelf.`}
+            {/* An empty shelf counts to "0 of 0 on the shelf", directly above
+                the line saying the shelf is empty. Blank here, said once below. */}
+            {books.length === 0
+              ? " "
+              : overdue > 0
+                ? `${overdue} ${overdue === 1 ? "book is" : "books are"} overdue — please bring ${overdue === 1 ? "it" : "them"} back.`
+                : counts.mine > 0
+                  ? `${counts.mine} ${counts.mine === 1 ? "book" : "books"} with you, ${counts.shelf} on the shelf.`
+                  : `${counts.shelf} of ${books.length} on the shelf.`}
           </p>
         </div>
       </header>

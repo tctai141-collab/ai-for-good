@@ -97,6 +97,34 @@ describe("the screen and the browser come with it", () => {
     expect(latest.userAgent).toContain("iPhone");
   });
 
+  test("the screen is a screen, not the URL every report would share", () => {
+    /*
+     * `page` was `location.pathname + location.hash`, which looks like it
+     * answers "where were they" and cannot: Sprint Buddy is a single page, so
+     * every report ever filed carried "/". The obvious repair is worse — read
+     * at submit and it says "Report a bug" every time, because that is where
+     * they are standing by the time they press the button.
+     *
+     * So the app passes in the screen they left, and this holds the component
+     * to it. Asserted on the source because the value is decided in a browser
+     * the server never sees.
+     */
+    /* Comments stripped: the one above the component names the old approach
+       in order to explain why it went, and that is not a use of it. */
+    const bug = readFileSync("src/components/BugReport.tsx", "utf-8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(bug).not.toContain("location.pathname");
+    expect(bug).toContain("page: from ?? \"\"");
+
+    const app = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
+    /* Captured on the way in, and never overwritten by the bug screen itself. */
+    expect(app).toContain('if (view !== "bugs") setBugFrom(VIEW_NAMES[view])');
+    expect(app).toContain("<BugReport from={bugFrom} />");
+    /* Keyed by View, so a new destination cannot be added without naming it. */
+    expect(app).toContain("const VIEW_NAMES: Record<View, string>");
+  });
+
   test("both are capped, because both come from the client", async () => {
     // They are evidence, not proof, and not a place to put a megabyte.
     await file(founder, "Long context.", { page: "p".repeat(5_000), userAgent: "u".repeat(5_000) });
