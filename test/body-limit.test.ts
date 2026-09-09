@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createOrganizer, startServer, type Harness, type Session } from "./helpers/harness";
-import { MAX_BODY_BYTES } from "../src/lib/limits";
+import { drain, DRAIN_LIMIT, MAX_BODY_BYTES } from "../src/lib/limits";
 
 /**
  * The request-size cap, and the hole that was in it.
@@ -218,7 +218,93 @@ describe("the limit is still a limit", () => {
     } as RequestInit & { duplex: "half" }).catch(() => ({ status: 0 }));
 
     expect([413, 0]).toContain(res.status);
-    // Nowhere near the whole thing was accepted.
-    expect(pushed).toBeLessThan(HUGE / 2);
+    /*
+     * Deliberately nothing is asserted about `pushed`.
+     *
+     * It used to say `pushed < HUGE / 2`, which reads like a statement about
+     * the server and is a statement about the client: how much fetch managed
+     * to hand to the kernel before the far end's refusal came back. On a fast
+     * CI box that is sometimes all forty megabytes even though the server read
+     * four, so the check failed about one run in three while nothing was
+     * wrong. Two merges were held up by it.
+     *
+     * What it was trying to protect is asserted directly below, without a
+     * socket in the way.
+     */
   }, 60_000);
+});
+
+describe("the drain itself", () => {
+  /*
+   * The property the flaky test was reaching for: an over-sized body is read
+   * to a clean boundary and then abandoned, so the cap cannot be turned into
+   * the denial of service it exists to prevent.
+   *
+   * A fake reader rather than a real request, so this measures what the server
+   * reads and nothing else.
+   */
+  function countingReader(chunkSize: number) {
+    let read = 0;
+    let cancelled = false;
+    return {
+      get read() { return read; },
+      get cancelled() { return cancelled; },
+      reader: {
+        read: async () => {
+          read += chunkSize;
+          return { done: false, value: new Uint8Array(chunkSize) };
+        },
+        cancel: async () => { cancelled = true; },
+      } as unknown as ReadableStreamDefaultReader<Uint8Array>,
+    };
+  }
+
+  test("stops at the limit however much more is coming", async () => {
+    // A stream that never ends, which is the shape of the attack.
+    const counted = countingReader(64 * 1024);
+    await drain(counted.reader, DRAIN_LIMIT);
+
+    expect(counted.read).toBeGreaterThanOrEqual(DRAIN_LIMIT);
+    // One chunk of overshoot at most: the check happens between reads.
+    expect(counted.read).toBeLessThanOrEqual(DRAIN_LIMIT + 64 * 1024);
+  });
+
+  test("lets go of the connection rather than holding it open", async () => {
+    const counted = countingReader(64 * 1024);
+    await drain(counted.reader, DRAIN_LIMIT);
+    expect(counted.cancelled).toBe(true);
+  });
+
+  test("a body that ends on its own is not cancelled early", async () => {
+    // The ordinary case: slightly over the cap, ends by itself, connection
+    // stays clean for the next request on it.
+    let reads = 0;
+    const reader = {
+      read: async () => {
+        reads += 1;
+        return reads > 2 ? { done: true, value: undefined } : { done: false, value: new Uint8Array(1024) };
+      },
+      cancel: async () => { throw new Error("should not cancel a stream that finished"); },
+    } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+
+    await drain(reader, DRAIN_LIMIT);
+    expect(reads).toBe(3);
+  });
+
+  test("a peer that disappears mid-drain is not an error", async () => {
+    // It is the outcome the drain wanted anyway.
+    const reader = {
+      read: async () => { throw new Error("socket went away"); },
+      cancel: async () => {},
+    } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+
+    expect(await drain(reader, DRAIN_LIMIT).then(() => "returned")).toBe("returned");
+  });
+
+  test("the limit is small enough to be worthless as an attack", () => {
+    // Generous for an accident — somebody pasting a long transcript — and far
+    // below anything worth sending on purpose.
+    expect(DRAIN_LIMIT).toBeLessThanOrEqual(8 * 1024 * 1024);
+    expect(DRAIN_LIMIT).toBeGreaterThan(MAX_BODY_BYTES);
+  });
 });

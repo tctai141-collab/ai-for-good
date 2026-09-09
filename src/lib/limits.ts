@@ -390,10 +390,19 @@ export function trackedIpCount(): number {
  * Generous enough to cover an accident — a founder pasting a very long
  * transcript — and far too small to be worth using as an attack.
  */
-const DRAIN_LIMIT = 4 * 1024 * 1024;
+export const DRAIN_LIMIT = 4 * 1024 * 1024;
 
-/** Reads and discards up to `limit` more bytes. Never throws. */
-async function drain(
+/**
+ * Reads and discards up to `limit` more bytes. Never throws.
+ *
+ * Exported for the test that this is bounded. It used to be covered by pushing
+ * forty megabytes at a real socket and asserting the client had not managed to
+ * send it all — which measures the client's buffering rather than the server's
+ * reading, and duly failed about one CI run in three while the server was
+ * behaving perfectly. What matters is here, and can be checked without a
+ * network.
+ */
+export async function drain(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   limit: number,
 ): Promise<void> {
