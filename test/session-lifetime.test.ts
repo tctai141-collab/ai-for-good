@@ -18,7 +18,7 @@ function sessionKey(token: string): string {
  * working session behind for a month.
  *
  * These tests move the clock by editing the row rather than by waiting, which
- * is the only way to test a 24-hour window in a suite that has to finish in
+ * is the only way to test a week-long window in a suite that has to finish in
  * seconds. The deadlines are read from the database on every request, so
  * rewriting them is a faithful simulation of time passing.
  */
@@ -80,22 +80,40 @@ beforeAll(async () => {
 afterAll(() => h?.stop());
 
 describe("idle timeout", () => {
-  test("a fresh session is good for about a day, not a month", async () => {
+  test("a fresh session is good for about a week, not a month", async () => {
     const founder = await createFounder(h, organizer, "fresh@example.test", "Fresh", "fresh-password-112");
     const row = readSession(founder)!;
     const window = new Date(row.expires_at).getTime() - Date.now();
 
-    expect(window).toBeGreaterThan(23 * HOUR);
-    expect(window).toBeLessThanOrEqual(25 * HOUR);
-    // The regression this guards: a 30-day idle window.
-    expect(window).toBeLessThan(2 * DAY);
+    expect(window).toBeGreaterThan(7 * DAY - HOUR);
+    expect(window).toBeLessThanOrEqual(7 * DAY + HOUR);
+    /*
+     * Two regressions guarded at once. The 30-day idle window this replaced,
+     * and the other direction: an idle window at or past the 14-day ceiling
+     * would collapse the two timers into one and quietly restore the flat
+     * session it was written to fix.
+     */
+    expect(window).toBeLessThan(14 * DAY);
   });
 
   test("a session left untouched past the window stops working", async () => {
+    // A fortnight away, which is past the idle window and the ceiling both.
     const founder = await createFounder(h, organizer, "idle@example.test", "Idle", "idle-password-1122");
     setDeadlines(founder, { expiresAt: ago(1 * HOUR) });
 
     expect(await signedIn(founder)).toBe(false);
+  });
+
+  test("a weekend away does not sign anybody out", async () => {
+    /*
+     * The report that moved this from 24 hours to seven days: a founder logged
+     * out repeatedly in the first week of the sprint. Two days idle used to be
+     * fatal and now is not, which is the whole point of the change.
+     */
+    const founder = await createFounder(h, organizer, "weekend@example.test", "Weekend", "weekend-password-1");
+    setDeadlines(founder, { expiresAt: inFuture(7 * DAY - 2 * DAY) });
+
+    expect(await signedIn(founder)).toBe(true);
   });
 
   test("an expired session is deleted, not just refused", async () => {
@@ -113,13 +131,15 @@ describe("idle timeout", () => {
 
     expect(await signedIn(founder)).toBe(true);
 
+    // Back to a full window, not merely nudged along.
     const after = new Date(readSession(founder)!.expires_at).getTime() - Date.now();
-    expect(after).toBeGreaterThan(23 * HOUR);
+    expect(after).toBeGreaterThan(7 * DAY - HOUR);
   });
 
   test("does not write on every request", async () => {
     // A write per API call would be several per screen. The window is only
-    // extended once it is more than half gone.
+    // extended once it is more than half gone — three and a half days, now,
+    // so an ordinary session is touched about twice a week.
     const founder = await createFounder(h, organizer, "quiet@example.test", "Quiet", "quiet-password-112");
     const before = readSession(founder)!.expires_at;
 

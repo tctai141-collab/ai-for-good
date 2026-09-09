@@ -50,8 +50,8 @@ export const SESSION_COOKIE = "sb_session";
  * Two timers is the ordinary shape for this, and it is what the numbers are
  * chosen around:
  *
- *   IDLE (24h, slides forward on use) — a founder checking in daily never sees
- *   a login screen. A session forgotten in a lab is dead by the next morning.
+ *   IDLE (7 days, slides forward on use) — a founder who opens the app in any
+ *   given week never sees a login screen.
  *
  *   ABSOLUTE (14 days from login, never slides) — even someone using the app
  *   every day re-authenticates fortnightly, which bounds how long a stolen
@@ -59,8 +59,23 @@ export const SESSION_COOKIE = "sb_session";
  *
  * Neither is a substitute for signing out, which now works; they are the
  * backstop for when nobody does.
+ *
+ * The idle window was 24 hours, on the reasoning that a founder checking in
+ * daily would never meet a login screen. That assumption did not survive
+ * contact with the cohort: the check-in did not open until the second evening
+ * of the sprint, nobody opens the app on a Saturday, and a founder reported
+ * being logged out repeatedly in the first week. A tool that makes you sign in
+ * because you took a weekend off is training people not to come back.
+ *
+ * Seven days rather than fourteen, deliberately. Fourteen would equal the
+ * ceiling, which collapses the two timers into one and puts this back to the
+ * flat window the paragraph above exists to describe. A session left on a
+ * shared machine now dies in a week instead of overnight — genuinely weaker,
+ * and the price of the thing being usable. The stronger fix is a "keep me
+ * signed in" choice at login, so the person who knows whose laptop it is makes
+ * the decision; that is worth doing if this ever needs revisiting.
  */
-const SESSION_IDLE_HOURS = 24;
+const SESSION_IDLE_HOURS = 7 * 24;
 const SESSION_ABSOLUTE_DAYS = 14;
 const INVITE_DAYS = 14;
 export const MIN_PASSWORD_LENGTH = 10;
