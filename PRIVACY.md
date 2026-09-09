@@ -21,7 +21,7 @@ sees it.
 | Check-in summaries, mood, theme | Lets the team see who is under strain | Until the account is deleted |
 | Deadline completions | Progress tracking | Until the account is deleted |
 | Working-style assessment: your thirty answers, scores and bands | Your own reflection. **Nobody else can read it, including organizers** | Until you retake it, or the account goes |
-| Session records | Staying signed in. Stored as SHA-256, never the cookie value | 24h idle / 14d absolute, then purged |
+| Session records | Staying signed in. Stored as SHA-256, never the cookie value | 7d idle / 14d absolute, then purged |
 | Invite and reset tokens | Account setup. Stored as SHA-256 | 14 days, single use |
 | Bug reports you file | Fixing the software. Includes the screen you were on and which browser you used | Life of the deployment. Your name and the link to your account are removed when the account goes; the description of the fault stays |
 | How many messages you sent Sprint Buddy each day | Keeping the running cost bounded, and knowing whether the daily allowance is set sensibly. A count and a token total per day — **not what you wrote** | Until the account is deleted |
@@ -92,7 +92,7 @@ real region rather than a promise to look it up.
 ## Retention
 
 - Conversations: until deleted by the founder
-- Sessions: 24h idle, 14d absolute
+- Sessions: 7d idle, 14d absolute
 - Invite and reset tokens: 14 days, single use
 - Backups: **30 days**, then rotated out
 - Rate-limit counters: 15 minutes, in memory only
