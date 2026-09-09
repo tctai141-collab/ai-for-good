@@ -116,6 +116,22 @@ class PortTaken extends Error {}
  * Five attempts: the window is a few milliseconds wide and losing it five
  * times running would mean something other than chance.
  */
+/**
+ * A start date that has not happened yet, whenever the suite happens to run.
+ *
+ * This was the literal string "2026-09-09", chosen as a date comfortably in
+ * the future. It stopped being one on 9 September 2026, and the test that
+ * asserts the advisor is told nothing about a programme that has not begun
+ * started failing on a Wednesday morning for no reason anybody had changed.
+ *
+ * A fixed date in a test is a fact about when the test was written, not about
+ * what it is testing. Suites that need the sprint already running pass their
+ * own date explicitly, which is the honest way to say so.
+ */
+function aMonthFromNow(): string {
+  return new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+}
+
 export async function startServer(
   options: { email?: boolean; advisorFails?: boolean; sprintStartDate?: string; checkinOpen?: boolean; workingGeniusOpen?: boolean } = {},
 ): Promise<Harness> {
@@ -226,7 +242,7 @@ async function startServerOnce(
       ANTHROPIC_BASE_URL: advisorUrl,
       // Future by default, which is the state the app is actually in and the
       // one that produced a bug. Tests that need a running sprint say so.
-      SPRINT_START_DATE: options.sprintStartDate ?? "2026-09-09",
+      SPRINT_START_DATE: options.sprintStartDate ?? aMonthFromNow(),
       /*
        * Stands the server on the far side of the check-in hold.
        *
@@ -243,10 +259,17 @@ async function startServerOnce(
        * Several suites take the assessment end to end — privacy, retakes, the
        * team map — and every one needs the save to reach the database. On by
        * default here, because the hold is a launch-week decision and not the
-       * behaviour those suites are about; the tests that care about the hold
-       * itself leave it off and assert the 423.
+       * behaviour those suites are about.
+       *
+       * The suite that tests the hold passes `workingGeniusOpen: false`, which
+       * pushes the date forward rather than unsetting the override. Unsetting
+       * it fell back to the real constant, so those tests asserted a 423 only
+       * for as long as the real date had not arrived — and they began failing
+       * the morning it did.
        */
-      ...(options.workingGeniusOpen === false ? {} : { WORKING_GENIUS_OPENS_AT_OVERRIDE: "0" }),
+      ...(options.workingGeniusOpen === false
+        ? { WORKING_GENIUS_OPENS_AT_OVERRIDE: String(Date.now() + 30 * 864e5) }
+        : { WORKING_GENIUS_OPENS_AT_OVERRIDE: "0" }),
       // Omitted entirely when a test needs the unconfigured case.
       ...(emailEnabled
         ? {
