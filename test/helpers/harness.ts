@@ -40,6 +40,8 @@ export type Harness = {
     /** The blocks as sent, so caching breakpoints can be asserted. */
     systemBlocks: { type: string; text: string; cache_control?: { type: string } }[];
     messages: { role: string; content: string }[];
+    /** Which model the call was billed against, for the check-in/chat split. */
+    model: string;
   }[];
   stop(): void;
 };
@@ -186,6 +188,7 @@ async function startServerOnce(
       const body = (await request.json()) as {
         system?: string | { type: string; text: string; cache_control?: { type: string } }[];
         messages: { role: string; content: string }[];
+        model?: string;
       };
       // The system prompt is captured too: what the advisor is told about the
       // cohort is exactly the thing that went wrong once. It is sent as blocks
@@ -198,6 +201,7 @@ async function startServerOnce(
         system: blocks.map((b) => b.text).join("\n\n"),
         systemBlocks: blocks,
         messages: body.messages ?? [],
+        model: String(body.model ?? ""),
       });
       if (options.advisorFails) {
         // The shape the audit caught being relayed to the browser verbatim.

@@ -24,6 +24,7 @@ sees it.
 | Session records | Staying signed in. Stored as SHA-256, never the cookie value | 24h idle / 14d absolute, then purged |
 | Invite and reset tokens | Account setup. Stored as SHA-256 | 14 days, single use |
 | Bug reports you file | Fixing the software. Includes the screen you were on and which browser you used | Life of the deployment. Your name and the link to your account are removed when the account goes; the description of the fault stays |
+| How many messages you sent Sprint Buddy each day | Keeping the running cost bounded, and knowing whether the daily allowance is set sensibly. A count and a token total per day — **not what you wrote** | Until the account is deleted |
 | Admin audit log | Accountability for organizer actions, including reading a shared conversation | Life of the deployment |
 
 **Not held:** payment details, location, tracking or analytics cookies, IP

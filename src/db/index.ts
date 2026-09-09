@@ -594,6 +594,7 @@ export function deleteUser(email: string): void {
     db.run("DELETE FROM decisions WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM threads WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM visits WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM chat_usage WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM working_genius WHERE user_email = $email", { $email: email });
     // Cascades from users anyway, but erasure is the wrong place to rely on a
     // constraint staying as it is.
@@ -1874,6 +1875,105 @@ export function countBugReportsSince(email: string, isoTimestamp: string): numbe
     .query("SELECT COUNT(*) AS n FROM bug_reports WHERE from_email = $email AND created_at >= $since")
     .get({ $email: email, $since: isoTimestamp }) as { n: number };
   return row.n;
+}
+
+/* ------------------------------------------------------ metered API usage -- */
+
+export type ChatUsageRow = {
+  email: string;
+  name: string;
+  role: string;
+  kind: "chat" | "checkin";
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+/**
+ * Counts one call and returns the running total for the day.
+ *
+ * Counted before the call goes upstream, not after. A reply that fails halfway
+ * still cost money, and a counter that only records successes is one a failing
+ * loop can spend against forever.
+ */
+export function recordChatCall(email: string, day: string, kind: "chat" | "checkin"): number {
+  const db = getDb();
+  db.run(
+    `INSERT INTO chat_usage (user_email, day, kind, calls) VALUES ($email, $day, $kind, 1)
+     ON CONFLICT(user_email, day, kind) DO UPDATE SET calls = calls + 1`,
+    { $email: email, $day: day, $kind: kind },
+  );
+  const row = db
+    .query("SELECT calls FROM chat_usage WHERE user_email = $email AND day = $day AND kind = $kind")
+    .get({ $email: email, $day: day, $kind: kind }) as { calls: number };
+  return row.calls;
+}
+
+/** How many calls of one kind this person has already made today. */
+export function chatCallsToday(email: string, day: string, kind: "chat" | "checkin"): number {
+  const db = getDb();
+  const row = db
+    .query("SELECT calls FROM chat_usage WHERE user_email = $email AND day = $day AND kind = $kind")
+    .get({ $email: email, $day: day, $kind: kind }) as { calls: number } | null;
+  return row?.calls ?? 0;
+}
+
+/**
+ * Adds what the provider said the call cost.
+ *
+ * Separate from the count because it arrives later — at the end of a stream,
+ * if it arrives at all. The row already exists by then.
+ */
+export function addChatTokens(
+  email: string, day: string, kind: "chat" | "checkin",
+  inputTokens: number, outputTokens: number,
+): void {
+  const db = getDb();
+  db.run(
+    `UPDATE chat_usage SET input_tokens = input_tokens + $in, output_tokens = output_tokens + $out
+      WHERE user_email = $email AND day = $day AND kind = $kind`,
+    { $email: email, $day: day, $kind: kind, $in: inputTokens, $out: outputTokens },
+  );
+}
+
+/**
+ * Claims the one alert for this person, this day, this kind.
+ *
+ * Returns true only to the first caller. Hitting a limit is worth one email,
+ * and a founder who keeps trying afterwards should not generate one per
+ * attempt — that turns a useful signal into the thing you filter out.
+ */
+export function claimUsageAlert(email: string, day: string, kind: "chat" | "checkin"): boolean {
+  const db = getDb();
+  /* Read and write in one transaction, so two requests arriving together
+     cannot both come away believing they were first. */
+  return db.transaction(() => {
+    const row = db
+      .query("SELECT alerted_at FROM chat_usage WHERE user_email = $email AND day = $day AND kind = $kind")
+      .get({ $email: email, $day: day, $kind: kind }) as { alerted_at: string | null } | null;
+    if (!row || row.alerted_at) return false;
+    db.run(
+      `UPDATE chat_usage SET alerted_at = datetime('now')
+        WHERE user_email = $email AND day = $day AND kind = $kind`,
+      { $email: email, $day: day, $kind: kind },
+    );
+    return true;
+  })();
+}
+
+/** Everyone's usage for one day, heaviest first, for the admin panel. */
+export function chatUsageForDay(day: string): ChatUsageRow[] {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT u.email, u.name, u.role, c.kind, c.calls,
+              c.input_tokens AS inputTokens, c.output_tokens AS outputTokens
+         FROM chat_usage c
+         JOIN users u ON u.email = c.user_email
+        WHERE c.day = $day
+        ORDER BY c.calls DESC, u.name COLLATE NOCASE`,
+    )
+    .all({ $day: day }) as ChatUsageRow[];
 }
 
 export type ProgrammeEventRow = {

@@ -58,6 +58,27 @@ services:
         value: low
       - key: ANTHROPIC_MODEL
         value: claude-opus-5
+      # Check-ins run on the smaller model. They are the highest-volume path in
+      # the app — every founder, every day, for thirteen weeks — and the most
+      # structured, so they have the least to lose from it. Open conversation
+      # stays on the model above, which is where the coaching voice has to
+      # carry something. Swap this back if the check-ins read flat.
+      - key: ANTHROPIC_CHECKIN_MODEL
+        value: claude-sonnet-5
+      # The daily allowance per person, which is what actually bounds the bill:
+      # the per-minute limit in limits.ts stops a script and nothing else.
+      # Declared here rather than left to the defaults so the numbers can be
+      # corrected from the dashboard once a real week of usage exists — forty
+      # is an estimate of a heavy day, not a measurement of one.
+      - key: CHAT_DAILY_LIMIT
+        value: "40"
+      # Separate, so a day spent in conversation cannot cost somebody the
+      # check-in that the programme is actually built on.
+      - key: CHECKIN_DAILY_LIMIT
+        value: "15"
+      # Staff demo and test the thing. Larger, and still not unlimited.
+      - key: STAFF_DAILY_LIMIT
+        value: "200"
       # --- Backups: Cloudflare R2, EU jurisdiction (see docs/operations/backups.md)
       - key: R2_ACCESS_KEY_ID
         sync: false

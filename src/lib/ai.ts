@@ -12,6 +12,34 @@ import Anthropic from "@anthropic-ai/sdk";
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 
 /**
+ * The check-in runs on a smaller model than open conversation.
+ *
+ * It is the highest-volume path in the app — every founder, every day, for
+ * thirteen weeks — and the most structured: a fixed framing, a couple of
+ * questions, a summary tag at the end. Open conversation is where the coaching
+ * voice has to carry something, and that is what stays on the larger model.
+ *
+ * Split for cost. The one thing it costs back: the persona block is prompt
+ * cached, and two models mean two cache entries rather than one.
+ */
+const CHECKIN_MODEL = process.env.ANTHROPIC_CHECKIN_MODEL || "claude-sonnet-5";
+
+/** Which model a given kind of turn runs on. */
+export function modelFor(kind: string | undefined): string {
+  return kind === "checkin" ? CHECKIN_MODEL : MODEL;
+}
+
+/** What one call cost, as the provider counted it. */
+export type Usage = { inputTokens: number; outputTokens: number };
+
+function usageOf(message: { usage?: { input_tokens?: number; output_tokens?: number } }): Usage {
+  return {
+    inputTokens: message.usage?.input_tokens ?? 0,
+    outputTokens: message.usage?.output_tokens ?? 0,
+  };
+}
+
+/**
  * Sprint Buddy replies are short coaching turns, so we run without thinking at
  * low effort: lower latency and cost, and `max_tokens` then bounds the visible
  * reply rather than reply-plus-reasoning. Raise ANTHROPIC_EFFORT if advice
@@ -99,6 +127,8 @@ type AdvisorRequest = {
   system: string;
   messages: ChatMessage[];
   maxTokens: number;
+  /** Defaults to the open-conversation model when the caller does not say. */
+  model?: string;
 };
 
 function buildParams(request: AdvisorRequest): Anthropic.MessageCreateParamsNonStreaming {
@@ -131,7 +161,7 @@ function buildParams(request: AdvisorRequest): Anthropic.MessageCreateParamsNonS
     : [{ type: "text", text: variable }];
 
   return {
-    model: MODEL,
+    model: request.model || MODEL,
     max_tokens: request.maxTokens,
     system,
     messages: turns,
@@ -141,8 +171,12 @@ function buildParams(request: AdvisorRequest): Anthropic.MessageCreateParamsNonS
 }
 
 /** Single-shot reply. Returns the assistant's text. */
-export async function advisorReply(request: AdvisorRequest): Promise<string> {
+export async function advisorReply(
+  request: AdvisorRequest,
+  onUsage?: (usage: Usage) => void,
+): Promise<string> {
   const response = await getClient().messages.create(buildParams(request));
+  onUsage?.(usageOf(response));
 
   if (response.stop_reason === "refusal") {
     throw new Error("The advisor declined to answer this request.");
@@ -168,6 +202,7 @@ function sseChunk(text: string): string {
 export function advisorReplyStream(
   request: AdvisorRequest,
   onText?: (text: string) => void,
+  onUsage?: (usage: Usage) => void,
 ): ReadableStream<Uint8Array> {
   const params = buildParams(request);
   const client = getClient();
@@ -187,6 +222,11 @@ export function advisorReplyStream(
         }
 
         const final = await stream.finalMessage();
+        /* Best effort, and deliberately not what the daily cap counts. A call
+           that dies before the final message still cost money upstream, so the
+           cap counts calls — which cannot fail open — and this only refines
+           what the number is worth. */
+        onUsage?.(usageOf(final));
         if (final.stop_reason === "refusal") {
           controller.enqueue(
             encoder.encode(sseChunk("\n\n[The advisor declined to answer this request.]")),

@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { APP_URL_UNSET, configuredAppUrl } from "../../../lib/appUrl";
 import { adminWriteLimiter, readJsonBody, tooMany } from "../../../lib/limits";
 import {
+  chatUsageForDay,
   countOrganizers,
   createInvite,
   createUser,
@@ -12,6 +13,7 @@ import {
   updateUser,
   type Role,
 } from "../../../db/index";
+import { helsinkiDay } from "../../../lib/deadlines";
 import { reportError } from "../../../lib/errors";
 import {
   EmailNotConfiguredError,
@@ -108,7 +110,33 @@ export const GET: APIRoute = async ({ cookies }) => {
   if (session.role !== "organizer") {
     return Response.json({ error: "Organizers only." }, { status: 403 });
   }
-  return Response.json({ users: listUsers(), you: session.email });
+  /*
+   * Today's metered-API usage, folded to one row per person.
+   *
+   * A count and a token total, never any message text — the point is to see
+   * whether the daily allowance is set right and whether anybody is using the
+   * advisor for something it is not for, and neither question needs reading
+   * what somebody wrote.
+   */
+  const day = helsinkiDay();
+  const byPerson = new Map<string, {
+    email: string; name: string; role: string;
+    chat: number; checkin: number; tokens: number;
+  }>();
+  for (const row of chatUsageForDay(day)) {
+    const at = byPerson.get(row.email) ?? {
+      email: row.email, name: row.name, role: row.role, chat: 0, checkin: 0, tokens: 0,
+    };
+    if (row.kind === "checkin") at.checkin += row.calls;
+    else at.chat += row.calls;
+    at.tokens += row.inputTokens + row.outputTokens;
+    byPerson.set(row.email, at);
+  }
+  const usage = [...byPerson.values()].sort(
+    (a, b) => (b.chat + b.checkin) - (a.chat + a.checkin) || a.name.localeCompare(b.name),
+  );
+
+  return Response.json({ users: listUsers(), you: session.email, usage, day });
 };
 
 export const POST: APIRoute = async ({ cookies, request }) => {
