@@ -43,6 +43,20 @@ export function helsinkiOffsetHours(date: Date): number {
 }
 
 /**
+ * Today's date in Helsinki, as YYYY-MM-DD.
+ *
+ * The daily usage allowance is keyed on this rather than on a UTC date, so
+ * "resets at midnight" means the midnight the cohort is living in. Through the
+ * same offset rule as everything else here, so there is one clock in the app
+ * and not two.
+ */
+export function helsinkiDay(now: number = Date.now()): string {
+  const at = new Date(now);
+  const local = new Date(at.getTime() + helsinkiOffsetHours(at) * 3_600_000);
+  return local.toISOString().slice(0, 10);
+}
+
+/**
  * The instant a deadline actually falls due, as a UTC timestamp.
  *
  * With a `due_time` that is HH:MM Helsinki on the due date. Without one it is

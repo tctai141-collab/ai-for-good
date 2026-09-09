@@ -41,6 +41,37 @@ export const CHAT_RATE_LIMIT = 20;
 export const CHAT_RATE_WINDOW_MS = 60_000;
 
 /**
+ * Advisor calls per person per day, which is the limit that actually bounds
+ * the bill.
+ *
+ * The burst limit above stops a script and nothing else: twenty a minute
+ * sustained is twelve hundred an hour, and there was no ceiling above it at
+ * all. Nineteen founders against no daily cap is half a million calls a day in
+ * theory, on a metered API, with nobody finding out until the invoice.
+ *
+ * A heavy genuine day is about thirty turns — a check-in plus a couple of real
+ * conversations. Forty leaves headroom over that without leaving room for a
+ * runaway.
+ *
+ * Two separate allowances, so a day spent talking cannot cost somebody their
+ * check-in. Staff get a larger one because they demo and test the thing, but
+ * not an unlimited one: a compromised staff account is worse than a founder's,
+ * not better.
+ *
+ * All three are env-tunable because forty is an estimate until there is a real
+ * day of usage to compare against.
+ */
+export const CHAT_DAILY_LIMIT = Number(process.env.CHAT_DAILY_LIMIT || 40);
+export const CHECKIN_DAILY_LIMIT = Number(process.env.CHECKIN_DAILY_LIMIT || 15);
+export const STAFF_DAILY_LIMIT = Number(process.env.STAFF_DAILY_LIMIT || 200);
+
+/** The allowance for one person on one kind of turn. */
+export function dailyLimitFor(role: string, kind: "chat" | "checkin"): number {
+  if (role === "organizer" || role === "mentor") return STAFF_DAILY_LIMIT;
+  return kind === "checkin" ? CHECKIN_DAILY_LIMIT : CHAT_DAILY_LIMIT;
+}
+
+/**
  * A fixed-window counter, bounded on purpose.
  *
  * The login throttle this is modelled on grew without limit: it recorded a

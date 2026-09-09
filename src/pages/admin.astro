@@ -410,6 +410,9 @@ import AaltoMark from "../components/AaltoMark.astro";
       .bk-sub { font-size: 0.8125rem; color: var(--muted); overflow-wrap: anywhere; }
       .bk-due { font-size: 0.8125rem; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
       .bk-due.late { color: var(--danger); font-weight: 600; }
+      /* A usage cell at or over its allowance. The only row in that table
+         worth reacting to, so it is the only one that gets a colour. */
+      td.late { color: var(--danger); font-weight: 600; }
 
       /* Loan history stays folded inside the book cell rather than taking a
          column of its own: it is the one thing here nobody reads until they
@@ -1094,6 +1097,27 @@ import AaltoMark from "../components/AaltoMark.astro";
         </div>
 
         <div class="tabpanel" id="tab-people" hidden>
+        <section class="panel">
+          <h2>Advisor usage today</h2>
+          <p class="note" style="margin-top:0">
+            Every message to Sprint Buddy is a paid API call. Founders get
+            40 conversation calls and 15 check-in calls a day, on separate
+            allowances so a busy day of chat cannot cost somebody their
+            check-in; staff get 200. Somebody at their limit is either getting
+            a lot out of it or using it for something it is not for — this
+            shows which people to ask. Counts only, never what was written.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Member</th><th>Conversation</th><th>Check-in</th><th>Tokens</th>
+              </tr>
+            </thead>
+            <tbody id="usage-rows"></tbody>
+          </table>
+          <p class="note" id="usage-empty" hidden>Nobody has used the advisor yet today.</p>
+        </section>
+
         <section class="panel">
           <h2>People</h2>
           <table>
@@ -1920,6 +1944,53 @@ import AaltoMark from "../components/AaltoMark.astro";
         const first = [...parts[0]][0];
         const last = parts.length > 1 ? [...parts[parts.length - 1]][0] : "";
         return (first + last).toUpperCase();
+      }
+
+      /*
+       * Today's spend, heaviest first.
+       *
+       * textContent throughout rather than innerHTML: a name is the one field
+       * here that somebody else chose, and this table exists to be looked at
+       * when something is odd — which is exactly when a hostile value is most
+       * likely to be sitting in it.
+       */
+      function renderUsage(usage) {
+        const body = document.getElementById("usage-rows");
+        const empty = document.getElementById("usage-empty");
+        if (!body) return;
+        body.textContent = "";
+        empty.hidden = usage.length > 0;
+
+        for (const row of usage) {
+          const tr = document.createElement("tr");
+
+          const who = document.createElement("td");
+          const name = document.createElement("div");
+          name.textContent = row.name || row.email;
+          const mail = document.createElement("div");
+          mail.className = "role";
+          mail.textContent = row.email;
+          who.append(name, mail);
+
+          /* At or over the allowance is the only thing worth colouring: it is
+             the row you would act on, and everything else is just a number. */
+          const limit = row.role === "organizer" || row.role === "mentor" ? 200 : 40;
+          const checkinLimit = row.role === "organizer" || row.role === "mentor" ? 200 : 15;
+
+          const chat = document.createElement("td");
+          chat.textContent = String(row.chat);
+          if (row.chat >= limit) chat.className = "late";
+
+          const checkin = document.createElement("td");
+          checkin.textContent = String(row.checkin);
+          if (row.checkin >= checkinLimit) checkin.className = "late";
+
+          const tokens = document.createElement("td");
+          tokens.textContent = row.tokens ? row.tokens.toLocaleString("en-GB") : "—";
+
+          tr.append(who, chat, checkin, tokens);
+          body.append(tr);
+        }
       }
 
       function renderUsers(users) {
@@ -3077,6 +3148,7 @@ import AaltoMark from "../components/AaltoMark.astro";
             (data.users.length === 1 ? " account" : " accounts") +
             (pending ? " · " + pending + " still to set up" : " · everyone is set up");
           app.hidden = false;
+          renderUsage(data.usage || []);
           renderUsers(data.users);
         } catch {
           lede.textContent = "Could not reach the server.";

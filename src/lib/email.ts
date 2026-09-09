@@ -373,6 +373,34 @@ Sprint.`,
   });
 }
 
+/**
+ * Tells the organizers somebody has spent their day's allowance.
+ *
+ * Sent once per person per day per kind. Hitting the limit means one of two
+ * things — a founder genuinely leaning on the tool, or somebody using it for
+ * something it is not for — and both are worth knowing on the day rather than
+ * on the invoice. Which of the two it is, is not something this email can tell
+ * you, so it does not guess.
+ */
+export function sendUsageLimitEmail(
+  to: string, who: string, kind: "chat" | "checkin", limit: number, link: string,
+): Promise<void> {
+  const what = kind === "checkin" ? "check-in" : "conversation";
+  return send({
+    to,
+    subject: `${who} reached today's ${what} limit`,
+    text: `${who} has made ${limit} ${what} calls to Sprint Buddy today, which is the daily allowance, and has been told it resets at midnight.
+
+That is either somebody getting a lot out of it or somebody using it for something else. The usage panel shows who is where: ${link}
+
+If the allowance is simply too low for how the cohort works, it is an environment variable (CHAT_DAILY_LIMIT), not a code change.
+
+---
+You are receiving this because you are an organizer on the Aalto Founder
+Sprint.`,
+  });
+}
+
 /** Tells a founder their wish was answered. */
 export function sendWishReplyEmail(
   to: string, answeredBy: string, body: string, link: string,

@@ -2,13 +2,31 @@ import type { APIRoute } from "astro";
 import { readJsonBody } from "../../lib/limits";
 import { buildCheckinPrompt } from "../../lib/prompts/checkin";
 import { CHECKIN_OPENS_AT, checkinLocked, checkinOpensLabel } from "../../lib/checkin-window";
-import { getLastCheckin, upsertCheckin } from "../../db";
-import { advisorReply, advisorReplyStream } from "../../lib/ai";
+import {
+  addChatTokens, chatCallsToday, claimUsageAlert, getLastCheckin,
+  listUsersByRole, recordChatCall, upsertCheckin,
+} from "../../db";
+import { advisorReply, advisorReplyStream, modelFor, type Usage } from "../../lib/ai";
 import { getSessionUser } from "../../lib/auth";
 import { buildProgrammeContext } from "../../lib/programme";
 import { sprintBuddyPersona } from "../../lib/knowledge";
-import { capHistory, chatLimiter } from "../../lib/limits";
+import { capHistory, chatLimiter, dailyLimitFor } from "../../lib/limits";
+import { helsinkiDay } from "../../lib/deadlines";
+import { configuredAppUrl } from "../../lib/appUrl";
+import { sendUsageLimitEmail } from "../../lib/email";
 import { reportError } from "../../lib/errors";
+
+async function notifyUsageLimit(
+  who: string, kind: "chat" | "checkin", limit: number,
+): Promise<void> {
+  const base = configuredAppUrl();
+  const link = base ? `${base}/admin` : "";
+  await Promise.all(
+    listUsersByRole("organizer").map((person) =>
+      sendUsageLimitEmail(person.email, who, kind, limit, link),
+    ),
+  );
+}
 
 const CHECKIN_TAG_RE = /\n*\[CHECKIN_SUMMARY\]:\s*(.+?)(?=\n*\[CHECKIN_SIGNAL\]:|\s*$)/ms;
 const CHECKIN_SIGNAL_RE = /\n*\[CHECKIN_SIGNAL\]:\s*(.+?)\s*$/m;
@@ -203,6 +221,54 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       );
     }
 
+    /*
+     * The daily allowance, which is the limit that actually bounds the bill.
+     *
+     * The burst limit above stops a script hammering the endpoint and nothing
+     * else — twenty a minute sustained is twelve hundred an hour, and there was
+     * no ceiling above it. This one is in SQLite rather than in memory because
+     * a figure for the day has to survive a deploy.
+     *
+     * Chat and check-in draw on separate allowances so that a long afternoon of
+     * conversation cannot cost somebody the day's check-in, which is the ritual
+     * the programme is built on and the worse of the two to lose.
+     *
+     * Counted before the call rather than after: a reply that fails upstream
+     * still cost money, so a counter that only records successes is one a
+     * failing loop can spend against all day.
+     */
+    const usageKind: "chat" | "checkin" = body.kind === "checkin" ? "checkin" : "chat";
+    const today = helsinkiDay();
+    const dailyLimit = dailyLimitFor(session.role, usageKind);
+
+    if (chatCallsToday(session.email, today, usageKind) >= dailyLimit) {
+      /* One email per person per day per kind. Somebody who keeps trying after
+         being told should not turn a useful signal into a filtered one. */
+      if (claimUsageAlert(session.email, today, usageKind)) {
+        notifyUsageLimit(session.name || session.email, usageKind, dailyLimit)
+          .catch(reportError);
+      }
+      return Response.json(
+        {
+          error: usageKind === "checkin"
+            ? "You have used today's check-in allowance. It resets at midnight."
+            : "You have reached today's limit for Sprint Buddy. It resets at midnight — your check-in is not affected.",
+          resetsOn: today,
+        },
+        { status: 429 },
+      );
+    }
+
+    recordChatCall(session.email, today, usageKind);
+    const onUsage = (u: Usage) => {
+      try {
+        addChatTokens(session.email, today, usageKind, u.inputTokens, u.outputTokens);
+      } catch (err) {
+        /* Bookkeeping must never take down a reply the founder is reading. */
+        reportError(err, { where: "chat.usage" });
+      }
+    };
+
     // More headroom than the OpenClaw caps: the current model writes longer by
     // default. Brevity is enforced by the style guardrails in the system prompt,
     // so this only needs to be high enough to avoid truncating mid-sentence.
@@ -217,6 +283,8 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       // message / ~1 MB history was forwarded upstream verbatim before this.
       messages: capHistory(body.messages),
       maxTokens,
+      /* Check-ins run on the smaller model: highest volume, most structured. */
+      model: modelFor(body.kind),
     };
 
     if (body.stream) {
@@ -232,7 +300,7 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         let accumulated = "";
         const stream = advisorReplyStream(advisorRequest, (text) => {
           accumulated += text;
-        });
+        }, onUsage);
 
         // Pass tokens straight through; persist the check-in once the reply ends.
         const persistOnFlush = new TransformStream<Uint8Array, Uint8Array>({
@@ -247,10 +315,13 @@ export const POST: APIRoute = async ({ cookies, request }) => {
         return new Response(stream.pipeThrough(persistOnFlush), { headers: streamHeaders });
       }
 
-      return new Response(advisorReplyStream(advisorRequest), { headers: streamHeaders });
+      return new Response(
+        advisorReplyStream(advisorRequest, undefined, onUsage),
+        { headers: streamHeaders },
+      );
     }
 
-    let content = await advisorReply(advisorRequest);
+    let content = await advisorReply(advisorRequest, onUsage);
 
     if (body.kind === "checkin" && body.userEmail) {
       persistCheckinSummary(body.userEmail, content);

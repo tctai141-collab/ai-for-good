@@ -119,6 +119,36 @@ export function initSchema(db: Database) {
     )
   `);
 
+  /*
+   * What each person has spent on the metered API, per day.
+   *
+   * The burst limiter in limits.ts is an in-memory Map that empties on every
+   * deploy, which is fine for "twenty a minute" and useless for "forty a day".
+   * A daily figure has to survive a restart, so it lives here.
+   *
+   * Split by kind on purpose. Counted as one pool, a long afternoon of
+   * conversation could eat the allowance and then lock a founder out of their
+   * check-in — the daily ritual the whole programme is built around, and much
+   * worse to lose than more chat.
+   *
+   * `day` is a Helsinki date, not UTC, so "resets at midnight" means the
+   * founder's midnight rather than one an hour or two off it.
+   *
+   * CASCADE because PRIVACY.md promises removal is removal.
+   */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_usage (
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      day TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('chat','checkin')),
+      calls INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      alerted_at TEXT,
+      PRIMARY KEY (user_email, day, kind)
+    )
+  `);
+
   db.run(`
     CREATE TABLE IF NOT EXISTS decisions (
       id TEXT PRIMARY KEY,
