@@ -59,13 +59,53 @@ jobs:
 
       - name: Audit dependencies
         run: |
-          # Fail on high severity only. Moderate and low are reported for
-          # visibility but do not block — the residual ones need a major Astro
-          # upgrade, which is not something to do inside an unrelated PR.
+          # Block on high AND critical. This used to match "high:" alone, which
+          # meant a critical advisory sailed through the gate reporting nothing
+          # — and one duly did: the Astro AVIF RCE below sat in a passing build.
+          #
+          # Moderate and low are printed for visibility and do not block.
+          #
+          # The exceptions are listed by id rather than by lowering the bar.
+          # Every one of them lives inside Astro's own dependency tree and is
+          # pinned there, so none can move until Astro 7 — a major upgrade, and
+          # not one to do inside an unrelated PR. Each was checked for
+          # reachability in this app before being listed:
+          #
+          #   GHSA-rgj7-g3m4-5g8c  sharp / libheif. Reached only through image
+          #     optimization. This app never imports astro:assets and has no
+          #     image config; sharp is present as Astro's transitive dependency
+          #     and nothing calls it.
+          #   GHSA-w27v-7q3p-w38r  SVGO removeScripts. A build-time SVG
+          #     optimizer. No user-supplied SVG is processed at build or at
+          #     runtime; the only SVGs here are ones in this repository.
+          #   GHSA-2883-xcg3-v3hh  js-yaml CPU use on merge keys. Astro parses
+          #     its own config and content frontmatter with this. No founder
+          #     input reaches a YAML parser anywhere in the app.
+          #
+          # Same tree, same blocker, and listed here rather than silently
+          # tolerated: GHSA-26w7-cxv4-gfx2 (critical, AVIF RCE) is unreachable
+          # for the same reason as the sharp one — no image optimization.
+          #
+          # REVIEW BY 2026-10-15, or when Astro 7 lands, whichever is first.
+          # If this list is still here after that date it has stopped being a
+          # decision and become a habit.
+          ALLOWED='GHSA-rgj7-g3m4-5g8c|GHSA-w27v-7q3p-w38r|GHSA-2883-xcg3-v3hh|GHSA-26w7-cxv4-gfx2'
+
           bun audit > audit.txt 2>&1 || true
           cat audit.txt
-          if grep -qE "^\s+high:" audit.txt; then
-            echo "::error::High-severity advisories found."
+
+          blocking=$(grep -E "^\s+(high|critical):" audit.txt | grep -vE "$ALLOWED" || true)
+          if [ -n "$blocking" ]; then
+            echo "$blocking"
+            echo "::error::High or critical advisories found that are not on the reviewed list."
             exit 1
           fi
-          echo "No high-severity advisories."
+
+          # A listed advisory that has stopped appearing has been fixed, and the
+          # entry should go. Said out loud, because an allowlist nobody prunes
+          # is how the next real one gets waved through.
+          for id in $(echo "$ALLOWED" | tr '|' ' '); do
+            grep -q "$id" audit.txt || echo "::warning::$id is no longer reported and can be removed from the allowlist in ci.yml."
+          done
+
+          echo "No unreviewed high or critical advisories."
