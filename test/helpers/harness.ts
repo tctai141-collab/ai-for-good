@@ -255,8 +255,17 @@ async function startServerOnce(
        * server time, never lands in the cached prompt prefix, and the hold
        * otherwise refuses the request before the model is reached. Everything
        * else runs with the hold on, which is what production has.
+       *
+       * "Hold on" means a date pushed forward, not the override left unset.
+       * Unset fell back to the real constant, so the suite that asserts a 423
+       * did so only until the hold expired — which it did on the evening of
+       * 9 September, taking two tests with it. The same shape as the sprint
+       * start date below and the working-style hold above: a fixed date in a
+       * test is a fact about when it was written.
        */
-      ...(options.checkinOpen ? { CHECKIN_OPENS_AT_OVERRIDE: "0" } : {}),
+      ...(options.checkinOpen
+        ? { CHECKIN_OPENS_AT_OVERRIDE: "0" }
+        : { CHECKIN_OPENS_AT_OVERRIDE: String(Date.now() + 30 * 864e5) }),
       /*
        * Stands the server past the working-style hold.
        *
