@@ -98,6 +98,113 @@ describe("the manifest", () => {
   });
 });
 
+describe("the favicon", () => {
+  /*
+   * A founder reported he kept losing the tab, and the cause was not taste.
+   *
+   * favicon.svg carried a comment reading "#5e6ad2 is --brand-accent". SVG is
+   * XML, a double hyphen is illegal inside an XML comment, and a fatal parse
+   * error is fatal: Chrome renders the error rather than the picture. The site
+   * had no favicon at all for a week, in every browser, and nothing here
+   * noticed because the file was served with a 200 and the right content type.
+   *
+   * Serving it is not the claim worth testing. Parsing is.
+   */
+  test("is well-formed XML, because a browser will not forgive it", async () => {
+    const svg = await (await get(h, "/favicon.svg")).text();
+
+    /* The specific way it broke, named so a future comment mentioning a CSS
+       custom property does not quietly do it again. */
+    const comments = svg.match(/<!--[\s\S]*?-->/g) ?? [];
+    for (const comment of comments) {
+      expect([comment.slice(0, 60), comment.slice(4, -3).includes("--")])
+        .toEqual([comment.slice(0, 60), false]);
+    }
+
+    /*
+     * And the general case, since a double hyphen is only the way it broke
+     * once. Checked by hand rather than with a parser: there is no DOMParser
+     * in the test runtime, and the one XML parser already in the tree is
+     * sharp's, which ci.yml currently says nothing calls — a claim worth
+     * keeping true.
+     *
+     * Not a real parser, and not pretending to be. It catches the ways a
+     * hand-edited SVG actually stops being XML: a comment that closes early,
+     * a tag left open, and a bare ampersand.
+     */
+    expect(svg.split("<!--").length).toBe(svg.split("-->").length);
+    expect(svg).not.toMatch(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);)/i);
+
+    const withoutComments = svg.replace(/<!--[\s\S]*?-->/g, "");
+    const open: string[] = [];
+    for (const [, closing, name, selfClosing] of
+         withoutComments.matchAll(/<(\/?)([a-zA-Z][\w:-]*)[^>]*?(\/?)>/g)) {
+      if (selfClosing) continue;
+      if (closing) expect(open.pop()).toBe(name!);
+      else open.push(name!);
+    }
+    expect(open).toEqual([]);
+    expect(withoutComments).toMatch(/^\s*<svg\b/);
+  });
+
+  test("carries its own size, not just a viewBox", async () => {
+    // Without width and height some renderers fall back to a default box and
+    // scale the art oddly. It costs two attributes to not find out which.
+    const svg = await (await get(h, "/favicon.svg")).text();
+    expect(svg).toMatch(/width="32"/);
+    expect(svg).toMatch(/height="32"/);
+    expect(svg).toMatch(/viewBox="0 0 32 32"/);
+  });
+
+  test("has a ground behind it, so it has a silhouette at 16px", async () => {
+    /*
+     * The other half of losing a tab. The mark before this one was line art on
+     * transparency: at sixteen pixels, in a row of twenty tabs, there is no
+     * shape to find and on a dark tab strip the indigo blended into it.
+     */
+    const svg = await (await get(h, "/favicon.svg")).text();
+    expect(svg).toMatch(/<rect[^>]*width="32"[^>]*height="32"[^>]*fill="#5e6ad2"/);
+  });
+
+  test("/favicon.ico is served, and is really an icon", async () => {
+    /*
+     * It 404'd. It is the path a browser falls back to when everything else
+     * fails, which is exactly the situation this bug was.
+     */
+    const res = await get(h, "/favicon.ico");
+    expect(res.status).toBe(200);
+
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const view = new DataView(bytes.buffer);
+    expect(view.getUint16(0, true)).toBe(0);   // reserved
+    expect(view.getUint16(2, true)).toBe(1);   // 1 = icon, 2 would be a cursor
+    const count = view.getUint16(4, true);
+    expect(count).toBeGreaterThanOrEqual(1);
+
+    /* Every entry points at real bytes inside the file. A directory that runs
+       past the end is the way a hand-built container goes wrong. */
+    for (let i = 0; i < count; i++) {
+      const entry = 6 + 16 * i;
+      const length = view.getUint32(entry + 8, true);
+      const offset = view.getUint32(entry + 12, true);
+      expect(offset + length).toBeLessThanOrEqual(bytes.length);
+      // PNG payloads, which every browser asking for a .ico can read.
+      expect([...bytes.slice(offset, offset + 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    }
+  });
+
+  test("the page offers a raster fallback, not only the SVG", async () => {
+    /* One file that renders nothing is how this happened. */
+    const html = await (await get(h, "/")).text();
+    expect(html).toContain('href="/favicon.ico"');
+    expect(html).toContain('href="/favicon-32.png"');
+    for (const path of ["/favicon-32.png", "/favicon-16.png"]) {
+      const res = await get(h, path);
+      expect(`${path} ${res.status}`).toBe(`${path} 200`);
+    }
+  });
+});
+
 describe("the icons", () => {
   test("every icon the manifest names is really there", async () => {
     /*

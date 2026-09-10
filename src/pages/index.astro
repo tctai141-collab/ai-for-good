@@ -8,7 +8,23 @@ import Root from "../components/Root";
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Sprint Buddy</title>
+    <!--
+      Three, in the order a browser should prefer them.
+
+      The SVG alone was the whole set, and it silently rendered nothing for a
+      week: SVG is XML, the file's own comment contained a double hyphen, and
+      Chrome refuses a document with a fatal parse error rather than doing its
+      best with it. A founder reported losing the tab; the file is fixed and a
+      test now parses it, but a single point of failure for an asset nobody
+      checks is worth removing as well.
+
+      favicon.ico is last and matters most for that: it is what a browser asks
+      for when nothing else works, and it was a 404 here.
+    -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <!--
       Add to Home Screen. Only this page carries these: it is the one that
       mounts the app, and the only one not marked noindex. /admin, /setup and

@@ -1,12 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <!--
-    The three faces are lit from above: a light top, the accent on the right,
-    a darker left. The hexes are the app's own indigo, not a set of their own —
-    #5e6ad2 is --brand-accent and #4a55b8 is the accent the print report uses.
-    They were three blues until the palette moved to indigo on 27 August and
-    this file did not move with it, so the tab and the app disagreed.
+    Sprint Buddy's face: the two eyes founders see on the mascot all day.
+
+    This was an isometric cube on a transparent background, and a founder said
+    he kept losing the tab. Transparency is why. At sixteen pixels a mark with
+    no ground behind it has no silhouette to find, and the cube's own indigo is
+    close enough to a dark tab strip to disappear into it. A filled tile is
+    findable in a row of twenty tabs; line art is not.
+
+    The geometry is measured from the version he drew rather than redrawn by
+    eye: a three-unit eye at x=10 and x=19, ten tall, on a tile rounded by
+    four and a half. His navy is the one thing not kept — #5e6ad2 is the app's
+    own accent, and the tab agreeing with the product is a thing this file
+    already got wrong once, when the palette moved to indigo in August and the
+    favicon stayed behind.
+
+    width and height are set as well as viewBox. Without them some renderers
+    fall back to a default box and scale the art oddly, which costs nothing to
+    prevent.
   -->
-  <path d="M16 4l12 5.5-12 5.5L4 9.5z" fill="#8f97e4"/>
-  <path d="M4 9.5l12 5.5v12L4 21.5z" fill="#4a55b8"/>
-  <path d="M16 15l12-5.5v12L16 27z" fill="#5e6ad2"/>
+  <rect width="32" height="32" rx="4.5" fill="#5e6ad2"/>
+  <rect x="10" y="11" width="3" height="10" rx="1.5" fill="#fff"/>
+  <rect x="19" y="11" width="3" height="10" rx="1.5" fill="#fff"/>
 </svg>
