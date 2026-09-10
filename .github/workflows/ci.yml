@@ -81,6 +81,16 @@ jobs:
           #   GHSA-2883-xcg3-v3hh  js-yaml CPU use on merge keys. Astro parses
           #     its own config and content frontmatter with this. No founder
           #     input reaches a YAML parser anywhere in the app.
+          #   GHSA-7w5x-hrqm-74c2  smol-toml denial of service on malformed
+          #     documents. Same shape as the js-yaml one and reached the same
+          #     way, through @astrojs/internal-helpers. This project has no
+          #     .toml file, imports no TOML parser, and has no content
+          #     collections; nothing a founder can send is ever parsed as TOML.
+          #
+          # Added 10 September, which is the second entry in two days. Both
+          # arrived because this tree is pinned to Astro 6 and cannot move.
+          # That is the argument for doing the upgrade rather than for growing
+          # this list, and it is what the review date below is counting down to.
           #
           # Same tree, same blocker, and listed here rather than silently
           # tolerated: GHSA-26w7-cxv4-gfx2 (critical, AVIF RCE) is unreachable
@@ -89,7 +99,7 @@ jobs:
           # REVIEW BY 2026-10-15, or when Astro 7 lands, whichever is first.
           # If this list is still here after that date it has stopped being a
           # decision and become a habit.
-          ALLOWED='GHSA-rgj7-g3m4-5g8c|GHSA-w27v-7q3p-w38r|GHSA-2883-xcg3-v3hh|GHSA-26w7-cxv4-gfx2'
+          ALLOWED='GHSA-rgj7-g3m4-5g8c|GHSA-w27v-7q3p-w38r|GHSA-2883-xcg3-v3hh|GHSA-26w7-cxv4-gfx2|GHSA-7w5x-hrqm-74c2'
 
           bun audit > audit.txt 2>&1 || true
           cat audit.txt
