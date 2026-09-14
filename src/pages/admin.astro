@@ -1069,6 +1069,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           <button type="button" class="tab" data-tab="mentor">This week</button>
           <button type="button" class="tab" data-tab="wishes">Wishes<span id="wish-badge" class="tab-badge" hidden></span></button>
           <button type="button" class="tab" data-tab="bugs">Bugs<span id="bug-badge" class="tab-badge" hidden></span></button>
+          <button type="button" class="tab" data-tab="survey">Survey</button>
           <button type="button" class="tab" data-tab="people">People</button>
           <button type="button" class="tab" data-tab="deadlines">Deadlines</button>
           <button type="button" class="tab" data-tab="shared">Shared</button>
@@ -1418,6 +1419,64 @@ import AaltoMark from "../components/AaltoMark.astro";
             <p class="message" id="bug-message" hidden></p>
 
             <div id="bug-list"></div>
+          </section>
+        </div>
+
+        <div class="tabpanel" id="tab-survey" hidden>
+          <section class="panel">
+            <h2>Survey</h2>
+            <p class="note" style="margin-top:0">
+              Roman's research questionnaire, taken inside Sprint Buddy. Founders see a
+              round only while its window is open, answer every statement once, and
+              cannot change an answer afterwards. Individual answers are for organizers
+              only — mentors do not see this tab.
+            </p>
+            <div class="row" style="align-items:flex-end">
+              <label>
+                <span class="label-text">Round</span>
+                <select id="survey-round"></select>
+              </label>
+            </div>
+            <p class="note" id="survey-summary"></p>
+            <div style="overflow-x:auto"><table id="survey-table"></table></div>
+          </section>
+
+          <section class="panel">
+            <h2>Edit a round</h2>
+            <p class="note" style="margin-top:0">
+              Questions lock once anybody has answered, because changing a statement
+              would change what the earlier answers meant. The title and the window
+              can still move. For new questions, make a new round from the last one.
+            </p>
+            <div class="row">
+              <button type="button" id="survey-clone">New round from the last one</button>
+            </div>
+            <form id="survey-form">
+              <label style="display:block">
+                <span class="label-text">Title</span>
+                <input id="sv-title" maxlength="200" required />
+              </label>
+              <label style="display:block">
+                <span class="label-text">Intro</span>
+                <textarea id="sv-intro" rows="6" maxlength="4000"></textarea>
+              </label>
+              <div class="row">
+                <label><span class="label-text">Opens (Helsinki)</span><input id="sv-opens-on" type="date" /></label>
+                <label><span class="label-text">at</span><input id="sv-opens-time" type="time" /></label>
+                <label><span class="label-text">Closes</span><input id="sv-closes-on" type="date" /></label>
+                <label><span class="label-text">at</span><input id="sv-closes-time" type="time" /></label>
+              </div>
+              <p class="note">Leave all four empty to keep a round as a draft nobody can take.</p>
+              <div id="sv-groups"></div>
+              <div class="row">
+                <button type="button" id="sv-add-group">Add a group of questions</button>
+              </div>
+              <div class="row">
+                <button type="submit">Save round</button>
+                <button type="button" id="sv-delete">Delete this round</button>
+              </div>
+            </form>
+            <p class="message" id="survey-message" hidden></p>
           </section>
         </div>
 
@@ -4937,12 +4996,238 @@ import AaltoMark from "../components/AaltoMark.astro";
            to be right before anybody opens the tab. */
         loadBugs();
         if (myRole === "mentor") return;
+        loadSurvey();
         loadDeadlines();
         loadLibrary();
         loadProgramme();
         loadEvents();
         loadKnowledge();
         loadBroadcast();
+      });
+
+      /* ------------------------------------------------------------- survey -- */
+
+      /*
+       * Results and the round editor.
+       *
+       * Built with textContent and .value throughout. Every string here was typed
+       * by somebody — a founder's name, a statement Roman wrote — and none of it
+       * needs to be HTML.
+       */
+      const surveySelect = document.getElementById("survey-round");
+      const surveySummary = document.getElementById("survey-summary");
+      const surveyTable = document.getElementById("survey-table");
+      const surveyMessage = document.getElementById("survey-message");
+      const surveyForm = document.getElementById("survey-form");
+      const svGroups = document.getElementById("sv-groups");
+      let surveyRounds = [];
+      let editingRoundId = null;
+
+      /* ISO instant to the Helsinki date and time the inputs take. */
+      function helsinkiParts(iso) {
+        if (!iso) return { date: "", time: "" };
+        const parts = Object.fromEntries(
+          new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Europe/Helsinki", year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+          }).formatToParts(new Date(iso)).map((p) => [p.type, p.value]),
+        );
+        return { date: parts.year + "-" + parts.month + "-" + parts.day, time: parts.hour + ":" + parts.minute };
+      }
+
+      function helsinkiLabel(iso) {
+        if (!iso) return "no window (draft)";
+        return new Date(iso).toLocaleString("en-GB", {
+          timeZone: "Europe/Helsinki", weekday: "short", day: "numeric", month: "short",
+          hour: "2-digit", minute: "2-digit",
+        });
+      }
+
+      function cell(tag, text) {
+        const el = document.createElement(tag);
+        el.textContent = text;
+        return el;
+      }
+
+      function renderSurveyResults() {
+        const round = surveyRounds.find((r) => r.id === surveySelect.value);
+        surveyTable.textContent = "";
+        if (!round) {
+          surveySummary.textContent = surveyRounds.length ? "" : "No rounds yet.";
+          return;
+        }
+        const founders = round.results.length;
+        surveySummary.textContent =
+          round.responses + " of " + founders + " answered · " +
+          helsinkiLabel(round.opensAt) + (round.closesAt ? " – " + helsinkiLabel(round.closesAt) : "");
+
+        const items = [];
+        round.groups.forEach((g, gi) => g.items.forEach((it, ii) => items.push({ id: it.id, code: "Q" + (gi + 1) + "." + (ii + 1), statement: it.statement })));
+
+        const thead = document.createElement("thead");
+        const head = document.createElement("tr");
+        head.append(cell("th", "Founder"), cell("th", "Sent"));
+        for (const it of items) {
+          const th = cell("th", it.code);
+          th.title = it.statement;
+          head.append(th);
+        }
+        thead.append(head);
+
+        const tbody = document.createElement("tbody");
+        for (const row of round.results) {
+          const tr = document.createElement("tr");
+          tr.append(cell("td", row.name || row.email));
+          tr.append(cell("td", row.submittedAt ? helsinkiLabel(row.submittedAt.replace(" ", "T") + "Z") : "—"));
+          for (const it of items) tr.append(cell("td", row.answers[it.id] ? String(row.answers[it.id]) : ""));
+          tbody.append(tr);
+        }
+        surveyTable.append(thead, tbody);
+      }
+
+      function groupEditor(group, locked) {
+        const box = document.createElement("fieldset");
+        box.className = "panel";
+        box.style.margin = "12px 0";
+        const field = (label, value, cls, tag) => {
+          const wrap = document.createElement("label");
+          wrap.style.display = "block";
+          wrap.append(cell("span", label));
+          wrap.firstChild.className = "label-text";
+          const input = document.createElement(tag || "input");
+          input.className = cls;
+          input.value = value;
+          input.disabled = locked;
+          if (tag === "textarea") input.rows = Math.max(4, (value.match(/\n/g) || []).length + 2);
+          wrap.append(input);
+          return wrap;
+        };
+        box.append(
+          field("Heading", group.heading, "svg-heading"),
+          field("Low end of the scale (1)", group.lowLabel, "svg-low"),
+          field("High end of the scale (5)", group.highLabel, "svg-high"),
+          field("Statements, one per line", group.items.map((i) => (typeof i === "string" ? i : i.statement)).join("\n"), "svg-items", "textarea"),
+        );
+        if (!locked) {
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.textContent = "Remove this group";
+          remove.addEventListener("click", () => box.remove());
+          box.append(remove);
+        }
+        return box;
+      }
+
+      function fillEditor(round) {
+        editingRoundId = round ? round.id : null;
+        const locked = !!(round && round.locked);
+        document.getElementById("sv-title").value = round ? round.title : "";
+        document.getElementById("sv-intro").value = round ? round.intro : "";
+        const o = helsinkiParts(round && round.opensAt);
+        const c = helsinkiParts(round && round.closesAt);
+        document.getElementById("sv-opens-on").value = o.date;
+        document.getElementById("sv-opens-time").value = o.time;
+        document.getElementById("sv-closes-on").value = c.date;
+        document.getElementById("sv-closes-time").value = c.time;
+        svGroups.textContent = "";
+        const groups = round ? round.groups : [{ heading: "", lowLabel: "", highLabel: "", items: [] }];
+        for (const g of groups) svGroups.append(groupEditor(g, locked));
+        document.getElementById("sv-add-group").disabled = locked;
+        document.getElementById("sv-delete").disabled = !round || locked;
+        if (locked) say(surveyMessage, "This round has answers, so its questions are locked. The title and window can still change.", false);
+      }
+
+      async function loadSurvey(selectId) {
+        let res;
+        try {
+          res = await fetch("/api/survey");
+        } catch {
+          return say(surveyMessage, "Could not reach the server.", true);
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        surveyRounds = data.rounds || [];
+        const keep = selectId || surveySelect.value || data.openRoundId || (surveyRounds[0] && surveyRounds[0].id);
+        surveySelect.textContent = "";
+        for (const r of surveyRounds) {
+          const opt = document.createElement("option");
+          opt.value = r.id;
+          opt.textContent = r.title + (r.id === data.openRoundId ? " (open now)" : "");
+          surveySelect.append(opt);
+        }
+        if (keep) surveySelect.value = keep;
+        renderSurveyResults();
+        fillEditor(surveyRounds.find((r) => r.id === surveySelect.value) || null);
+      }
+
+      surveySelect.addEventListener("change", () => {
+        surveyMessage.hidden = true;
+        renderSurveyResults();
+        fillEditor(surveyRounds.find((r) => r.id === surveySelect.value) || null);
+      });
+
+      document.getElementById("sv-add-group").addEventListener("click", () => {
+        svGroups.append(groupEditor({ heading: "", lowLabel: "", highLabel: "", items: [] }, false));
+      });
+
+      async function surveyPost(payload) {
+        let res;
+        try {
+          res = await fetch("/api/survey", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+        } catch {
+          say(surveyMessage, "Could not reach the server.", true);
+          return null;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          say(surveyMessage, data.error || "That did not save.", true);
+          return null;
+        }
+        return data;
+      }
+
+      document.getElementById("survey-clone").addEventListener("click", async () => {
+        const data = await surveyPost({ action: "clone-round" });
+        if (!data) return;
+        await loadSurvey(data.id);
+        say(surveyMessage, "New draft round made from the last one. Rename it and set a window.", false);
+      });
+
+      document.getElementById("sv-delete").addEventListener("click", async () => {
+        if (!editingRoundId) return;
+        const data = await surveyPost({ action: "delete-round", id: editingRoundId });
+        if (!data) return;
+        surveySelect.value = "";
+        await loadSurvey();
+        say(surveyMessage, "Round deleted.", false);
+      });
+
+      surveyForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const groups = [...svGroups.querySelectorAll("fieldset")].map((box) => ({
+          heading: box.querySelector(".svg-heading").value,
+          lowLabel: box.querySelector(".svg-low").value,
+          highLabel: box.querySelector(".svg-high").value,
+          items: box.querySelector(".svg-items").value.split("\n").map((l) => l.trim()).filter(Boolean),
+        }));
+        const data = await surveyPost({
+          action: "save-round",
+          id: editingRoundId || undefined,
+          title: document.getElementById("sv-title").value,
+          intro: document.getElementById("sv-intro").value,
+          opensOn: document.getElementById("sv-opens-on").value,
+          opensTime: document.getElementById("sv-opens-time").value,
+          closesOn: document.getElementById("sv-closes-on").value,
+          closesTime: document.getElementById("sv-closes-time").value,
+          groups,
+        });
+        if (!data) return;
+        await loadSurvey(data.id);
+        say(surveyMessage, "Saved.", false);
       });
     </script>
   </body>

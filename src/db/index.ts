@@ -595,6 +595,10 @@ export function deleteUser(email: string): void {
     db.run("DELETE FROM threads WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM visits WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM chat_usage WHERE user_email = $email", { $email: email });
+    /* Research answers are personal data and go with the person. The round and
+       its questions stay: they belong to the study, not to whoever answered. */
+    db.run("DELETE FROM survey_answers WHERE user_email = $email", { $email: email });
+    db.run("DELETE FROM survey_submissions WHERE user_email = $email", { $email: email });
     db.run("DELETE FROM working_genius WHERE user_email = $email", { $email: email });
     // Cascades from users anyway, but erasure is the wrong place to rely on a
     // constraint staying as it is.
@@ -1974,6 +1978,225 @@ export function chatUsageForDay(day: string): ChatUsageRow[] {
         ORDER BY c.calls DESC, u.name COLLATE NOCASE`,
     )
     .all({ $day: day }) as ChatUsageRow[];
+}
+
+/* ---------------------------------------------------------------- surveys -- */
+
+export type SurveyItem = { id: string; statement: string };
+export type SurveyGroup = {
+  id: string; heading: string; lowLabel: string; highLabel: string; items: SurveyItem[];
+};
+export type SurveyRound = {
+  id: string; title: string; intro: string;
+  opensAt: string | null; closesAt: string | null;
+  createdAt: string;
+  groups: SurveyGroup[];
+};
+export type SurveyGroupInput = { heading: string; lowLabel: string; highLabel: string; items: string[] };
+
+type RoundRow = {
+  id: string; title: string; intro: string;
+  opensAt: string | null; closesAt: string | null; createdAt: string;
+};
+
+function withGroups(db: Database, round: RoundRow): SurveyRound {
+  const groups = db
+    .query(
+      `SELECT id, heading, low_label AS lowLabel, high_label AS highLabel
+         FROM survey_groups WHERE round_id = $round ORDER BY position`,
+    )
+    .all({ $round: round.id }) as Omit<SurveyGroup, "items">[];
+  return {
+    ...round,
+    groups: groups.map((group) => ({
+      ...group,
+      items: db
+        .query("SELECT id, statement FROM survey_items WHERE group_id = $group ORDER BY position")
+        .all({ $group: group.id }) as SurveyItem[],
+    })),
+  };
+}
+
+const ROUND_COLUMNS = `id, title, intro, opens_at AS opensAt, closes_at AS closesAt, created_at AS createdAt`;
+
+/** Every round, newest window first; drafts with no window after them. */
+export function listSurveyRounds(): SurveyRound[] {
+  const db = getDb();
+  const rows = db
+    .query(
+      `SELECT ${ROUND_COLUMNS} FROM survey_rounds
+        ORDER BY opens_at IS NULL, opens_at DESC, created_at DESC`,
+    )
+    .all() as RoundRow[];
+  return rows.map((row) => withGroups(db, row));
+}
+
+export function getSurveyRound(id: string): SurveyRound | null {
+  const db = getDb();
+  const row = db.query(`SELECT ${ROUND_COLUMNS} FROM survey_rounds WHERE id = $id`).get({ $id: id }) as RoundRow | null;
+  return row ? withGroups(db, row) : null;
+}
+
+/**
+ * The round a founder can take right now.
+ *
+ * ISO strings from toISOString() compare correctly as text, so the window test
+ * stays in SQL. If two windows overlap, the one that opened most recently wins:
+ * that is the one somebody just announced.
+ */
+export function openSurveyRound(nowIso: string): SurveyRound | null {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT ${ROUND_COLUMNS} FROM survey_rounds
+        WHERE opens_at IS NOT NULL AND closes_at IS NOT NULL
+          AND opens_at <= $now AND $now < closes_at
+        ORDER BY opens_at DESC LIMIT 1`,
+    )
+    .get({ $now: nowIso }) as RoundRow | null;
+  return row ? withGroups(db, row) : null;
+}
+
+/** The next round to open, so a founder can be told when rather than just "no". */
+export function nextSurveyRound(nowIso: string): { title: string; opensAt: string } | null {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT title, opens_at AS opensAt FROM survey_rounds
+        WHERE opens_at IS NOT NULL AND opens_at > $now
+        ORDER BY opens_at ASC LIMIT 1`,
+    )
+    .get({ $now: nowIso }) as { title: string; opensAt: string } | null;
+}
+
+export function hasSubmittedSurvey(roundId: string, email: string): boolean {
+  const db = getDb();
+  return !!db
+    .query("SELECT 1 FROM survey_submissions WHERE round_id = $round AND user_email = $email")
+    .get({ $round: roundId, $email: email });
+}
+
+export function surveyResponseCount(roundId: string): number {
+  const db = getDb();
+  const row = db
+    .query("SELECT COUNT(*) AS n FROM survey_submissions WHERE round_id = $round")
+    .get({ $round: roundId }) as { n: number };
+  return row.n;
+}
+
+/** One submission and all its answers, or nothing. */
+export function submitSurvey(roundId: string, email: string, answers: Record<string, number>): void {
+  const db = getDb();
+  db.transaction(() => {
+    db.run(
+      "INSERT INTO survey_submissions (round_id, user_email) VALUES ($round, $email)",
+      { $round: roundId, $email: email },
+    );
+    for (const [itemId, value] of Object.entries(answers)) {
+      db.run(
+        `INSERT INTO survey_answers (round_id, user_email, item_id, value)
+         VALUES ($round, $email, $item, $value)`,
+        { $round: roundId, $email: email, $item: itemId, $value: value },
+      );
+    }
+  })();
+}
+
+export type SurveyResultRow = {
+  email: string; name: string; submittedAt: string | null; answers: Record<string, number>;
+};
+
+/**
+ * Every founder, answered or not.
+ *
+ * Non-responders are rows with no answers rather than absent rows, because
+ * "who has not done it" is half of what somebody running the session needs.
+ */
+export function surveyResults(roundId: string): SurveyResultRow[] {
+  const db = getDb();
+  const people = db
+    .query(
+      `SELECT u.email, u.name, s.submitted_at AS submittedAt
+         FROM users u
+         LEFT JOIN survey_submissions s ON s.user_email = u.email AND s.round_id = $round
+        WHERE u.role = 'founder'
+        ORDER BY s.submitted_at IS NULL, u.name COLLATE NOCASE`,
+    )
+    .all({ $round: roundId }) as Omit<SurveyResultRow, "answers">[];
+  const answers = db
+    .query("SELECT user_email AS email, item_id AS itemId, value FROM survey_answers WHERE round_id = $round")
+    .all({ $round: roundId }) as { email: string; itemId: string; value: number }[];
+  const byPerson = new Map<string, Record<string, number>>();
+  for (const a of answers) {
+    const row = byPerson.get(a.email) ?? {};
+    row[a.itemId] = a.value;
+    byPerson.set(a.email, row);
+  }
+  return people.map((p) => ({ ...p, answers: byPerson.get(p.email) ?? {} }));
+}
+
+/**
+ * Creates or updates a round.
+ *
+ * `groups` replaces the round's questions wholesale when given. The caller is
+ * responsible for refusing that once anybody has answered; this function does
+ * the writing, not the policy.
+ */
+export function saveSurveyRound(
+  round: { id: string; title: string; intro: string; opensAt: string | null; closesAt: string | null },
+  groups: SurveyGroupInput[] | null,
+  actorEmail: string,
+): void {
+  const db = getDb();
+  db.transaction(() => {
+    db.run(
+      `INSERT INTO survey_rounds (id, title, intro, opens_at, closes_at, created_by)
+       VALUES ($id, $title, $intro, $opens, $closes, $actor)
+       ON CONFLICT(id) DO UPDATE SET
+         title = excluded.title, intro = excluded.intro,
+         opens_at = excluded.opens_at, closes_at = excluded.closes_at,
+         updated_at = datetime('now')`,
+      {
+        $id: round.id, $title: round.title, $intro: round.intro,
+        $opens: round.opensAt, $closes: round.closesAt, $actor: actorEmail,
+      },
+    );
+    if (!groups) return;
+    /* Explicit rather than trusting CASCADE, which depends on the foreign-key
+       pragma being on for this connection. */
+    db.run(
+      "DELETE FROM survey_items WHERE group_id IN (SELECT id FROM survey_groups WHERE round_id = $id)",
+      { $id: round.id },
+    );
+    db.run("DELETE FROM survey_groups WHERE round_id = $id", { $id: round.id });
+    groups.forEach((group, g) => {
+      const groupId = crypto.randomUUID();
+      db.run(
+        `INSERT INTO survey_groups (id, round_id, position, heading, low_label, high_label)
+         VALUES ($id, $round, $pos, $heading, $low, $high)`,
+        { $id: groupId, $round: round.id, $pos: g, $heading: group.heading, $low: group.lowLabel, $high: group.highLabel },
+      );
+      group.items.forEach((statement, i) => {
+        db.run(
+          "INSERT INTO survey_items (id, group_id, position, statement) VALUES ($id, $group, $pos, $statement)",
+          { $id: crypto.randomUUID(), $group: groupId, $pos: i, $statement: statement },
+        );
+      });
+    });
+  })();
+}
+
+/** Only ever called for a round nobody has answered; the API checks. */
+export function deleteSurveyRound(id: string): void {
+  const db = getDb();
+  db.transaction(() => {
+    db.run(
+      "DELETE FROM survey_items WHERE group_id IN (SELECT id FROM survey_groups WHERE round_id = $id)",
+      { $id: id },
+    );
+    db.run("DELETE FROM survey_groups WHERE round_id = $id", { $id: id });
+    db.run("DELETE FROM survey_rounds WHERE id = $id", { $id: id });
+  })();
 }
 
 export type ProgrammeEventRow = {
