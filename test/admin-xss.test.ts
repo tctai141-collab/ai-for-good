@@ -38,7 +38,9 @@ describe("values interpolated into innerHTML", () => {
      * cannot carry markup — so they are named rather than pattern-matched,
      * which keeps the check honest when a new string field appears.
      */
-    const NUMERIC = new Set(["position", "week", "id", "length"]);
+    /* Not `id`. It sat in this list as if ids were numbers; they are strings,
+       and knowledge ids reached HTML attributes raw because of it. */
+    const NUMERIC = new Set(["position", "week", "length"]);
     const offenders: string[] = [];
 
     for (const block of script.matchAll(/innerHTML\s*=\s*([\s\S]*?);\n/g)) {
@@ -49,6 +51,21 @@ describe("values interpolated into innerHTML", () => {
       }
     }
 
+    expect(offenders).toEqual([]);
+  });
+
+  test("no HTML attribute takes a bare record field, wherever the string is built", () => {
+    /*
+     * The check above only reads the expression on an innerHTML line. The
+     * knowledge rows were built in a .map() a few lines earlier and assigned
+     * afterwards, so `data-open="' + e.id + '"` never came into view — and the
+     * API accepted any id a request supplied. An attribute is the easiest place
+     * to break out of: a single quote-mark is enough.
+     */
+    const NUMERIC = new Set(["position", "week", "length", "count"]);
+    const offenders = [...script.matchAll(/="'\s*\+\s*([a-z]\w*)\.(\w+)\s*\+\s*'"/gi)]
+      .filter((m) => !NUMERIC.has(m[2]!))
+      .map((m) => `${m[1]}.${m[2]}`);
     expect(offenders).toEqual([]);
   });
 

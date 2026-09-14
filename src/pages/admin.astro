@@ -4068,10 +4068,10 @@ import AaltoMark from "../components/AaltoMark.astro";
               (e.source ? ' <span class="note" style="margin:0">· ' + esc(e.source) + "</span>" : "") +
               (archived ? ' <span class="note" style="margin:0">· archived</span>' : "") +
               "</span>" +
-              '<button type="button" class="disclose" data-open="' + e.id + '">' + (open ? "Hide" : "Show") + "</button>" +
-              '<button type="button" data-edit="' + e.id + '">Edit</button>' +
-              '<button type="button" data-toggle="' + e.id + '">' + (archived ? "Restore" : "Archive") + "</button>" +
-              '<button type="button" data-delete="' + e.id + '" title="Remove permanently">Delete</button>' +
+              '<button type="button" class="disclose" data-open="' + esc(e.id) + '">' + (open ? "Hide" : "Show") + "</button>" +
+              '<button type="button" data-edit="' + esc(e.id) + '">Edit</button>' +
+              '<button type="button" data-toggle="' + esc(e.id) + '">' + (archived ? "Restore" : "Archive") + "</button>" +
+              '<button type="button" data-delete="' + esc(e.id) + '" title="Remove permanently">Delete</button>' +
               "</div>" +
               (open ? '<p class="note expanded" style="margin:0">' + esc(e.body) + "</p>" : "")
             );
