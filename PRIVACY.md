@@ -25,6 +25,7 @@ sees it.
 | Invite and reset tokens | Account setup. Stored as SHA-256 | 14 days, single use |
 | Bug reports you file | Fixing the software. Includes the screen you were on and which browser you used | Life of the deployment. Your name and the link to your account are removed when the account goes; the description of the fault stays |
 | How many messages you sent Sprint Buddy each day | Keeping the running cost bounded, and knowing whether the daily allowance is set sensibly. A count and a token total per day — **not what you wrote** | Until the account is deleted |
+| Your survey answers | The research survey the programme runs with Roman Mamzer: how you approach problems and how confident you feel, compared across rounds. **Organizers can read your individual answers; mentors and other founders cannot.** Answers cannot be changed after you submit them | Until the account is deleted |
 | Admin audit log | Accountability for organizer actions, including reading a shared conversation | Life of the deployment |
 
 **Not held:** payment details, location, tracking or analytics cookies, IP

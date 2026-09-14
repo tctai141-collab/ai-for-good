@@ -2,6 +2,7 @@ import React, { useCallback, useState, useMemo, useRef, useEffect } from "react"
 import { checkinLocked, checkinOpensLabel } from "../lib/checkin-window";
 import { workingGeniusLocked, workingGeniusOpensLabel } from "../lib/working-genius-window";
 import BugReport from "./BugReport";
+import Survey from "./Survey";
 import ProgrammeTimeline from "./ProgrammeTimeline";
 import Wishes from "./Wishes";
 import Assistant from "./Assistant";
@@ -418,7 +419,7 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library" | "bugs";
+type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library" | "bugs" | "survey";
 
 /* What each view is called in the sidebar, so a bug report names the screen
    the way the person filing it would name it. Keyed by View, so adding a
@@ -432,6 +433,7 @@ const VIEW_NAMES: Record<View, string> = {
   deadlines: "Deadlines",
   library: "Library",
   bugs: "Report a bug",
+  survey: "Survey",
 };
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
@@ -449,6 +451,25 @@ type SprintBuddyProps = {
 
 export default function SprintBuddy({ persona, canAssist = false, userEmail, initialData, onSignOut, signOutLabel = "Sign out" }: SprintBuddyProps) {
   const [view, setView] = useState<View>("chat");
+  /*
+   * Whether a survey round is open that this founder has not answered, so the
+   * chat view can say so. During a session everybody opens the app at once and
+   * should not have to hunt for it. Re-read when they come back to the chat
+   * view, which is where they land after answering.
+   */
+  const [surveyDue, setSurveyDue] = useState<{ title: string } | null>(null);
+  const refreshSurvey = useCallback(async () => {
+    if (persona !== "founder") return;
+    try {
+      const res = await fetch("/api/survey");
+      if (!res.ok) return setSurveyDue(null);
+      const data = await res.json();
+      setSurveyDue(data.round && !data.submitted ? { title: data.round.title } : null);
+    } catch {
+      setSurveyDue(null);
+    }
+  }, [persona]);
+  useEffect(() => { if (view === "chat") void refreshSurvey(); }, [view, refreshSurvey]);
   /* The screen a bug reporter left to come and file. Captured on the way in,
      because by the time they submit they are on "Report a bug" and that is
      the one answer nobody needs. */
@@ -680,6 +701,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         onProgramme={() => setView("programme")}
         onWishes={() => setView("wishes")}
         onBugs={() => { if (view !== "bugs") setBugFrom(VIEW_NAMES[view]); setView("bugs"); }}
+        onSurvey={() => setView("survey")}
         onDeadlines={() => setView("deadlines")}
         onLibrary={() => setView("library")}
         onAssistant={() => setView("assistant")}
@@ -705,6 +727,9 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
             onOpenSidebar={() => setSidebarOpen(true)}
           />
         )}
+        {persona === "founder" && view === "chat" && surveyDue && (
+          <SurveyCard title={surveyDue.title} onOpen={() => setView("survey")} />
+        )}
         {persona === "founder" && view === "chat" && (
           <Chat
             key={activeKey}
@@ -727,6 +752,9 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         )}
         {view === "bugs" && persona === "founder" && (
           <Scroll><BugReport from={bugFrom} /></Scroll>
+        )}
+        {view === "survey" && persona === "founder" && (
+          <Scroll><Survey onDone={() => void refreshSurvey()} /></Scroll>
         )}
         {view === "deadlines" && persona === "founder" && (
           <Scroll><DeadlinesPage state={deadlines} /></Scroll>
@@ -751,6 +779,42 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
 
 const Scroll = ({ children }: { children: React.ReactNode }) => <div style={{ flex: 1, overflowY: "auto" }}>{children}</div>;
 
+/**
+ * A survey round is open and this founder has not answered it.
+ *
+ * Above the conversation rather than in a corner, because it is time-boxed and
+ * usually announced in the room: everybody opens the app at once and the thing
+ * to do should be the first thing they see. Gone as soon as they have answered.
+ * Clear of the docked mascot on the right, which floats over this corner.
+ */
+function SurveyCard({ title, onOpen }: { title: string; onOpen: () => void }) {
+  return (
+    <div
+      role="region"
+      aria-label="A survey is open"
+      style={{
+        flexShrink: 0,
+        margin: "16px calc(24px + var(--mascot-gutter, 0px)) 0 24px",
+        padding: "14px 18px",
+        borderRadius: 14,
+        border: `1px solid ${C.line}`,
+        background: "rgba(94, 106, 210, 0.12)",
+        display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+      }}
+    >
+      <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: C.ink }}>{title} is open</div>
+        <div style={{ fontSize: 13, lineHeight: 1.45, color: C.sub, marginTop: 2 }}>
+          It takes a few minutes. Organizers can see your answers.
+        </div>
+      </div>
+      <button type="button" onClick={onOpen} className="btn-metal" style={{ padding: "10px 18px", fontSize: 14, fontWeight: 700 }}>
+        Take the survey
+      </button>
+    </div>
+  );
+}
+
 /* ---------------- Sidebar ---------------- */
 type SidebarProps = {
   persona: Persona;
@@ -774,6 +838,7 @@ type SidebarProps = {
   onProgramme: () => void;
   onWishes: () => void;
   onBugs: () => void;
+  onSurvey: () => void;
   onDeadlines: () => void;
   onLibrary: () => void;
   onAssistant: () => void;
@@ -783,7 +848,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, library, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, library, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onBugs, onSurvey, onDeadlines, onLibrary, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -1082,6 +1147,9 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
             <button onClick={onWishes} className="navitem" style={{ ...navItem, background: view === "wishes" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
               <Glyph>✦</Glyph> <span>Ask for something</span>
             </button>
+            <button onClick={onSurvey} className="navitem" style={{ ...navItem, background: view === "survey" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+              <Glyph>☑</Glyph> <span>Survey</span>
+            </button>
             {/* Beside "Ask for something", because they are the same gesture
                 pointed at different things: one asks the programme for
                 something, the other tells the people who built this that it is
@@ -1204,6 +1272,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           onProgramme={onProgramme}
           onWishes={onWishes}
           onBugs={onBugs}
+          onSurvey={onSurvey}
           onReflections={onReflections}
           onPickTeam={onPickTeam}
           onSignOut={onSignOut}
@@ -1298,7 +1367,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
  */
 function SidebarRail({
   persona, view, coachTeam, deadlines, checkinDone, width, canAssist,
-  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onReflections, onAssistant, onPickTeam, onSignOut,
+  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onBugs, onSurvey, onDeadlines, onLibrary, onReflections, onAssistant, onPickTeam, onSignOut,
 }: {
   width: number;
   canAssist: boolean;
@@ -1317,6 +1386,7 @@ function SidebarRail({
   onProgramme: () => void;
   onWishes: () => void;
   onBugs: () => void;
+  onSurvey: () => void;
   onReflections: () => void;
   onPickTeam: (team: Team | null) => void;
   onSignOut?: () => void;
@@ -1343,6 +1413,7 @@ function SidebarRail({
         { key: "library", glyph: "▥", label: "Library", on: view === "library", run: onLibrary },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
         { key: "wishes", glyph: "✦", label: "Ask for something", on: view === "wishes", run: onWishes },
+        { key: "survey", glyph: "☑", label: "Survey", on: view === "survey", run: onSurvey },
         /* Every founder destination is on the rail — on a phone the rail is the
            whole navigation, so a page reachable only from the open panel is a
            page they cannot get to. */

@@ -914,5 +914,173 @@ export function initSchema(db: Database) {
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_email);
   `);
+
+  /*
+   * Surveys: Roman's research questionnaire, run in rounds.
+   *
+   * It lived in Webropol, where founders typed their own name so answers could
+   * be linked week to week. Here the account does that, so there is no name
+   * question and no chance of "Aino V" in week 2 and "aino virtanen" in week 3.
+   *
+   * Questions belong to a round rather than to the app, because Roman edits
+   * them between rounds. Once anybody has answered, a round's questions are
+   * locked by the API: changing a statement after answers exist would quietly
+   * change what those answers meant.
+   *
+   * Answers are personal research data. Organizers can read them; mentors and
+   * other founders cannot. CASCADE on the user, and deleteUser removes them
+   * explicitly as well.
+   */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS survey_rounds (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      intro TEXT NOT NULL DEFAULT '',
+      -- ISO instants in UTC. NULL on both means a draft nobody can take yet.
+      opens_at TEXT,
+      closes_at TEXT,
+      created_by TEXT REFERENCES users(email) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS survey_groups (
+      id TEXT PRIMARY KEY,
+      round_id TEXT NOT NULL REFERENCES survey_rounds(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      heading TEXT NOT NULL,
+      low_label TEXT NOT NULL,
+      high_label TEXT NOT NULL
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS survey_items (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL REFERENCES survey_groups(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      statement TEXT NOT NULL
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS survey_submissions (
+      round_id TEXT NOT NULL REFERENCES survey_rounds(id) ON DELETE CASCADE,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (round_id, user_email)
+    )
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS survey_answers (
+      round_id TEXT NOT NULL REFERENCES survey_rounds(id) ON DELETE CASCADE,
+      user_email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+      item_id TEXT NOT NULL REFERENCES survey_items(id) ON DELETE CASCADE,
+      value INTEGER NOT NULL CHECK(value BETWEEN 1 AND 5),
+      PRIMARY KEY (round_id, user_email, item_id)
+    )
+  `);
+  /* Which seeds have run, so a seed runs once in the life of the database. */
+  db.run(`
+    CREATE TABLE IF NOT EXISTS survey_seeds (
+      key TEXT PRIMARY KEY,
+      seeded_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  db.run("CREATE INDEX IF NOT EXISTS idx_survey_groups_round ON survey_groups(round_id, position)");
+  db.run("CREATE INDEX IF NOT EXISTS idx_survey_items_group ON survey_items(group_id, position)");
+
+  seedFounderSprintWeek2(db);
+}
+
+/**
+ * Week 2, exactly as Roman wrote it in Webropol, minus the name question.
+ *
+ * Seeded rather than typed into the editor so tomorrow's session does not
+ * depend on the editor being finished tonight.
+ *
+ * Runs once per database, recorded in survey_seeds, not "whenever the round is
+ * missing". A seed keyed on absence resurrects on every deploy: Roman deletes a
+ * statement, the next boot puts it back, and nobody can tell why.
+ *
+ * The window is Tuesday 15 September 2026, 10:00–11:45 Helsinki, written as UTC
+ * instants because summer time puts Helsinki at +3. test/survey.test.ts checks
+ * both against dueInstant() so a wrong offset cannot slip in.
+ *
+ * Two edits to his intro, both because the original would now be untrue: no
+ * name is asked for, so "your name is collected only to link your responses"
+ * becomes a plain statement of how answers are linked and who can see them.
+ */
+export const SURVEY_WEEK2_ID = "founder-sprint-week-2";
+export const SURVEY_WEEK2_OPENS_AT = "2026-09-15T07:00:00.000Z";
+export const SURVEY_WEEK2_CLOSES_AT = "2026-09-15T08:45:00.000Z";
+
+export const SURVEY_WEEK2_INTRO = [
+  "Thank you for participating in the Founder Sprint study!",
+  "Estimated completion time: 2–3 minutes.",
+  "This short questionnaire asks about how you approach different situations and how confident you feel in performing different activities. There are no right or wrong answers, so please answer based on how you see yourself.",
+  "Participation is voluntary, and your responses will be handled confidentially. Your answers are saved with your account so rounds can be compared over time, and organizers can see them. The data will be pseudonymized for analysis.",
+  "If you have any questions, feel free to contact me at roman.mamzer@aalto.fi or +358465877609",
+].join("\n\n");
+
+export const SURVEY_WEEK2_GROUPS = [
+  {
+    heading: "Please indicate to what extent each statement applies to you:",
+    lowLabel: "does not apply at all",
+    highLabel: "applies completely",
+    items: [
+      "I actively attack problems.",
+      "Whenever something goes wrong, I search for a solution immediately.",
+      "Whenever there is a chance to get actively involved, I take it.",
+      "I take initiative immediately even when others don’t.",
+      "I use opportunities quickly in order to attain my goals.",
+      "Usually I do more than I am asked to do.",
+      "I am particularly good at realizing ideas.",
+    ],
+  },
+  {
+    heading: "How confident are you in successfully performing each of the following activities?",
+    lowLabel: "no confidence",
+    highLabel: "complete confidence",
+    items: [
+      "Identifying new business opportunities",
+      "Creating new products",
+      "Thinking creatively",
+      "Commercializing an idea or new development",
+    ],
+  },
+];
+
+function seedFounderSprintWeek2(db: Database) {
+  const key = SURVEY_WEEK2_ID;
+  if (db.query("SELECT 1 FROM survey_seeds WHERE key = $key").get({ $key: key })) return;
+  db.transaction(() => {
+    db.run(
+      `INSERT OR IGNORE INTO survey_rounds (id, title, intro, opens_at, closes_at)
+       VALUES ($id, $title, $intro, $opens, $closes)`,
+      {
+        $id: key,
+        $title: "Founder Sprint Survey: Week 2",
+        $intro: SURVEY_WEEK2_INTRO,
+        $opens: SURVEY_WEEK2_OPENS_AT,
+        $closes: SURVEY_WEEK2_CLOSES_AT,
+      },
+    );
+    SURVEY_WEEK2_GROUPS.forEach((group, g) => {
+      const groupId = `${key}-g${g + 1}`;
+      db.run(
+        `INSERT OR IGNORE INTO survey_groups (id, round_id, position, heading, low_label, high_label)
+         VALUES ($id, $round, $pos, $heading, $low, $high)`,
+        { $id: groupId, $round: key, $pos: g, $heading: group.heading, $low: group.lowLabel, $high: group.highLabel },
+      );
+      group.items.forEach((statement, i) => {
+        db.run(
+          `INSERT OR IGNORE INTO survey_items (id, group_id, position, statement)
+           VALUES ($id, $group, $pos, $statement)`,
+          { $id: `${groupId}-i${i + 1}`, $group: groupId, $pos: i, $statement: statement },
+        );
+      });
+    });
+    db.run("INSERT INTO survey_seeds (key) VALUES ($key)", { $key: key });
+  })();
 }
 

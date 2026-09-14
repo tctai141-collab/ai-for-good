@@ -28,7 +28,7 @@ describe("collapsed is a rail, not a void", () => {
   });
 
   test("every founder destination is on the rail", () => {
-    for (const key of ["chat", "checkin", "programme", "wishes", "reflections", "library"]) {
+    for (const key of ["chat", "checkin", "programme", "wishes", "reflections", "library", "survey"]) {
       expect(rail).toContain(`key: "${key}"`);
     }
     expect(rail).toContain("onSignOut");
