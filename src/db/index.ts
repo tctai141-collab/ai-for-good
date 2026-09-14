@@ -1567,7 +1567,8 @@ export function upsertKnowledge(entry: {
   source: string;
 }): string {
   const db = getDb();
-  // Server-generated, like every other id here. A caller never names a row.
+  // Server-generated for a new entry. An existing id reaches here only after the
+  // route has checked that the entry exists: a caller never names a new row.
   const id = entry.id ?? crypto.randomUUID();
   db.run(
     `INSERT INTO knowledge_entries (id, persona, topic, body, position, source, updated_at)

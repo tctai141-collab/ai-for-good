@@ -309,3 +309,32 @@ describe("the budget ceiling", () => {
     expect(body.size.truncated).toBe(true);
   });
 });
+
+describe("ids", () => {
+  /*
+   * The save action used to accept any id a request named and insert a row
+   * under it. The admin page writes those ids into HTML attributes, so an id
+   * like `" onmouseover="...` was stored script for whichever organizer opened
+   * the knowledge tab next.
+   */
+  test("a new entry gets an id the server chose", async () => {
+    const { status, body } = await save({ topic: "Pricing", body: "Charge early." });
+    expect(status).toBe(200);
+    expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  test("an id that does not exist is refused, and nothing is stored under it", async () => {
+    const crafted = '" onmouseover="alert(1)';
+    const { status } = await save({ id: crafted, topic: "Crafted", body: "Should not exist." });
+    expect(status).toBe(404);
+    const { entries } = (await (await get(h, "/api/knowledge", organizer.cookie)).json()) as { entries: { id: string }[] };
+    expect(entries.some((e) => e.id === crafted)).toBe(false);
+  });
+
+  test("editing an entry by its own id still works", async () => {
+    const first = await save({ topic: "Hiring", body: "Slowly." });
+    const again = await save({ id: first.body.id, topic: "Hiring", body: "Slowly, then quickly." });
+    expect(again.status).toBe(200);
+    expect(again.body.id).toBe(first.body.id);
+  });
+});

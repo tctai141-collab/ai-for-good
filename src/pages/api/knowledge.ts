@@ -102,9 +102,21 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       const text = cap(body.body, MAX_BODY).trim();
       if (!text) return json({ error: "The entry needs some text." }, 400);
 
+      /*
+       * An id names an entry that already exists, or there is no id.
+       *
+       * The editor only ever sends the id of the entry it is editing. This used
+       * to hand any string straight to the insert, so a request could name a new
+       * row — and the admin page writes knowledge ids into HTML attributes, which
+       * made a crafted id stored script in the next organizer's session.
+       */
+      const requestedId = typeof body.id === "string" && body.id ? body.id : undefined;
+      if (requestedId && !listKnowledge(persona, true).some((row) => row.id === requestedId)) {
+        return json({ error: "No such entry." }, 404);
+      }
       const position = Number(body.position);
       const id = upsertKnowledge({
-        id: typeof body.id === "string" && body.id ? body.id : undefined,
+        id: requestedId,
         persona,
         topic,
         body: text,
