@@ -22,7 +22,7 @@ type State =
   | { kind: "error"; message: string }
   | { kind: "none"; next: { title: string; opensAt: string } | null }
   | { kind: "done"; title: string }
-  | { kind: "open"; round: Round };
+  | { kind: "open"; round: Round; staff: boolean };
 
 const POINTS = ["1", "2", "3", "4", "5"];
 
@@ -46,7 +46,7 @@ export default function Survey({ onDone }: { onDone?: () => void }) {
       if (!res.ok) return setState({ kind: "error", message: data.error ?? "Could not load the survey." });
       if (!data.round) return setState({ kind: "none", next: data.next ?? null });
       if (data.submitted) return setState({ kind: "done", title: data.round.title });
-      setState({ kind: "open", round: data.round });
+      setState({ kind: "open", round: data.round, staff: data.staff === true });
     } catch {
       setState({ kind: "error", message: "Could not reach the server." });
     }
@@ -62,7 +62,8 @@ export default function Survey({ onDone }: { onDone?: () => void }) {
   const complete = itemIds.length > 0 && answered === itemIds.length;
 
   const send = async () => {
-    if (state.kind !== "open" || !complete || sending) return;
+    /* Organizers preview; the server refuses their answers anyway. */
+    if (state.kind !== "open" || state.staff || !complete || sending) return;
     setSending(true);
     setNote(null);
     try {
@@ -119,6 +120,13 @@ export default function Survey({ onDone }: { onDone?: () => void }) {
       {state.kind === "open" && (
         <>
           <header className="sv-head">
+            {state.staff && (
+              <p className="sv-preview" role="note">
+                Staff preview. This round is open and founders can answer it now.
+                Organizer accounts cannot send answers; the responses are in
+                admin, under Survey.
+              </p>
+            )}
             <h1 className="sv-title">{state.round.title}</h1>
             {state.round.intro.split(/\n{2,}/).map((para, i) => (
               <p key={i} className="sv-intro">{para}</p>
@@ -154,12 +162,14 @@ export default function Survey({ onDone }: { onDone?: () => void }) {
             </section>
           ))}
 
-          <div className="sv-actions">
-            <button type="button" className="sv-send" onClick={send} disabled={!complete || sending}>
-              {sending ? "Sending…" : "Send answers"}
-            </button>
-            <span className="sv-count">{answered} of {itemIds.length} answered</span>
-          </div>
+          {!state.staff && (
+            <div className="sv-actions">
+              <button type="button" className="sv-send" onClick={send} disabled={!complete || sending}>
+                {sending ? "Sending…" : "Send answers"}
+              </button>
+              <span className="sv-count">{answered} of {itemIds.length} answered</span>
+            </div>
+          )}
           {note && <p className="sv-note">{note}</p>}
         </>
       )}
@@ -193,6 +203,12 @@ export const SURVEY_CSS = `
 .sv-send:disabled { opacity: 0.45; cursor: default; }
 .sv-send:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 .sv-count { font-size: 0.8125rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.sv-preview {
+  margin: 0 0 18px; padding: 10px 14px; max-width: 62ch;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: rgba(94, 106, 210, 0.12);
+  font-size: 0.875rem; line-height: 1.5; color: var(--ink-sub);
+}
 .sv-note { margin: 12px 0 0; font-size: 0.875rem; color: var(--danger, #eb5757); }
 /* On a phone the statement sits above its scale, and the scale keeps its width:
    five 40px boxes and the gaps between them fit inside 320px. */

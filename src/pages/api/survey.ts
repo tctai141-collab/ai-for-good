@@ -53,12 +53,26 @@ export const GET: APIRoute = async ({ cookies }) => {
     const now = new Date().toISOString();
 
     if (session.role === "organizer") {
+      const open = openSurveyRound(now);
       return json({
         rounds: listSurveyRounds().map((round) => {
           const responses = surveyResponseCount(round.id);
           return { ...round, responses, locked: responses > 0, results: surveyResults(round.id) };
         }),
-        openRoundId: openSurveyRound(now)?.id ?? null,
+        openRoundId: open?.id ?? null,
+        /*
+         * The founder screen, as a preview.
+         *
+         * An organizer opening the Survey page used to get only the admin shape
+         * above, which has no `round`, so the page said "No survey open right
+         * now" while the round was open for every founder. The first person to
+         * meet that was the organizer who had just opened the round and was
+         * checking it worked. `staff` tells the page to show the questions
+         * without a Send button: organizers do not take the survey.
+         */
+        staff: true,
+        round: open ? forFounder(open) : null,
+        next: open ? null : nextSurveyRound(now),
       });
     }
 

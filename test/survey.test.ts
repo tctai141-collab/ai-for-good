@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   createFounder, createOrganizer, get, post, startServer,
@@ -230,6 +231,42 @@ describe("reading the answers", () => {
       const res = await post(h, "/api/survey", { action: "clone-round" }, who.cookie);
       expect(res.status).toBe(403);
     }
+  });
+});
+
+describe("staff preview", () => {
+  /*
+   * An organizer opened a round and went to check it, and the Survey page told
+   * them nothing was open. The organizer response carried only the admin data,
+   * with no `round`, so the founder screen fell through to "No survey open
+   * right now" for every staff account, whatever the window said.
+   */
+  test("an organizer loading the survey sees the open round, marked as staff", async () => {
+    await makeRound("Preview", -1, 60);
+    const data = (await (await get(h, "/api/survey", organizer.cookie)).json()) as {
+      staff: boolean; openRoundId: string | null;
+      round: { id: string; groups: unknown[]; results?: unknown } | null;
+      rounds: unknown[];
+    };
+    expect(data.staff).toBe(true);
+    expect(data.openRoundId).not.toBeNull();
+    expect(data.round?.id).toBe(data.openRoundId!);
+    expect(data.round!.groups.length).toBeGreaterThan(0);
+    /* The preview is the founder shape: questions, never anybody's answers. */
+    expect(data.round).not.toHaveProperty("results");
+    /* And the admin data is still there for the admin tab. */
+    expect(data.rounds.length).toBeGreaterThan(0);
+  });
+
+  test("a founder is not told they are staff", async () => {
+    const data = await (await get(h, "/api/survey", founder.cookie)).json();
+    expect(data).not.toHaveProperty("staff");
+  });
+
+  test("the preview has no Send, and the send path refuses staff too", () => {
+    const src = readFileSync("src/components/Survey.tsx", "utf-8");
+    expect(src).toContain("{!state.staff && (");
+    expect(src).toContain("state.staff ||");
   });
 });
 
