@@ -469,7 +469,24 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
       setSurveyDue(null);
     }
   }, [persona]);
-  useEffect(() => { if (view === "chat") void refreshSurvey(); }, [view, refreshSurvey]);
+  /*
+   * Recheck on a timer and when the tab comes back, not only on arriving here.
+   *
+   * A founder who opened the app at 09:55 and stayed in the conversation never
+   * saw the card appear when the round opened at 10:00. One small request a
+   * minute per founder, and only while this view is showing.
+   */
+  useEffect(() => {
+    if (view !== "chat") return;
+    void refreshSurvey();
+    const every = window.setInterval(() => { void refreshSurvey(); }, 60_000);
+    const onVisible = () => { if (document.visibilityState === "visible") void refreshSurvey(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(every);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [view, refreshSurvey]);
   /* The screen a bug reporter left to come and file. Captured on the way in,
      because by the time they submit they are on "Report a bug" and that is
      the one answer nobody needs. */

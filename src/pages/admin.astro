@@ -1444,9 +1444,10 @@ import AaltoMark from "../components/AaltoMark.astro";
           <section class="panel">
             <h2>Edit a round</h2>
             <p class="note" style="margin-top:0">
-              Questions lock once anybody has answered, because changing a statement
-              would change what the earlier answers meant. The title and the window
-              can still move. For new questions, make a new round from the last one.
+              Questions lock while a round is open and once anybody has answered:
+              changing a statement then would break the form on founders' screens or
+              change what earlier answers meant. The title and the window can still
+              move. For new questions, make a new round from the last one.
             </p>
             <div class="row">
               <button type="button" id="survey-clone">New round from the last one</button>
@@ -5134,7 +5135,11 @@ import AaltoMark from "../components/AaltoMark.astro";
         for (const g of groups) svGroups.append(groupEditor(g, locked));
         document.getElementById("sv-add-group").disabled = locked;
         document.getElementById("sv-delete").disabled = !round || locked;
-        if (locked) say(surveyMessage, "This round has answers, so its questions are locked. The title and window can still change.", false);
+        if (locked) {
+          say(surveyMessage, round.responses > 0
+            ? "This round has answers, so its questions are locked. The title and window can still change."
+            : "This round is open, so its questions are locked: founders may already have it on screen. The title and window can still change.", false);
+        }
       }
 
       async function loadSurvey(selectId) {

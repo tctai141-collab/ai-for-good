@@ -54,6 +54,19 @@ export default function Survey({ onDone }: { onDone?: () => void }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  /*
+   * Recheck while there is nothing to take.
+   *
+   * Loaded before a round opens, this page kept saying "No survey open right
+   * now" after it had opened, until the founder left and came back. A round is
+   * usually opened in the room while everybody already has the app up.
+   */
+  useEffect(() => {
+    if (state.kind !== "none") return;
+    const every = window.setInterval(() => { void load(); }, 60_000);
+    return () => window.clearInterval(every);
+  }, [state.kind, load]);
+
   const itemIds = useMemo(
     () => (state.kind === "open" ? state.round.groups.flatMap((g) => g.items.map((i) => i.id)) : []),
     [state],
@@ -78,7 +91,15 @@ export default function Survey({ onDone }: { onDone?: () => void }) {
         onDone?.();
         return;
       }
-      setNote((data as { error?: string }).error ?? "That did not send. Your answers are still here.");
+      const error = (data as { error?: string }).error;
+      /* The questions changed under the form. Reload them rather than leave the
+         founder unable to send until they navigate away and back. */
+      if (res.status === 400 && error?.includes("does not have")) {
+        setNote("The questions were updated. They have been reloaded — please check your answers.");
+        void load();
+        return;
+      }
+      setNote(error ?? "That did not send. Your answers are still here.");
     } catch {
       setNote("Could not reach the server. Your answers are still here.");
     } finally {
