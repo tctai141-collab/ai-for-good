@@ -57,7 +57,8 @@ export const GET: APIRoute = async ({ cookies }) => {
       return json({
         rounds: listSurveyRounds().map((round) => {
           const responses = surveyResponseCount(round.id);
-          return { ...round, responses, locked: responses > 0, results: surveyResults(round.id) };
+          const open = isOpenNow(round);
+          return { ...round, responses, open, locked: responses > 0 || open, results: surveyResults(round.id) };
         }),
         openRoundId: open?.id ?? null,
         /*
@@ -179,6 +180,26 @@ function windowFrom(body: Record<string, unknown>): { opensAt: string | null; cl
   const [opensOn, opensTime, closesOn, closesTime] = parts as [string, string, string, string];
   if (![opensOn, closesOn].every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) return "Dates must be YYYY-MM-DD.";
   if (![opensTime, closesTime].every((t) => /^\d{2}:\d{2}$/.test(t))) return "Times must be HH:MM.";
+  /*
+   * Real dates and times, not just the right shape.
+   *
+   * dueInstant builds the instant with Date.UTC, which rolls anything out of
+   * range forward instead of refusing it: "2026-09-31" became 1 October and
+   * "24:30" the next morning, so a typo saved as a window nobody chose. The
+   * admin page's date and time pickers prevent that; the API did not.
+   */
+  const realDate = (value: string) => {
+    const [y, m, d] = value.split("-").map(Number);
+    const at = new Date(Date.UTC(y!, m! - 1, d!));
+    return at.getUTCFullYear() === y && at.getUTCMonth() === m! - 1 && at.getUTCDate() === d;
+  };
+  const realTime = (value: string) => {
+    const [hh, mm] = value.split(":").map(Number);
+    return hh! <= 23 && mm! <= 59;
+  };
+  if (![opensOn, closesOn].every(realDate) || ![opensTime, closesTime].every(realTime)) {
+    return "That date or time does not exist.";
+  }
   const opens = dueInstant(opensOn, opensTime);
   const closes = dueInstant(closesOn, closesTime);
   if (!Number.isFinite(opens) || !Number.isFinite(closes)) return "That date or time does not exist.";
@@ -204,6 +225,13 @@ function groupsFrom(raw: unknown): SurveyGroupInput[] | string {
     groups.push({ heading, lowLabel, highLabel, items });
   }
   return groups;
+}
+
+/** Whether a round's window contains this moment. */
+function isOpenNow(round: { opensAt: string | null; closesAt: string | null }, now = Date.now()): boolean {
+  const opens = round.opensAt ? Date.parse(round.opensAt) : NaN;
+  const closes = round.closesAt ? Date.parse(round.closesAt) : NaN;
+  return now >= opens && now < closes;
 }
 
 /* The questions as a comparable value, to tell a question edit from a title edit. */
@@ -234,12 +262,29 @@ function saveRound(session: { email: string }, body: Record<string, unknown>): R
    * not: the answers already given were to the old wording, and the table would
    * show them against the new one.
    */
+  /*
+   * And while the round is open, even before anybody has answered.
+   *
+   * Replacing questions gives them new ids. A founder who loaded the form at
+   * 10:02 and pressed send at 10:06, after somebody fixed a typo at 10:05, was
+   * told their answers were to questions the survey did not have. Close the
+   * round first, or make a new one.
+   */
   let replaceQuestions = true;
   if (existing) {
     const sameQuestions = questionsKey(existing.groups) === questionsKey(groups);
-    if (surveyResponseCount(existing.id) > 0) {
+    const answered = surveyResponseCount(existing.id) > 0;
+    const openNow = isOpenNow(existing);
+    if (answered || openNow) {
       if (!sameQuestions) {
-        return json({ error: "Questions are locked once anyone has answered. Make a new round instead." }, 409);
+        return json(
+          {
+            error: answered
+              ? "Questions are locked once anyone has answered. Make a new round instead."
+              : "Questions are locked while the round is open, because founders may already have it on screen. Close it first, or make a new round.",
+          },
+          409,
+        );
       }
       replaceQuestions = false;
     } else if (sameQuestions) {

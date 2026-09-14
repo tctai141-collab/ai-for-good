@@ -292,6 +292,54 @@ describe("editing rounds", () => {
     expect(after.results.find((r) => r.email === founder.email)!.answers[after.groups[0]!.items[0]!.id]).toBe(4);
   });
 
+  test("questions also lock while a round is open, before anybody answers", async () => {
+    /*
+     * Replacing questions gives them new ids, so a founder with the form on
+     * screen was refused on send after somebody fixed a typo mid-session.
+     */
+    const id = await makeRound("Open, unanswered", -2, 60);
+    const o = helsinki(Date.now() - 2 * 60_000);
+    const c = helsinki(Date.now() + 60 * 60_000);
+    const reworded = GROUPS.map((g, i) => (i === 0 ? { ...g, items: ["First, reworded.", "Second."] } : g));
+    const res = await post(h, "/api/survey", {
+      action: "save-round", id, title: "Open, unanswered", intro: "Intro.",
+      opensOn: o.on, opensTime: o.time, closesOn: c.on, closesTime: c.time, groups: reworded,
+    }, organizer.cookie);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("open");
+    const round = await roundById(id);
+    expect(round.locked).toBe(true);
+    expect(round.groups[0]!.items[0]!.statement).toBe("First.");
+  });
+
+  test("a closed round nobody answered can still be reworded", async () => {
+    const id = await makeRound("Closed, unanswered", -180, -120);
+    const o = helsinki(Date.now() - 180 * 60_000);
+    const c = helsinki(Date.now() - 120 * 60_000);
+    const reworded = GROUPS.map((g, i) => (i === 0 ? { ...g, items: ["First, reworded.", "Second."] } : g));
+    const res = await post(h, "/api/survey", {
+      action: "save-round", id, title: "Closed, unanswered", intro: "Intro.",
+      opensOn: o.on, opensTime: o.time, closesOn: c.on, closesTime: c.time, groups: reworded,
+    }, organizer.cookie);
+    expect(res.status).toBe(200);
+    expect((await roundById(id)).groups[0]!.items[0]!.statement).toBe("First, reworded.");
+  });
+
+  test("a date or time that does not exist is refused, not rolled forward", async () => {
+    const cases: [string, string, string, string][] = [
+      ["2026-09-31", "10:00", "2026-10-01", "10:00"],
+      ["2026-10-01", "24:30", "2026-10-02", "10:00"],
+      ["2026-10-01", "10:00", "2026-10-01", "10:61"],
+      ["2026-02-29", "10:00", "2026-03-01", "10:00"],
+    ];
+    for (const [opensOn, opensTime, closesOn, closesTime] of cases) {
+      const res = await post(h, "/api/survey", {
+        action: "save-round", title: "Impossible", opensOn, opensTime, closesOn, closesTime, groups: GROUPS,
+      }, organizer.cookie);
+      expect([opensOn, opensTime, closesTime, res.status]).toEqual([opensOn, opensTime, closesTime, 400]);
+    }
+  });
+
   test("a round with answers cannot be deleted", async () => {
     const id = await makeRound("Keep", -2, 60);
     const round = await roundById(id);
@@ -340,5 +388,20 @@ describe("erasure", () => {
       db.close();
     }
     expect(await roundById(id)).toBeDefined();
+  });
+});
+
+describe("noticing a round open", () => {
+  test("the chat card and the survey page recheck on their own", () => {
+    /*
+     * Both only looked when the founder arrived on the view, so a round opened
+     * while the room already had the app up stayed invisible until somebody
+     * navigated away and back.
+     */
+    const app = readFileSync("src/components/SprintBuddy.tsx", "utf-8");
+    const page = readFileSync("src/components/Survey.tsx", "utf-8");
+    expect(app).toContain("window.setInterval(() => { void refreshSurvey(); }, 60_000)");
+    expect(app).toContain('document.addEventListener("visibilitychange", onVisible)');
+    expect(page).toContain("window.setInterval(() => { void load(); }, 60_000)");
   });
 });
