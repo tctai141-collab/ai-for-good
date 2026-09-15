@@ -13,6 +13,10 @@ import {
   getWorkingGenius,
   listWorkingGeniusTakes,
   recordAdminAction,
+  bugReportsFrom,
+  chatUsageFor,
+  listWishesFrom,
+  surveyAnswersFor,
 } from "../../db/index";
 import { endSession, getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
@@ -81,6 +85,17 @@ export const GET: APIRoute = async ({ cookies }) => {
          data about you. Returned loans are included; the history is the point. */
       booksBorrowed: getBookLoans(session.email),
       timesOpened: getVisits(session.email),
+      /*
+       * Four tables that were missing, found by comparing every table that
+       * holds a person against this list. What you asked the programme for,
+       * what you reported as broken, your survey answers — personal research
+       * data, and PRIVACY.md says so — and how much you used the advisor each
+       * day, which is counts, never text.
+       */
+      wishes: listWishesFrom(session.email),
+      bugReports: bugReportsFrom(session.email),
+      surveyAnswers: surveyAnswersFor(session.email),
+      advisorUsage: chatUsageFor(session.email),
       note:
         "Conversations you deleted are not here. Encrypted backups may still " +
         "contain them for up to 30 days before rotating out.",

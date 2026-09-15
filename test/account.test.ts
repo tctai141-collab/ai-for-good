@@ -71,6 +71,54 @@ describe("export", () => {
     expect(Array.isArray(style.everyTake)).toBe(true);
   });
 
+  test("carries what they asked for, reported, answered and used", async () => {
+    /*
+     * Found by comparing every table that holds a person against the export:
+     * wishes, bug reports, survey answers and daily advisor usage were all
+     * missing. The export is assembled by hand on purpose, so new tables have
+     * to be added to it on purpose.
+     */
+    const helsinki = (ms: number) => {
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Europe/Helsinki", year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+      return { on: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+    };
+
+    expect((await post(h, "/api/wishes", { body: "Alice would like more mentor hours.", audience: "organizers" }, alice.cookie)).status).toBe(200);
+    expect((await post(h, "/api/bugs", { body: "Alice found the scroll jumps." }, alice.cookie)).status).toBe(200);
+
+    const o = helsinki(Date.now() - 2 * 60_000);
+    const c = helsinki(Date.now() + 60 * 60_000);
+    const made = await post(h, "/api/survey", {
+      action: "save-round", title: "Export round", intro: "",
+      opensOn: o.on, opensTime: o.time, closesOn: c.on, closesTime: c.time,
+      groups: [{ heading: "How true?", lowLabel: "not", highLabel: "very", items: ["Alice statement."] }],
+    }, organizer.cookie);
+    expect(made.status).toBe(200);
+    const roundId = ((await made.json()) as { id: string }).id;
+    const rounds = ((await (await get(h, "/api/survey", organizer.cookie)).json()) as {
+      rounds: { id: string; groups: { items: { id: string }[] }[] }[];
+    }).rounds;
+    const itemId = rounds.find((r) => r.id === roundId)!.groups[0]!.items[0]!.id;
+    expect((await post(h, "/api/survey", { action: "submit", roundId, answers: { [itemId]: 4 } }, alice.cookie)).status).toBe(200);
+
+    await post(h, "/api/chat", { messages: [{ role: "user", content: "hello" }] }, alice.cookie);
+
+    const body = (await (await get(h, "/api/account", alice.cookie)).json()) as {
+      wishes: { body: string }[];
+      bugReports: { body: string }[];
+      surveyAnswers: { title: string; answers: { heading: string; statement: string; value: number }[] }[];
+      advisorUsage: { calls: number }[];
+    };
+    expect(body.wishes.map((w) => w.body)).toContain("Alice would like more mentor hours.");
+    expect(body.bugReports.map((b) => b.body)).toContain("Alice found the scroll jumps.");
+    const answered = body.surveyAnswers.find((r) => r.title === "Export round")!;
+    expect(answered.answers).toEqual([{ heading: "How true?", statement: "Alice statement.", value: 4 }]);
+    expect(body.advisorUsage.reduce((n, u) => n + u.calls, 0)).toBeGreaterThan(0);
+  });
+
   test("never contains credentials", async () => {
     // An export lands in a downloads folder or an inbox. It must not be a
     // copy of the things that authenticate the person.
