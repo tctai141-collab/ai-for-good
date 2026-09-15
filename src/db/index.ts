@@ -1981,6 +1981,61 @@ export function chatUsageForDay(day: string): ChatUsageRow[] {
     .all({ $day: day }) as ChatUsageRow[];
 }
 
+/* ------------------------------------------------ for a person's own export -- */
+
+/** Bug reports this person filed, for their data export. */
+export function bugReportsFrom(email: string) {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT id, body, page, user_agent AS userAgent, status, created_at AS createdAt
+         FROM bug_reports WHERE from_email = $email ORDER BY created_at DESC`,
+    )
+    .all({ $email: email }) as {
+      id: string; body: string; page: string; userAgent: string; status: string; createdAt: string;
+    }[];
+}
+
+/** Every survey round this person answered, with the statements and their answers. */
+export function surveyAnswersFor(email: string) {
+  const db = getDb();
+  const rows = db
+    .query(
+      `SELECT r.id AS roundId, r.title, s.submitted_at AS submittedAt,
+              g.heading, i.statement, a.value
+         FROM survey_submissions s
+         JOIN survey_rounds r ON r.id = s.round_id
+         JOIN survey_answers a ON a.round_id = s.round_id AND a.user_email = s.user_email
+         JOIN survey_items i ON i.id = a.item_id
+         JOIN survey_groups g ON g.id = i.group_id
+        WHERE s.user_email = $email
+        ORDER BY s.submitted_at, g.position, i.position`,
+    )
+    .all({ $email: email }) as {
+      roundId: string; title: string; submittedAt: string; heading: string; statement: string; value: number;
+    }[];
+  const rounds = new Map<string, { title: string; submittedAt: string; answers: { heading: string; statement: string; value: number }[] }>();
+  for (const row of rows) {
+    const round = rounds.get(row.roundId) ?? { title: row.title, submittedAt: row.submittedAt, answers: [] };
+    round.answers.push({ heading: row.heading, statement: row.statement, value: row.value });
+    rounds.set(row.roundId, round);
+  }
+  return [...rounds.values()];
+}
+
+/** This person's daily advisor usage: counts and tokens, never message text. */
+export function chatUsageFor(email: string) {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT day, kind, calls, input_tokens AS inputTokens, output_tokens AS outputTokens
+         FROM chat_usage WHERE user_email = $email ORDER BY day, kind`,
+    )
+    .all({ $email: email }) as {
+      day: string; kind: string; calls: number; inputTokens: number; outputTokens: number;
+    }[];
+}
+
 /* ---------------------------------------------------------------- surveys -- */
 
 export type SurveyItem = { id: string; statement: string };
