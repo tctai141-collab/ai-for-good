@@ -1977,6 +1977,34 @@ export function chatUsageForDay(day: string): ChatUsageRow[] {
     .all({ $day: day }) as ChatUsageRow[];
 }
 
+/* ------------------------------------------------ for a person's own export -- */
+
+/** Bug reports this person filed, for their data export. */
+export function bugReportsFrom(email: string) {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT id, body, page, user_agent AS userAgent, status, created_at AS createdAt
+         FROM bug_reports WHERE from_email = $email ORDER BY created_at DESC`,
+    )
+    .all({ $email: email }) as {
+      id: string; body: string; page: string; userAgent: string; status: string; createdAt: string;
+    }[];
+}
+
+/** This person's daily advisor usage: counts and tokens, never message text. */
+export function chatUsageFor(email: string) {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT day, kind, calls, input_tokens AS inputTokens, output_tokens AS outputTokens
+         FROM chat_usage WHERE user_email = $email ORDER BY day, kind`,
+    )
+    .all({ $email: email }) as {
+      day: string; kind: string; calls: number; inputTokens: number; outputTokens: number;
+    }[];
+}
+
 export type ProgrammeEventRow = {
   id: string;
   title: string;
