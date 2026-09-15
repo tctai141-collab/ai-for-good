@@ -6,7 +6,27 @@ export interface CheckinContext {
   founderName: string | null;
 }
 
+/**
+ * One line, whatever it was given.
+ *
+ * Every value in the ground block below is a single labelled line the model
+ * reads as fact. A newline inside one is a new line of system prompt, which is
+ * how a value becomes an instruction. The route already refuses request text
+ * for these; this makes the builder safe on its own, for the next caller.
+ */
+function oneLine(value: string, max = 400): string {
+  return value.replace(/[\r\n\u2028\u2029]+/g, " ").slice(0, max).trim();
+}
+
 export function buildCheckinPrompt(ctx: CheckinContext): string {
+  ctx = {
+    ...ctx,
+    serverTime: oneLine(ctx.serverTime),
+    founderTz: oneLine(ctx.founderTz, 64),
+    lastCheckinAt: ctx.lastCheckinAt === null ? null : oneLine(ctx.lastCheckinAt),
+    lastCheckinSummary: ctx.lastCheckinSummary === null ? null : oneLine(ctx.lastCheckinSummary),
+    founderName: ctx.founderName === null ? null : oneLine(ctx.founderName, 120),
+  };
   const ground = [
     `CURRENT_SERVER_TIME: ${ctx.serverTime}`,
     `FOUNDER_LOCAL_TZ: ${ctx.founderTz}`,
