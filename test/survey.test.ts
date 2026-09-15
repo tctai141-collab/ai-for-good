@@ -107,13 +107,40 @@ describe("Week 2, as Roman wrote it", () => {
     const all = week2.groups.flatMap((g) => [g.heading, ...g.items.map((i) => i.statement)]).join(" ");
     expect(all.toLowerCase()).not.toContain("name");
     expect(week2.intro).not.toContain("Your name is collected");
-    expect(week2.intro).toContain("organizers can see them");
-    expect(week2.intro).toContain("roman.mamzer@aalto.fi");
+    // The participation paragraph and contact line were removed on 15 September.
+    expect(week2.intro).not.toContain("Participation is voluntary");
+    expect(week2.intro).not.toContain("roman.mamzer@aalto.fi");
+    expect(week2.intro).toContain("Estimated completion time: 2–3 minutes.");
   });
 
   test("the window is 10:00–11:45 on the wall clock in Espoo, not UTC", () => {
     expect(Date.parse(SURVEY_WEEK2_OPENS_AT)).toBe(dueInstant("2026-09-15", "10:00"));
     expect(Date.parse(SURVEY_WEEK2_CLOSES_AT)).toBe(dueInstant("2026-09-15", "11:45"));
+  });
+
+  test("an untouched intro seeded earlier is trimmed; an edited one is left alone", async () => {
+    const { initSchema, SURVEY_WEEK2_INTRO, SURVEY_WEEK2_INTRO_ORIGINAL } = await import("../src/db/schema");
+    const db = h.db();
+    const intro = () => (db.query("SELECT intro FROM survey_rounds WHERE id = $id").get({ $id: SURVEY_WEEK2_ID }) as { intro: string }).intro;
+    const rerun = (value: string) => {
+      db.run("UPDATE survey_rounds SET intro = $v WHERE id = $id", { $v: value, $id: SURVEY_WEEK2_ID });
+      db.run("DELETE FROM survey_seeds WHERE key = $k", { $k: `${SURVEY_WEEK2_ID}-intro-trim` });
+      initSchema(db);
+    };
+    try {
+      rerun(SURVEY_WEEK2_INTRO_ORIGINAL);
+      expect(intro()).toBe(SURVEY_WEEK2_INTRO);
+
+      rerun("Roman rewrote this.");
+      expect(intro()).toBe("Roman rewrote this.");
+
+      /* And once it has run, putting the paragraphs back by hand sticks. */
+      db.run("UPDATE survey_rounds SET intro = $v WHERE id = $id", { $v: SURVEY_WEEK2_INTRO_ORIGINAL, $id: SURVEY_WEEK2_ID });
+      initSchema(db);
+      expect(intro()).toBe(SURVEY_WEEK2_INTRO_ORIGINAL);
+    } finally {
+      db.close();
+    }
   });
 
   test("the seed runs once, so a deleted round does not come back", async () => {

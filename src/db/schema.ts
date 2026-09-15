@@ -990,6 +990,29 @@ export function initSchema(db: Database) {
   db.run("CREATE INDEX IF NOT EXISTS idx_survey_items_group ON survey_items(group_id, position)");
 
   seedFounderSprintWeek2(db);
+  trimFounderSprintWeek2Intro(db);
+}
+
+/**
+ * Takes the two paragraphs out of Week 2's intro in databases seeded before
+ * they were removed from the seed.
+ *
+ * Only when the intro is still exactly what was seeded. An organizer who has
+ * edited it has decided what it should say, and this does not overrule them.
+ * Runs once, recorded in survey_seeds, so putting the paragraphs back by hand
+ * later does not get undone on the next deploy.
+ */
+function trimFounderSprintWeek2Intro(db: Database) {
+  const key = `${SURVEY_WEEK2_ID}-intro-trim`;
+  if (db.query("SELECT 1 FROM survey_seeds WHERE key = $key").get({ $key: key })) return;
+  db.transaction(() => {
+    db.run(
+      `UPDATE survey_rounds SET intro = $new, updated_at = datetime('now')
+        WHERE id = $id AND intro = $old`,
+      { $id: SURVEY_WEEK2_ID, $new: SURVEY_WEEK2_INTRO, $old: SURVEY_WEEK2_INTRO_ORIGINAL },
+    );
+    db.run("INSERT INTO survey_seeds (key) VALUES ($key)", { $key: key });
+  })();
 }
 
 /**
@@ -1014,12 +1037,28 @@ export const SURVEY_WEEK2_ID = "founder-sprint-week-2";
 export const SURVEY_WEEK2_OPENS_AT = "2026-09-15T07:00:00.000Z";
 export const SURVEY_WEEK2_CLOSES_AT = "2026-09-15T08:45:00.000Z";
 
-export const SURVEY_WEEK2_INTRO = [
+/*
+ * Week 2's intro as first seeded, kept so the trim below can tell an untouched
+ * intro from one an organizer has since edited.
+ */
+export const SURVEY_WEEK2_INTRO_ORIGINAL = [
   "Thank you for participating in the Founder Sprint study!",
   "Estimated completion time: 2–3 minutes.",
   "This short questionnaire asks about how you approach different situations and how confident you feel in performing different activities. There are no right or wrong answers, so please answer based on how you see yourself.",
   "Participation is voluntary, and your responses will be handled confidentially. Your answers are saved with your account so rounds can be compared over time, and organizers can see them. The data will be pseudonymized for analysis.",
   "If you have any questions, feel free to contact me at roman.mamzer@aalto.fi or +358465877609",
+].join("\n\n");
+
+/*
+ * Without the participation paragraph and the contact line, at Tai's request on
+ * 15 September 2026. Flagged when it was asked for: that paragraph is the
+ * participant information for Roman's study, so whether a round needs it is
+ * Roman's call, and an organizer can put it back in any round's intro.
+ */
+export const SURVEY_WEEK2_INTRO = [
+  "Thank you for participating in the Founder Sprint study!",
+  "Estimated completion time: 2–3 minutes.",
+  "This short questionnaire asks about how you approach different situations and how confident you feel in performing different activities. There are no right or wrong answers, so please answer based on how you see yourself.",
 ].join("\n\n");
 
 export const SURVEY_WEEK2_GROUPS = [
