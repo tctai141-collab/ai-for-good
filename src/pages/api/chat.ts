@@ -121,6 +121,26 @@ function normalizeSignalStatus(status: string | undefined, score: number): strin
   return "stable";
 }
 
+/**
+ * A time zone the browser reported, or Helsinki.
+ *
+ * It lands in the system prompt, so it has to be a real zone name and nothing
+ * else. Anything Intl will not accept — including a string carrying newlines and
+ * a paragraph of instructions — becomes the cohort's own zone, which is a better
+ * guess than UTC for a programme run in Espoo.
+ */
+function safeTimeZone(value: unknown): string {
+  if (typeof value !== "string" || value.length > 64 || !/^[A-Za-z][A-Za-z0-9_+\-]*(\/[A-Za-z0-9_+\-]+){0,2}$/.test(value)) {
+    return "Europe/Helsinki";
+  }
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return value;
+  } catch {
+    return "Europe/Helsinki";
+  }
+}
+
 function buildSystem(body: {
   personality?: string;
   kind?: string;
@@ -274,7 +294,22 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     // so this only needs to be high enough to avoid truncating mid-sentence.
     const maxTokens = 550;
 
-    const { persona, variable } = buildSystem(body);
+    /*
+     * The name and time zone the check-in prompt is grounded in come from the
+     * server, not the request.
+     *
+     * Both used to be taken from the body and written into the system prompt
+     * as `FOUNDER_NAME: …` and `FOUNDER_LOCAL_TZ: …`. The browser derived the
+     * "name" from the email address, and any client could send a value with
+     * newlines and write its own instructions into the system prompt — the
+     * easiest way around the scope rules the prompt now carries. The account's
+     * name is the real one, and the zone is checked against Intl.
+     */
+    const { persona, variable } = buildSystem({
+      ...body,
+      founderName: session.name || undefined,
+      founderTz: safeTimeZone(body.founderTz),
+    });
 
     const advisorRequest = {
       persona,
