@@ -1,7 +1,6 @@
 import { defineConfig } from "astro/config";
 import node from "@astrojs/node";
 import react from "@astrojs/react";
-import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   adapter: node({
@@ -33,10 +32,6 @@ export default defineConfig({
     port: 3000,
   },
   vite: {
-    /* Tailwind v4, for the shadcn components under src/components/ui only.
-       Preflight is deliberately not imported (see src/styles/tailwind.css), so
-       this adds utility classes and changes nothing that already renders. */
-    plugins: [tailwindcss()],
     ssr: {
       // bun:* are native Bun modules — don't let Vite/Node bundle or resolve them
       external: ["bun:sqlite", "bun:ffi", "bun:test"],

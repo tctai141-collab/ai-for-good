@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createFounder, createOrganizer, get, post, startServer, type Harness, type Session } from "./helpers/harness";
 import { chunkTranscript, nameLeaks } from "../src/lib/extract";
+import { EXTRACT_LIMIT } from "../src/lib/limits";
 
 /**
  * The transcript ingest.
@@ -315,5 +316,32 @@ describe("the name-leak guard", () => {
 
   test("an unnamed speaker flags nothing", () => {
     expect(nameLeaks("Any text at all.", "")).toEqual([]);
+  });
+});
+
+describe("the extraction allowance", () => {
+  /*
+   * Reading a transcript is the only model call an organizer can make in a
+   * loop, and it was the one call in the app with no limit on it at all. The
+   * panel fires one per 24 000-character piece, so a long session is a handful
+   * and this ceiling is never met by somebody doing the work.
+   */
+  test("extraction stops once the allowance is spent", async () => {
+    const staff = await createOrganizer(h, "ingest-limit@example.test");
+    const once = () =>
+      post(
+        h,
+        "/api/knowledge",
+        { action: "extract", source: "Someone", transcript: "x".repeat(500) },
+        staff.cookie,
+      );
+
+    for (let i = 0; i < EXTRACT_LIMIT; i++) {
+      expect([i, (await once()).status]).toEqual([i, 200]);
+    }
+
+    const refused = await once();
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("Retry-After")).toBeTruthy();
   });
 });

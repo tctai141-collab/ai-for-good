@@ -171,6 +171,24 @@ export const ADMIN_WRITE_LIMIT = 60;
 export const ADMIN_WRITE_WINDOW_MS = 60_000;
 export const adminWriteLimiter = new RateLimiter(ADMIN_WRITE_LIMIT, ADMIN_WRITE_WINDOW_MS);
 
+/**
+ * Transcript extraction, the one model call the operating team can make in a
+ * loop.
+ *
+ * The ingest panel splits a pasted session into 24 000-character pieces and
+ * calls once per piece, so a long mentor session is a handful of calls and a
+ * two-hour one is still under ten. Thirty in ten minutes is far above that and
+ * far below a script. It matters more than the other admin writes because each
+ * call is Opus with an 8 000-token ceiling: this is the admin surface where a
+ * stolen organizer cookie spends money rather than filling a disk, and it was
+ * the only model call in the app with no limit of any kind on it. The founder
+ * advisor has a burst limit and a daily allowance; the admin assistant shares
+ * the burst limit; this had neither.
+ */
+export const EXTRACT_LIMIT = 30;
+export const EXTRACT_WINDOW_MS = 10 * 60_000;
+export const extractLimiter = new RateLimiter(EXTRACT_LIMIT, EXTRACT_WINDOW_MS);
+
 /** The 429 every limiter hands back, so the wording cannot drift. */
 export function tooMany(retryAfterSeconds: number): Response {
   return new Response(
