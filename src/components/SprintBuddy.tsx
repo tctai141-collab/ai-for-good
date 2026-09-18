@@ -27,6 +27,8 @@ import {
 import { MAX_WG_TEXT_CHARS } from "../lib/limits";
 import type { Checkin, UserData } from "../lib/persistence";
 import { advisorErrorMessage } from "../lib/advisor-errors";
+import { sendChat } from "../lib/chat-transport";
+import { detectDecision, type Detected } from "../lib/decisions";
 import TextShimmer from "./TextShimmer";
 import InteractiveHoverButton from "./InteractiveHoverButton";
 import GlassFilter from "./GlassFilter";
@@ -153,18 +155,6 @@ type Decision = {
   outcome?: string;
 };
 
-type Detected = { present: false } | { present: true; summary: string; door: "reversible" | "one-way"; theme: string };
-
-function detectDecision(text: string, theme: string): Detected {
-  const t = (text || "").toLowerCase();
-  const looksLikeDecision = /should i|whether|torn|deciding|decide|do i|or wait|or not|\bvs\b|either/.test(t);
-  if (!looksLikeDecision) return { present: false };
-  const door = /fire|shut|quit|sell|sign|permanent|delay launch/.test(t) ? "one-way" : "reversible";
-  const words = (text || "").replace(/\s+/g, " ").trim().split(" ").slice(0, 9).join(" ");
-  const summary = words.charAt(0).toUpperCase() + words.slice(1);
-  return { present: true, summary, door, theme };
-}
-
 type Msg = { role: "user" | "assistant"; content: string };
 
 type ResponderResult = {
@@ -185,63 +175,30 @@ async function callClaude(
   kind?: "checkin",
   ctx?: { userEmail?: string; founderName?: string; founderTz?: string },
 ): Promise<ResponderResult> {
+  /* `system` is still taken, and still not sent. The server builds the system
+     prompt from the knowledge pack and ignores anything a client offers, which
+     is the only arrangement in which the pack cannot be edited from a
+     browser. */
+  void system;
+
   const lastUser = [...messages].reverse().find((m) => m.role === "user")?.content || "";
   const theme = guessTheme(lastUser);
+  const isCheckin = kind === "checkin";
 
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages,
-        stream: !!onChunk,
-        kind,
-        userEmail: ctx?.userEmail,
-        founderName: ctx?.founderName,
-        founderTz: ctx?.founderTz,
-      }),
-    });
+  const voice = await sendChat(
+    {
+      messages,
+      stream: !!onChunk,
+      kind,
+      userEmail: ctx?.userEmail,
+      founderName: ctx?.founderName,
+      founderTz: ctx?.founderTz,
+    },
+    onChunk ? (full) => onChunk(isCheckin ? stripCheckinTag(full) : full) : undefined,
+  );
 
-    // Carry the status through. Collapsing every failure into one message is
-    // what made a 403 look like a dropped connection.
-    if (!res.ok) throw new Error(advisorErrorMessage(res.status));
-
-    if (onChunk) {
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-      const decoder = new TextDecoder();
-      const isCheckin = kind === "checkin";
-      let full = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        for (const line of text.split("\n")) {
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (json === "[DONE]") continue;
-          try {
-            const chunk = JSON.parse(json) as { choices?: { delta?: { content?: string } }[] };
-            const token = chunk.choices?.[0]?.delta?.content || "";
-            if (token) {
-              full += token;
-              onChunk(isCheckin ? stripCheckinTag(full) : full);
-            }
-          } catch { /* ignore malformed chunks */ }
-        }
-      }
-      const voice = isCheckin ? stripCheckinTag(full) : full;
-      return { voice: voice || "...", theme, decision: detectDecision(lastUser, theme) };
-    }
-
-    const data = await res.json() as { content: string };
-    return { voice: data.content || "", theme, decision: detectDecision(lastUser, theme) };
-  } catch (err) {
-    // A thrown fetch means the request never landed; anything else already
-    // carries a message chosen for the status it came back with.
-    if (err instanceof TypeError) throw new Error(advisorErrorMessage(null));
-    throw err instanceof Error ? err : new Error(advisorErrorMessage(null));
-  }
+  const shown = isCheckin ? stripCheckinTag(voice) : voice;
+  return { voice: shown || "...", theme, decision: detectDecision(lastUser, theme) };
 }
 
 /* ---------- Palette: reads from DESIGN.md tokens defined in :root ---------- */
@@ -623,7 +580,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
     next[i]!.arc[currentWeekIndex] = (next[i]!.arc[currentWeekIndex] ?? 0) + 1;
     return next;
   });
-  const addDecision = (d: { summary: string; door: "reversible" | "one-way"; theme: string }) => {
+  const addDecision = (d: { summary: string; door: "reversible" | "one-way"; theme: string; threadId?: string }) => {
     const id = "d" + Date.now();
     const decision = { ...d, id, status: "open" as const, at: "today", createdAt: new Date().toISOString() };
     setDecisions((prev) => [decision, ...prev]);
@@ -735,7 +692,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
           <Scroll><LibraryPage state={library} /></Scroll>
         )}
         {persona === "founder" && view === "reflections" && (
-          <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} /></Scroll>
+          <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} onOpenThread={(id) => { setActive({ id }); setView("chat"); }} /></Scroll>
         )}
         {persona === "coach" && view !== "programme" && view !== "wishes" && view !== "assistant" && (
           <Scroll>
@@ -1534,7 +1491,7 @@ type ChatProps = {
   threads: Thread[];
   setThreads: React.Dispatch<React.SetStateAction<Thread[]>>;
   bumpTheme: (n: string) => void;
-  addDecision: (d: { summary: string; door: "reversible" | "one-way"; theme: string }) => void;
+  addDecision: (d: { summary: string; door: "reversible" | "one-way"; theme: string; threadId?: string }) => void;
   setVisits: React.Dispatch<React.SetStateAction<number>>;
   markCheckinDone: () => void;
   userEmail?: string;
@@ -1773,9 +1730,22 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
     : undefined;
   const callCtx = { userEmail, founderName, founderTz };
 
-  const persistThread = (finalMsgs: Msg[], theme: string, t: string) => {
+  /*
+   * This conversation's id, decided once and reused.
+   *
+   * Pulled out of persistThread because the decision journal needs the same
+   * id at the same moment: an entry written without one is an entry nobody can
+   * click back from, which is how the journal ended up as a list of fragments
+   * with nothing behind them.
+   */
+  const ensureThreadId = () => {
     const id = existing?.id || createdThreadId.current || ("t" + Date.now());
     if (!createdThreadId.current && !existing?.id) createdThreadId.current = id;
+    return id;
+  };
+
+  const persistThread = (finalMsgs: Msg[], theme: string, t: string) => {
+    const id = ensureThreadId();
     const title = existing?.title
       || (isCheckin ? `Check-in · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : titleFrom(t || finalMsgs[0]?.content || ""));
     setThreads((prev) => {
@@ -1833,7 +1803,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
       if (r.theme) bumpTheme(r.theme);
 
       if (!isCheckin && r.decision && r.decision.present) {
-        addDecision({ summary: r.decision.summary, door: r.decision.door, theme: r.theme });
+        addDecision({ summary: r.decision.summary, door: r.decision.door, theme: r.theme, threadId: ensureThreadId() });
         setBanner({ kind: "logged", text: `Logged to your decision journal · ${r.decision.door} door` });
       }
 
@@ -2240,6 +2210,7 @@ function Reflections({
   userEmail,
   takes,
   initialWorkingGenius,
+  onOpenThread,
 }: {
   threads: Thread[];
   decisions: Decision[];
@@ -2250,6 +2221,8 @@ function Reflections({
   /** Absent only before sign-in completes; every use below is guarded. */
   userEmail?: string;
   takes?: Array<{ takenOn: string; result: WorkingGeniusResult }>;
+  /** Opens the conversation a decision came out of. */
+  onOpenThread?: (threadId: string) => void;
   initialWorkingGenius?: {
     primary: string;
     counts: Record<string, number>;
@@ -2510,7 +2483,7 @@ function Reflections({
         <p style={{ margin: 0, paddingTop: 14, borderTop: `1px solid ${C.line}`, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14.5, color: C.faint }}>No decisions tracked yet. They'll appear here when you weigh one in chat.</p>
       ) : (
         <ol style={{ margin: 0, padding: 0, listStyle: "none", borderTop: `1px solid ${C.line}` }}>
-          {orderedDecisions.map((d) => <DecisionRow key={d.id} d={d} onClose={closeDecision} />)}
+          {orderedDecisions.map((d) => <DecisionRow key={d.id} d={d} onClose={closeDecision} onOpen={onOpenThread} />)}
         </ol>
       )}
 
@@ -3355,7 +3328,7 @@ function ThemeRow({ t }: { t: ThemeArc }) {
   );
 }
 
-function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision) => void }) {
+function DecisionRow({ d, onClose, onOpen }: { d: Decision; onClose: (decision: Decision) => void; onOpen?: (threadId: string) => void }) {
   const statusColor = d.status === "closed" ? C.accent : C.yellow;
   return (
     <li style={{ display: "grid", gridTemplateColumns: "5rem 1fr auto", gap: 20, alignItems: "start", padding: "16px 0", borderBottom: `1px solid ${C.line}`, fontSize: 15, lineHeight: 1.5 }}>
@@ -3365,7 +3338,21 @@ function DecisionRow({ d, onClose }: { d: Decision; onClose: (decision: Decision
         {d.status === "closed" && d.outcome && (
           <em style={{ display: "block", marginTop: 4, fontFamily: "var(--font-serif)", fontStyle: "italic", color: C.sub, fontSize: 14.5 }}>{d.outcome}</em>
         )}
-        <span style={{ display: "block", marginTop: 5, fontSize: 12, color: C.faint }}>{d.door} · {decisionDate(d)}</span>
+        <span style={{ display: "block", marginTop: 5, fontSize: 12, color: C.faint }}>
+          {d.door} · {decisionDate(d)}
+          {d.threadId && onOpen && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => onOpen(d.threadId!)}
+                style={{ background: "none", border: "none", padding: 0, font: "inherit", color: C.accent, cursor: "pointer", textDecoration: "underline" }}
+              >
+                Open the conversation
+              </button>
+            </>
+          )}
+        </span>
       </div>
       {d.status === "open" && (
         <button
