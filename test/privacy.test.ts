@@ -63,7 +63,7 @@ beforeAll(async () => {
     shared: true,
   }, alice.cookie);
 
-  // detectDecision() in the client stores the founder's own first nine words.
+  // detectDecision() in the client stores the founder's own first sentence.
   await post(h, "/api/persistence", {
     action: "save-decision",
     userEmail: alice.email,
