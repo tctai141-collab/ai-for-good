@@ -28,10 +28,9 @@ let founder: Session;
 let mentor: Session;
 
 const answers = () => {
-  const a: Record<string, string> = {};
+  const a: Record<string, number> = {};
   for (const item of WORKING_GENIUS_ITEMS) {
-    const first = item.options[0];
-    if (first) a[item.id] = first.id;
+    a[item.id] = 4;
   }
   return a;
 };

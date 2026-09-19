@@ -31,7 +31,7 @@ let founder: Session;
 /** Thirty answers, in the shape the endpoint accepts, so nothing but the hold
     can be what refuses them. */
 const answers = () =>
-  Object.fromEntries(WORKING_GENIUS_ITEMS.map((i) => [i.id, i.options[0]!.id]));
+  Object.fromEntries(WORKING_GENIUS_ITEMS.map((i) => [i.id, 4]));
 
 beforeAll(async () => {
   // The one suite that stands on this side of the hold rather than past it.

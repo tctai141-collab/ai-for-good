@@ -30,6 +30,7 @@ import {
   WORKING_GENIUS_ITEMS,
   nextRetakeDate,
   retakeOpen,
+  readAnswer,
   scoreWorkingGenius,
   type WorkingGeniusId,
   type WorkingGeniusResponses,
@@ -40,7 +41,6 @@ import {
   cap, MAX_MESSAGES_PER_THREAD, MAX_MESSAGE_CHARS,
   MAX_SUMMARY_CHARS, MAX_TITLE_CHARS, MAX_WG_TEXT_CHARS,
 } from "../../lib/limits";
-import { resolveFreeText } from "../../lib/workingGeniusText";
 
 /**
  * Reading and writing founder data, under the cohort's privacy rule:
@@ -295,37 +295,16 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           return err("This cannot be saved without agreeing to share the profile.", 400);
         }
 
-        // Only answers to items that exist, naming options those items offer.
-        // Anything else is dropped rather than rejected: a half-recognised
-        // submission is still worth more to the founder than an error.
-        const byItem = new Map(WORKING_GENIUS_ITEMS.map((i) => [i.id, i]));
+        // Only statements that exist, and only points on the scale. Anything
+        // else is dropped rather than rejected: a half-recognised submission is
+        // still worth more to the founder than an error.
+        const known = new Set(WORKING_GENIUS_ITEMS.map((item) => item.id));
         const responses: WorkingGeniusResponses = {};
         for (const [itemId, raw] of Object.entries(body.workingGeniusResponses)) {
-          const item = byItem.get(itemId);
-          if (!item) continue;
-
-          if (typeof raw === "string") {
-            if (item.options.some((o) => o.id === raw)) responses[itemId] = raw as WorkingGeniusId;
-            continue;
-          }
-          if (typeof raw !== "object" || raw === null) continue;
-
-          const a = raw as { choice?: unknown; text?: unknown };
-          const choiceOk = a.choice === "neither" || item.options.some((o) => o.id === a.choice);
-          if (!choiceOk) continue;
-
-          /*
-           * `resolved` is never taken from the client. It is what the
-           * classifier decided, and accepting it from a request body would let
-           * a founder hand themselves any profile they liked while the raw
-           * text said something else.
-           */
-          responses[itemId] = {
-            choice: a.choice as WorkingGeniusId | "neither",
-            ...(typeof a.text === "string" && a.text.trim()
-              ? { text: cap(a.text, MAX_WG_TEXT_CHARS).trim() }
-              : {}),
-          };
+          if (!known.has(itemId)) continue;
+          const point = readAnswer(raw);
+          if (point === null) continue;
+          responses[itemId] = point;
         }
         if (Object.keys(responses).length < WORKING_GENIUS_ITEMS.length) {
           return err("assessment incomplete");
@@ -351,17 +330,9 @@ export const POST: APIRoute = async ({ cookies, request }) => {
           );
         }
 
-        /*
-         * The classifier runs here, once, and what it decides is stored with
-         * the answers. Scoring below is then a pure function over stored data:
-         * re-reading this row later returns the same profile it returns now.
-         */
-        const { responses: resolved } = await resolveFreeText(
-          responses,
-          import.meta.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY,
-        );
-
-        const result = scoreWorkingGenius(resolved, today);
+        /* Scoring is a pure function over the stored answers, so re-reading
+           this row later returns the same profile it returns now. */
+        const result = scoreWorkingGenius(responses, today);
         upsertWorkingGenius({
           user_email: session!.email,
           primary_type: result.primary,
