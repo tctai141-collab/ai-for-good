@@ -320,7 +320,19 @@ export const POST: APIRoute = async ({ cookies, request }) => {
          */
         const today = helsinkiToday();
         const previous = getWorkingGenius(session!.email);
-        if (previous && !retakeOpen(previous.completed_at, today)) {
+        /*
+         * A take on a different instrument does not hold the window shut.
+         *
+         * The windows exist so that a retake measures the person rather than
+         * the week they have just had — which assumes both takes asked the
+         * same questions. afs-4 does not: it is forty-two rated statements
+         * where afs-3 was thirty forced choices, and the two are not
+         * comparable, so there is nothing for the lock to protect. Without
+         * this, everybody who took the September version is refused until 8
+         * October and cannot take the new one at all.
+         */
+        const sameInstrument = (previous?.instrument_version ?? null) === INSTRUMENT_VERSION;
+        if (previous && sameInstrument && !retakeOpen(previous.completed_at, today)) {
           const next = nextRetakeDate(previous.completed_at);
           return err(
             next
