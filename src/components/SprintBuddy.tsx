@@ -8,7 +8,7 @@ import Assistant from "./Assistant";
 import AaltoMark from "./AaltoMark";
 import { DeadlinesPage, useDeadlines, nextUp, type DeadlinesState } from "./Tasks";
 import { LibraryPage, useLibrary, type LibraryState } from "./Library";
-import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
+import { saveThread, saveDecision, saveCheckin, bumpVisits, loadWorkingGenius, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
   INSTRUMENT_PREAMBLE,
   INSTRUMENT_VERSION,
@@ -375,7 +375,7 @@ const splitCheckinPrompt = (prompt: string) => {
 };
 
 type Persona = "founder" | "coach";
-type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library" | "bugs";
+type View = "chat" | "reflections" | "programme" | "wishes" | "assistant" | "deadlines" | "library" | "bugs" | "working-style";
 
 /* What each view is called in the sidebar, so a bug report names the screen
    the way the person filing it would name it. Keyed by View, so adding a
@@ -389,6 +389,7 @@ const VIEW_NAMES: Record<View, string> = {
   deadlines: "Deadlines",
   library: "Library",
   bugs: "Report a bug",
+  "working-style": "Working style",
 };
 
 type ActiveTarget = { fresh?: boolean; _t?: number; id?: string; checkin?: boolean };
@@ -634,6 +635,7 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         onDeleteThread={removeThread}
         decisions={decisions}
         onReflections={() => setView("reflections")}
+        onWorkingStyle={() => setView("working-style")}
         onProgramme={() => setView("programme")}
         onWishes={() => setView("wishes")}
         onBugs={() => { if (view !== "bugs") setBugFrom(VIEW_NAMES[view]); setView("bugs"); }}
@@ -694,7 +696,22 @@ export default function SprintBuddy({ persona, canAssist = false, userEmail, ini
         {persona === "founder" && view === "reflections" && (
           <Scroll><Reflections threads={threads} decisions={decisions} setDecisions={setDecisions} checkins={checkins} themes={themes} visits={visits} userEmail={userEmail} initialWorkingGenius={initialData?.workingGenius} takes={initialData?.workingGeniusTakes} onOpenThread={(id) => { setActive({ id }); setView("chat"); }} /></Scroll>
         )}
-        {persona === "coach" && view !== "programme" && view !== "wishes" && view !== "assistant" && (
+        {persona === "coach" && view === "working-style" && (
+          <Scroll>
+            {/* Staff take it for themselves. Nothing here reaches the cohort
+                heat map or the team map: listSharedWorkingGenius is
+                founders-only at the query, so a staff profile is for the
+                person who took it and whoever they show it to. */}
+            <div style={{ maxWidth: 760, margin: "0 auto", padding: "28px 4px 0" }}>
+              <p style={{ ...kicker, marginBottom: 6 }}>Yours, not the cohort's</p>
+              <h1 style={{ margin: "0 0 18px", fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 800, letterSpacing: "-0.02em", color: C.ink }}>
+                Working style
+              </h1>
+              <WorkingStyle userEmail={userEmail} standalone />
+            </div>
+          </Scroll>
+        )}
+        {persona === "coach" && view !== "programme" && view !== "wishes" && view !== "assistant" && view !== "working-style" && (
           <Scroll>
             {coachTeam
               ? <FounderCard team={coachTeam} onBack={() => setCoachTeam(null)} />
@@ -729,6 +746,7 @@ type SidebarProps = {
   /** Only so the delete warning can say how many go with the conversation. */
   decisions: Decision[];
   onReflections: () => void;
+  onWorkingStyle: () => void;
   onProgramme: () => void;
   onWishes: () => void;
   onBugs: () => void;
@@ -741,7 +759,7 @@ type SidebarProps = {
   onPickTeam: (t: Team | null) => void;
 };
 
-function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, library, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
+function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onToggle, checkinDone, deadlines, library, onStartCheckin, onNew, onThread, onDeleteThread, decisions, onReflections, onWorkingStyle, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onAssistant, canAssist, onSignOut, signOutLabel, onPickTeam }: SidebarProps) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const pending = confirmDelete ? threads.find((t) => t.id === confirmDelete) ?? null : null;
   const pendingDecisions = pending ? decisions.filter((d) => d.threadId === pending.id).length : 0;
@@ -1087,6 +1105,12 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
               <Glyph>✳</Glyph> <span>Assistant</span>
             </button>
           )}
+          {/* Theirs, not a founder's. The cohort views above are about other
+              people; this one is the only thing in the coach view that is
+              about the person reading it. */}
+          <button onClick={onWorkingStyle} className="navitem" style={{ ...navItem, background: view === "working-style" ? "rgba(255,255,255,0.11)" : "transparent", fontWeight: 600, padding: "12px 12px", fontSize: 14 }}>
+            <Glyph>◈</Glyph> <span>Working style</span>
+          </button>
           <div style={{ marginBottom: 12 }} />
           <p style={{ ...navLabel, marginTop: 0 }}>Your cohort</p>
           <div style={{ flexShrink: 0 }}>
@@ -1163,6 +1187,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
           onWishes={onWishes}
           onBugs={onBugs}
           onReflections={onReflections}
+          onWorkingStyle={onWorkingStyle}
           onPickTeam={onPickTeam}
           onSignOut={onSignOut}
         />
@@ -1256,7 +1281,7 @@ function Sidebar({ persona, view, active, threads, coachTeam, teams, open, onTog
  */
 function SidebarRail({
   persona, view, coachTeam, deadlines, checkinDone, width, canAssist,
-  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onReflections, onAssistant, onPickTeam, onSignOut,
+  onExpand, onNew, onStartCheckin, onProgramme, onWishes, onBugs, onDeadlines, onLibrary, onReflections, onWorkingStyle, onAssistant, onPickTeam, onSignOut,
 }: {
   width: number;
   canAssist: boolean;
@@ -1276,6 +1301,7 @@ function SidebarRail({
   onWishes: () => void;
   onBugs: () => void;
   onReflections: () => void;
+  onWorkingStyle: () => void;
   onPickTeam: (team: Team | null) => void;
   onSignOut?: () => void;
 }) {
@@ -1308,11 +1334,12 @@ function SidebarRail({
         { key: "reflections", glyph: "◷", label: "Reflections", on: view === "reflections", run: onReflections },
       ]
     : [
-        { key: "cohort", glyph: "▦", label: "Cohort heatmap", on: view !== "programme" && view !== "assistant" && !coachTeam, run: () => onPickTeam(null) },
+        { key: "cohort", glyph: "▦", label: "Cohort heatmap", on: view !== "programme" && view !== "assistant" && view !== "working-style" && !coachTeam, run: () => onPickTeam(null) },
         { key: "programme", glyph: "▤", label: "Programme", on: view === "programme", run: onProgramme },
         ...(canAssist
           ? [{ key: "assistant", glyph: "✳", label: "Assistant", on: view === "assistant", run: onAssistant }]
           : []),
+        { key: "working-style", glyph: "◈", label: "Working style", on: view === "working-style", run: onWorkingStyle },
       ];
 
   return (
@@ -2203,65 +2230,62 @@ function EmptyState({ firstRun }: { firstRun: boolean }) {
 const WG_PAGE_SIZE = 6;
 const WG_PAGES = Math.ceil(WORKING_GENIUS_ITEMS.length / WG_PAGE_SIZE);
 
-/* ---------------- Reflections page ---------------- */
-function Reflections({
-  threads,
-  decisions,
-  setDecisions,
-  checkins,
-  themes,
-  visits,
+
+/**
+ * The working-style assessment, and whatever it has produced.
+ *
+ * Lifted out of Reflections so that it has two homes rather than one. Founders
+ * meet it at the bottom of their own page, where it sits among their
+ * check-ins and decisions. Staff meet it on its own: an organizer or mentor
+ * has no Reflections page — the coach view holds the cohort, not a person —
+ * and until this they could not take the assessment at all without being given
+ * a second, founder-role account, which would have put them in the cohort heat
+ * map and the team map and sent them founder reminders.
+ *
+ * Their results stay out of both maps without anything here doing the work:
+ * listSharedWorkingGenius is founders-only at the query. A staff take is for
+ * the person who took it and for whoever they choose to show it to.
+ */
+function WorkingStyle({
   userEmail,
-  takes,
   initialWorkingGenius,
-  onOpenThread,
+  takes: initialTakes,
+  standalone,
+  onResult,
 }: {
-  threads: Thread[];
-  decisions: Decision[];
-  setDecisions: React.Dispatch<React.SetStateAction<Decision[]>>;
-  checkins: Checkin[];
-  themes: ThemeArc[];
-  visits: number;
-  /** Absent only before sign-in completes; every use below is guarded. */
   userEmail?: string;
-  takes?: Array<{ takenOn: string; result: WorkingGeniusResult }>;
-  /** Opens the conversation a decision came out of. */
-  onOpenThread?: (threadId: string) => void;
   initialWorkingGenius?: {
     primary: string;
     counts: Record<string, number>;
     completedAt: string;
     result?: WorkingGeniusResult;
   };
+  takes?: Array<{ takenOn: string; result: WorkingGeniusResult }>;
+  /** On its own page rather than at the foot of Reflections. */
+  standalone?: boolean;
+  onResult?: (result: WorkingGeniusResult | null) => void;
 }) {
-  const openCount = decisions.filter((d) => d.status === "open").length;
-  const nextOpenDecision = decisions.find((d) => d.status === "open") || null;
-  const latestCheckin = checkins[0] || null;
-  const latestCheckinParts = latestCheckin ? splitCheckinPrompt(latestCheckin.prompt) : null;
-  /* The oldest dated check-in. Was computed inside the printable record; the
-     counts it belongs with now sit at the top of the page. */
-  const startedOn = useMemo(() => {
-    const dated = checkins.filter((c) => c.createdAt).map((c) => asDate(c.createdAt!));
-    const first = dated.length ? dated[dated.length - 1]! : null;
-    return first ? first.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
-  }, [checkins]);
+  const [fetched, setFetched] = useState<{
+    profile?: { primary: string; counts: Record<string, number>; completedAt: string; result?: WorkingGeniusResult };
+    takes: Array<{ takenOn: string; result: WorkingGeniusResult }>;
+  } | null>(null);
 
-  /* Open first. The page used to carry a separate "open loop to close next"
-     row naming the first one; putting them at the top of the list says the
-     same thing without a second copy of the decision. */
-  const orderedDecisions = useMemo(
-    () => [...decisions].sort((a, b) => Number(a.status === "closed") - Number(b.status === "closed")),
-    [decisions],
-  );
-  const topTheme = useMemo(() => {
-    const m: Record<string, number> = {};
-    threads.forEach((t) => { m[t.theme] = (m[t.theme] || 0) + 1; });
-    /* null, not a dash. The sentence that uses this drops the clause when
-       there is no theme; a placeholder glyph in the middle of a sentence read
-       as "Most of it circled —." on every account that had check-ins but no
-       titled conversations, which is every account in week one. */
-    return Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  }, [threads]);
+  /* Only when nobody handed us one: Reflections already has it, and a second
+     request for a profile the page is holding is a wasted round trip. */
+  useEffect(() => {
+    if (!standalone || !userEmail) return;
+    let live = true;
+    loadWorkingGenius(userEmail)
+      .then((data) => {
+        if (!live) return;
+        setFetched({ profile: data.workingGenius ?? undefined, takes: data.takes ?? [] });
+      })
+      .catch(() => { if (live) setFetched({ takes: [] }); });
+    return () => { live = false; };
+  }, [standalone, userEmail]);
+
+  const known = initialWorkingGenius ?? fetched?.profile;
+  const takes = initialTakes ?? fetched?.takes ?? [];
 
   /*
    * Three states: not started, mid-assessment, and scored. The scored result
@@ -2273,10 +2297,10 @@ function Reflections({
    * bands the six items could not support.
    */
   const [wgResult, setWgResult] = useState<WorkingGeniusResult | null>(
-    initialWorkingGenius?.result ?? null,
+    known?.result ?? null,
   );
   const [wgLegacy, setWgLegacy] = useState<boolean>(
-    Boolean(initialWorkingGenius && !initialWorkingGenius.result),
+    Boolean(known && !known.result),
   );
   /*
    * Retakes are pinned to three dates the whole cohort shares. The instrument
@@ -2285,11 +2309,11 @@ function Reflections({
    * server too; this only decides what the card says.
    */
   const today = helsinkiDay(new Date());
-  const lastTakenOn = wgResult?.completedAt ?? initialWorkingGenius?.completedAt ?? null;
+  const lastTakenOn = wgResult?.completedAt ?? known?.completedAt ?? null;
   /* A profile from an earlier instrument is not a retake: those answers asked
      different questions, so the window that spaces retakes apart has nothing to
      protect. Enforced on the server too; this only decides what the card says. */
-  const lastVersion = wgResult?.version ?? initialWorkingGenius?.result?.version ?? null;
+  const lastVersion = wgResult?.version ?? known?.result?.version ?? null;
   const canRetake = lastVersion !== INSTRUMENT_VERSION || retakeOpen(lastTakenOn, today);
   const nextWindow = nextRetakeDate(lastTakenOn);
 
@@ -2324,6 +2348,7 @@ function Reflections({
     try {
       const result = await saveWorkingGenius(userEmail, answers);
       setWgResult(result);
+      onResult?.(result);
       setWgLegacy(false);
       setWgStarted(false);
     } catch (error) {
@@ -2389,6 +2414,314 @@ function Reflections({
     setWgError(null);
     setWgStarted(true);
   };
+
+  return (
+    <div
+      style={{
+        marginTop: 48,
+        padding: "26px 24px",
+        borderRadius: 18,
+        background: "linear-gradient(140deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01))",
+        border: `1px solid ${C.line}`,
+        boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
+      }}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <p style={{ ...kicker, marginBottom: 6 }}>Working style</p>
+          <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", color: C.ink }}>
+            {wgResult ? "Where your energy goes" : "Find where your energy goes"}
+          </h2>
+        </div>
+        {wgResult ? (
+          workingGeniusLocked() ? (
+            /* Before anything else, including the retake window. Somebody
+               holding a result from the earlier six-question version is
+               inside a retake window right now, and the honest answer to
+               "when can I do this" is the hold, not the window after it. */
+            <span style={{ fontSize: 12.5, color: C.faint, textAlign: "right", lineHeight: 1.45 }}>
+              Opens {workingGeniusOpensLabel()}
+            </span>
+          ) : canRetake ? (
+            <button
+              type="button"
+              onClick={askWorkingGenius}
+              style={{
+                background: "none", border: `1px solid ${C.accent}`, borderRadius: 999,
+                padding: "7px 15px", color: C.accent, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              Retake it now
+            </button>
+          ) : nextWindow ? (
+            <span
+              title="Locked until the next window so the retake measures you, not the week you have just had"
+              style={{ fontSize: 12.5, color: C.faint, textAlign: "right", lineHeight: 1.45 }}
+            >
+              Next on {readableWindow(nextWindow)}
+              <br />
+              <span style={{ color: C.sub }}>
+                {daysUntil(nextWindow, today)} {daysUntil(nextWindow, today) === 1 ? "day" : "days"}
+              </span>
+            </span>
+          ) : (
+            <span style={{ fontSize: 12.5, color: C.faint }}>Last one taken</span>
+          )
+        ) : (
+          /* Not the opening date, even while it is held. The block below
+             carries that, with the reason for it, and a card that states the
+             same date twice about eight lines apart reads as a mistake. This
+             slot describes the thing itself, which is true either way. */
+          <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
+            Forty-two statements, never to constantly. About nine minutes.
+          </span>
+        )}
+      </div>
+
+      {wgClosed && (
+        <p style={{ margin: "14px 0 0", fontSize: 13.5, color: C.yellow, lineHeight: 1.6 }}>
+          {wgClosed} Your answers were not saved.
+        </p>
+      )}
+
+      {(!wgStarted || wgResult) && <WgPrivateNote />}
+      {wgConsenting && (
+        <WgConsent onAgree={startWorkingGenius} onCancel={() => setWgConsenting(false)} />
+      )}
+
+      {wgResult ? (
+        <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
+          {(["genius", "competency", "frustration"] as WorkingGeniusBand[]).map((band) => (
+            <WgBandCard key={band} band={band} ids={wgResult.bands[band]} />
+          ))}
+          <WgRanking result={wgResult} />
+          <WgCaveats result={wgResult} />
+          <WgDownload />
+          <WgHistory takes={takes ?? []} />
+        </div>
+      ) : wgStarted ? (
+        <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint }}>
+              {wgAnswered} of {WORKING_GENIUS_ITEMS.length}
+            </span>
+            {wgPage > 0 && (
+              <button
+                type="button"
+                onClick={backWorkingGeniusPage}
+                style={{ background: "none", border: "none", color: C.faint, fontSize: 12.5, cursor: "pointer", padding: 0 }}
+              >
+                ← Back
+              </button>
+            )}
+          </div>
+          <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <div style={{ width: `${(wgAnswered / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.accent, transition: "width 200ms ease" }} />
+          </div>
+
+          {wgPage === 0 && <p className="wg-preamble">{INSTRUMENT_PREAMBLE}</p>}
+
+          {/*
+            * The scale is named at the top of every page, not once at the
+            * start. Somebody on page five should not have to remember which
+            * end was never.
+            */}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, letterSpacing: 1.2, textTransform: "uppercase", color: C.faint }}>
+            <span>{WORKING_GENIUS_SCALE[0]?.label}</span>
+            <span>{WORKING_GENIUS_SCALE[WORKING_GENIUS_SCALE.length - 1]?.label}</span>
+          </div>
+
+          <div style={{ display: "grid", gap: 18 }}>
+            {wgPageItems.map((item) => {
+              /*
+               * The type each statement measures is deliberately not shown.
+               * The earlier quiz printed "WONDER" above each option, which
+               * told the founder exactly what their answer scored and turned
+               * the instrument into a self-portrait.
+               */
+              const chosen = wgAnswers[item.id];
+              return (
+                <div key={item.id} style={{ display: "grid", gap: 9, paddingBottom: 16, borderBottom: `1px solid ${C.line}` }}>
+                  <p id={`wg-${item.id}`} style={{ margin: 0, fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>
+                    {item.statement}
+                  </p>
+                  <div role="radiogroup" aria-labelledby={`wg-${item.id}`} style={{ display: "flex", gap: 8 }}>
+                    {WORKING_GENIUS_SCALE.map((point) => {
+                      const picked = chosen === point.value;
+                      return (
+                        <button
+                          key={point.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={picked}
+                          aria-label={point.label}
+                          title={point.label}
+                          disabled={wgSaving}
+                          onClick={() => rateWorkingGenius(item.id, point.value)}
+                          style={{
+                            flex: 1,
+                            minHeight: 44,
+                            borderRadius: 10,
+                            cursor: wgSaving ? "default" : "pointer",
+                            border: picked ? `1px solid ${C.accent}` : `1px solid ${C.line}`,
+                            background: picked ? C.accent : "rgba(255,255,255,0.03)",
+                            color: picked ? C.black : C.sub,
+                            fontSize: 11.5,
+                            fontWeight: picked ? 700 : 500,
+                            letterSpacing: 0.2,
+                            transition: "background 120ms ease, border-color 120ms ease",
+                          }}
+                        >
+                          {point.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <button
+              type="button"
+              className="btn-metal"
+              disabled={!wgPageDone || wgSaving}
+              onClick={nextWorkingGeniusPage}
+              style={{ padding: "11px 20px", fontSize: 14, fontWeight: 700, opacity: wgPageDone ? 1 : 0.45 }}
+            >
+              {wgLastPage ? "Finish" : "Next"}
+            </button>
+            {!wgPageDone && (
+              <span style={{ fontSize: 12.5, color: C.faint }}>
+                {wgPageItems.filter((item) => wgAnswers[item.id] === undefined).length} left on this page
+              </span>
+            )}
+          </div>
+
+          {wgSaving && (
+            <p style={{ margin: 0, fontSize: 13, color: C.faint }}>Scoring…</p>
+          )}
+          {wgError && (
+            <p style={{ margin: 0, fontSize: 13, color: C.red }}>
+              {wgError}{" "}
+              <button
+                type="button"
+                onClick={() => void submitWorkingGenius(wgAnswers)}
+                style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", padding: 0, fontSize: 13, textDecoration: "underline" }}
+              >
+                Try again
+              </button>
+            </p>
+          )}
+        </div>
+      ) : (
+        <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
+          <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.55, color: C.sub, fontFamily: "var(--font-serif)" }}>
+            Six kinds of work. Two you are gifted at <em>and</em> energised by, two you can do
+            without much cost, two that drain you whether or not you are good at them. The point
+            is not the label. It is knowing which two to stop volunteering for, and who on your
+            team should be doing them instead.
+          </p>
+          {wgLegacy && known && (
+            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: C.faint, padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.line}`, background: "rgba(0,0,0,0.2)" }}>
+              You took the earlier six-question version on {known.completedAt}, which
+              only ever named one type and could not compare all six. Retaking it gives you the
+              full ranking.
+            </p>
+          )}
+          <div>
+            {workingGeniusLocked() ? (
+              /* Not hidden. Somebody told this is part of the programme, who
+                 cannot find it, concludes it is broken — and the date is the
+                 answer to the question they would otherwise have to ask. */
+              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: C.faint }}>
+                Opens {workingGeniusOpensLabel()}, once the cohort has been
+                through what the six types are.
+              </p>
+            ) : (
+              <button
+                type="button"
+                className="btn-metal"
+                onClick={askWorkingGenius}
+                disabled={!userEmail}
+                style={{ padding: "12px 22px", fontSize: 14.5, fontWeight: 700 }}
+              >
+                {wgLegacy ? "Retake it properly" : "Start"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Reflections page ---------------- */
+function Reflections({
+  threads,
+  decisions,
+  setDecisions,
+  checkins,
+  themes,
+  visits,
+  userEmail,
+  takes,
+  initialWorkingGenius,
+  onOpenThread,
+}: {
+  threads: Thread[];
+  decisions: Decision[];
+  setDecisions: React.Dispatch<React.SetStateAction<Decision[]>>;
+  checkins: Checkin[];
+  themes: ThemeArc[];
+  visits: number;
+  /** Absent only before sign-in completes; every use below is guarded. */
+  userEmail?: string;
+  takes?: Array<{ takenOn: string; result: WorkingGeniusResult }>;
+  /** Opens the conversation a decision came out of. */
+  onOpenThread?: (threadId: string) => void;
+  initialWorkingGenius?: {
+    primary: string;
+    counts: Record<string, number>;
+    completedAt: string;
+    result?: WorkingGeniusResult;
+  };
+}) {
+  const openCount = decisions.filter((d) => d.status === "open").length;
+  const nextOpenDecision = decisions.find((d) => d.status === "open") || null;
+  const latestCheckin = checkins[0] || null;
+  const latestCheckinParts = latestCheckin ? splitCheckinPrompt(latestCheckin.prompt) : null;
+  /* The oldest dated check-in. Was computed inside the printable record; the
+     counts it belongs with now sit at the top of the page. */
+  const startedOn = useMemo(() => {
+    const dated = checkins.filter((c) => c.createdAt).map((c) => asDate(c.createdAt!));
+    const first = dated.length ? dated[dated.length - 1]! : null;
+    return first ? first.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  }, [checkins]);
+
+  /* Open first. The page used to carry a separate "open loop to close next"
+     row naming the first one; putting them at the top of the list says the
+     same thing without a second copy of the decision. */
+  const orderedDecisions = useMemo(
+    () => [...decisions].sort((a, b) => Number(a.status === "closed") - Number(b.status === "closed")),
+    [decisions],
+  );
+  const topTheme = useMemo(() => {
+    const m: Record<string, number> = {};
+    threads.forEach((t) => { m[t.theme] = (m[t.theme] || 0) + 1; });
+    /* null, not a dash. The sentence that uses this drops the clause when
+       there is no theme; a placeholder glyph in the middle of a sentence read
+       as "Most of it circled —." on every account that had check-ins but no
+       titled conversations, which is every account in week one. */
+    return Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }, [threads]);
+
+  /* The card owns the assessment; the printable record only needs whatever it
+     ended up with. */
+  const [recordResult, setRecordResult] = useState<WorkingGeniusResult | null>(
+    initialWorkingGenius?.result ?? null,
+  );
 
   const closeDecision = (decision: Decision) => {
     const outcome = window.prompt("What happened? Keep it short.", decision.outcome || "");
@@ -2486,251 +2819,19 @@ function Reflections({
         </ol>
       )}
 
-      <div
-        style={{
-          marginTop: 48,
-          padding: "26px 24px",
-          borderRadius: 18,
-          background: "linear-gradient(140deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01))",
-          border: `1px solid ${C.line}`,
-          boxShadow: "0 18px 40px rgba(0,0,0,0.22)",
-        }}
-      >
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <p style={{ ...kicker, marginBottom: 6 }}>Working style</p>
-            <h2 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", color: C.ink }}>
-              {wgResult ? "Where your energy goes" : "Find where your energy goes"}
-            </h2>
-          </div>
-          {wgResult ? (
-            workingGeniusLocked() ? (
-              /* Before anything else, including the retake window. Somebody
-                 holding a result from the earlier six-question version is
-                 inside a retake window right now, and the honest answer to
-                 "when can I do this" is the hold, not the window after it. */
-              <span style={{ fontSize: 12.5, color: C.faint, textAlign: "right", lineHeight: 1.45 }}>
-                Opens {workingGeniusOpensLabel()}
-              </span>
-            ) : canRetake ? (
-              <button
-                type="button"
-                onClick={askWorkingGenius}
-                style={{
-                  background: "none", border: `1px solid ${C.accent}`, borderRadius: 999,
-                  padding: "7px 15px", color: C.accent, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                }}
-              >
-                Retake it now
-              </button>
-            ) : nextWindow ? (
-              <span
-                title="Locked until the next window so the retake measures you, not the week you have just had"
-                style={{ fontSize: 12.5, color: C.faint, textAlign: "right", lineHeight: 1.45 }}
-              >
-                Next on {readableWindow(nextWindow)}
-                <br />
-                <span style={{ color: C.sub }}>
-                  {daysUntil(nextWindow, today)} {daysUntil(nextWindow, today) === 1 ? "day" : "days"}
-                </span>
-              </span>
-            ) : (
-              <span style={{ fontSize: 12.5, color: C.faint }}>Last one taken</span>
-            )
-          ) : (
-            /* Not the opening date, even while it is held. The block below
-               carries that, with the reason for it, and a card that states the
-               same date twice about eight lines apart reads as a mistake. This
-               slot describes the thing itself, which is true either way. */
-            <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-              Forty-two statements, never to constantly. About nine minutes.
-            </span>
-          )}
-        </div>
-
-        {wgClosed && (
-          <p style={{ margin: "14px 0 0", fontSize: 13.5, color: C.yellow, lineHeight: 1.6 }}>
-            {wgClosed} Your answers were not saved.
-          </p>
-        )}
-
-        {(!wgStarted || wgResult) && <WgPrivateNote />}
-        {wgConsenting && (
-          <WgConsent onAgree={startWorkingGenius} onCancel={() => setWgConsenting(false)} />
-        )}
-
-        {wgResult ? (
-          <div style={{ marginTop: 20, display: "grid", gap: 14 }}>
-            {(["genius", "competency", "frustration"] as WorkingGeniusBand[]).map((band) => (
-              <WgBandCard key={band} band={band} ids={wgResult.bands[band]} />
-            ))}
-            <WgRanking result={wgResult} />
-            <WgCaveats result={wgResult} />
-            <WgDownload />
-            <WgHistory takes={takes ?? []} />
-          </div>
-        ) : wgStarted ? (
-          <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint }}>
-                {wgAnswered} of {WORKING_GENIUS_ITEMS.length}
-              </span>
-              {wgPage > 0 && (
-                <button
-                  type="button"
-                  onClick={backWorkingGeniusPage}
-                  style={{ background: "none", border: "none", color: C.faint, fontSize: 12.5, cursor: "pointer", padding: 0 }}
-                >
-                  ← Back
-                </button>
-              )}
-            </div>
-            <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-              <div style={{ width: `${(wgAnswered / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.accent, transition: "width 200ms ease" }} />
-            </div>
-
-            {wgPage === 0 && <p className="wg-preamble">{INSTRUMENT_PREAMBLE}</p>}
-
-            {/*
-              * The scale is named at the top of every page, not once at the
-              * start. Somebody on page five should not have to remember which
-              * end was never.
-              */}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, letterSpacing: 1.2, textTransform: "uppercase", color: C.faint }}>
-              <span>{WORKING_GENIUS_SCALE[0]?.label}</span>
-              <span>{WORKING_GENIUS_SCALE[WORKING_GENIUS_SCALE.length - 1]?.label}</span>
-            </div>
-
-            <div style={{ display: "grid", gap: 18 }}>
-              {wgPageItems.map((item) => {
-                /*
-                 * The type each statement measures is deliberately not shown.
-                 * The earlier quiz printed "WONDER" above each option, which
-                 * told the founder exactly what their answer scored and turned
-                 * the instrument into a self-portrait.
-                 */
-                const chosen = wgAnswers[item.id];
-                return (
-                  <div key={item.id} style={{ display: "grid", gap: 9, paddingBottom: 16, borderBottom: `1px solid ${C.line}` }}>
-                    <p id={`wg-${item.id}`} style={{ margin: 0, fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>
-                      {item.statement}
-                    </p>
-                    <div role="radiogroup" aria-labelledby={`wg-${item.id}`} style={{ display: "flex", gap: 8 }}>
-                      {WORKING_GENIUS_SCALE.map((point) => {
-                        const picked = chosen === point.value;
-                        return (
-                          <button
-                            key={point.value}
-                            type="button"
-                            role="radio"
-                            aria-checked={picked}
-                            aria-label={point.label}
-                            title={point.label}
-                            disabled={wgSaving}
-                            onClick={() => rateWorkingGenius(item.id, point.value)}
-                            style={{
-                              flex: 1,
-                              minHeight: 44,
-                              borderRadius: 10,
-                              cursor: wgSaving ? "default" : "pointer",
-                              border: picked ? `1px solid ${C.accent}` : `1px solid ${C.line}`,
-                              background: picked ? C.accent : "rgba(255,255,255,0.03)",
-                              color: picked ? C.black : C.sub,
-                              fontSize: 11.5,
-                              fontWeight: picked ? 700 : 500,
-                              letterSpacing: 0.2,
-                              transition: "background 120ms ease, border-color 120ms ease",
-                            }}
-                          >
-                            {point.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <button
-                type="button"
-                className="btn-metal"
-                disabled={!wgPageDone || wgSaving}
-                onClick={nextWorkingGeniusPage}
-                style={{ padding: "11px 20px", fontSize: 14, fontWeight: 700, opacity: wgPageDone ? 1 : 0.45 }}
-              >
-                {wgLastPage ? "Finish" : "Next"}
-              </button>
-              {!wgPageDone && (
-                <span style={{ fontSize: 12.5, color: C.faint }}>
-                  {wgPageItems.filter((item) => wgAnswers[item.id] === undefined).length} left on this page
-                </span>
-              )}
-            </div>
-
-            {wgSaving && (
-              <p style={{ margin: 0, fontSize: 13, color: C.faint }}>Scoring…</p>
-            )}
-            {wgError && (
-              <p style={{ margin: 0, fontSize: 13, color: C.red }}>
-                {wgError}{" "}
-                <button
-                  type="button"
-                  onClick={() => void submitWorkingGenius(wgAnswers)}
-                  style={{ background: "none", border: "none", color: C.accent, cursor: "pointer", padding: 0, fontSize: 13, textDecoration: "underline" }}
-                >
-                  Try again
-                </button>
-              </p>
-            )}
-          </div>
-        ) : (
-          <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
-            <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.55, color: C.sub, fontFamily: "var(--font-serif)" }}>
-              Six kinds of work. Two you are gifted at <em>and</em> energised by, two you can do
-              without much cost, two that drain you whether or not you are good at them. The point
-              is not the label. It is knowing which two to stop volunteering for, and who on your
-              team should be doing them instead.
-            </p>
-            {wgLegacy && initialWorkingGenius && (
-              <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: C.faint, padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.line}`, background: "rgba(0,0,0,0.2)" }}>
-                You took the earlier six-question version on {initialWorkingGenius.completedAt}, which
-                only ever named one type and could not compare all six. Retaking it gives you the
-                full ranking.
-              </p>
-            )}
-            <div>
-              {workingGeniusLocked() ? (
-                /* Not hidden. Somebody told this is part of the programme, who
-                   cannot find it, concludes it is broken — and the date is the
-                   answer to the question they would otherwise have to ask. */
-                <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: C.faint }}>
-                  Opens {workingGeniusOpensLabel()}, once the cohort has been
-                  through what the six types are.
-                </p>
-              ) : (
-                <button
-                  type="button"
-                  className="btn-metal"
-                  onClick={askWorkingGenius}
-                  disabled={!userEmail}
-                  style={{ padding: "12px 22px", fontSize: 14.5, fontWeight: 700 }}
-                >
-                  {wgLegacy ? "Retake it properly" : "Start"}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      <WorkingStyle
+        userEmail={userEmail}
+        initialWorkingGenius={initialWorkingGenius}
+        takes={takes}
+        onResult={setRecordResult}
+      />
 
       <SprintRecord
         threads={threads}
         decisions={decisions}
         checkins={checkins}
         themes={themes}
-        result={wgResult}
+        result={recordResult}
       />
 
       <p style={{ marginTop: 44, paddingTop: 22, borderTop: `1px solid ${C.line}`, color: C.faint, fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 14, lineHeight: 1.5 }}>

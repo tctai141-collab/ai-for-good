@@ -115,6 +115,45 @@ async function get(params: Record<string, string>) {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
+type WorkingGeniusRow = {
+  primary_type: string;
+  counts_json: string;
+  completed_at: string;
+  result_json?: string | null;
+};
+
+/*
+ * Guarded, and deliberately so: a row this client cannot parse is not worth
+ * failing over. loadUserData is awaited inside a try in App.enter, so a throw
+ * does not surface — the founder simply signs in with no threads, no check-ins
+ * and no history, and nothing says why. One malformed column, and their whole
+ * record looks deleted.
+ */
+function normaliseWorkingGenius(row: WorkingGeniusRow) {
+  try {
+    return {
+      primary: row.primary_type,
+      counts: JSON.parse(row.counts_json) as Record<string, number>,
+      completedAt: row.completed_at,
+      result: row.result_json ? (JSON.parse(row.result_json) as WorkingGeniusResult) : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Same guard, one take at a time: a bad row costs the comparison one point. */
+function normaliseTake(raw: Record<string, unknown>): WorkingGeniusTake | null {
+  try {
+    return {
+      takenOn: String(raw.taken_on),
+      result: JSON.parse(String(raw.result_json)) as WorkingGeniusResult,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadUserData(userEmail: string): Promise<UserData> {
   const [tData, dData, cData, vData, wgData, thData] = await Promise.all([
     get({ resource: "threads", user: userEmail }),
@@ -186,43 +225,11 @@ export async function loadUserData(userEmail: string): Promise<UserData> {
     themes: (thData.themes as ThemeArc[]) || [],
     week: (thData.week as number) || 1,
     visits: (vData.visits as number) || 0,
-    workingGeniusTakes: ((wgData.takes as Array<{ taken_on: string; result_json: string }> | undefined) ?? [])
-      .flatMap((t) => {
-        try {
-          return [{ takenOn: t.taken_on, result: JSON.parse(t.result_json) as WorkingGeniusResult }];
-        } catch {
-          // A row this client cannot parse is not worth failing the whole page
-          // over; the comparison simply has one fewer point.
-          return [];
-        }
-      }),
+    workingGeniusTakes: ((wgData.takes as Array<Record<string, unknown>> | undefined) ?? [])
+      .map(normaliseTake)
+      .filter((t): t is WorkingGeniusTake => t !== null),
     workingGenius: wgData.workingGenius
-      ? (() => {
-        const row = wgData.workingGenius as {
-          primary_type: string;
-          counts_json: string;
-          completed_at: string;
-          result_json?: string | null;
-        };
-        /* Guarded for the same reason the takes mapping above it is: a row
-           this client cannot parse is not worth failing over. The difference
-           is what failing costs here. loadUserData is awaited inside a try in
-           App.enter, so a throw does not surface — the founder simply signs in
-           with no threads, no check-ins and no history, and nothing says why.
-           One malformed column, and their whole record looks deleted. */
-        try {
-          return {
-            primary: row.primary_type,
-            counts: JSON.parse(row.counts_json),
-            completedAt: row.completed_at,
-            result: row.result_json
-              ? (JSON.parse(row.result_json) as WorkingGeniusResult)
-              : undefined,
-          };
-        } catch {
-          return undefined;
-        }
-      })()
+      ? normaliseWorkingGenius(wgData.workingGenius as WorkingGeniusRow)
       : undefined,
   };
 }
@@ -304,6 +311,26 @@ export async function bumpVisits(userEmail: string): Promise<number> {
  * scoring so that one item bank and one ranking implementation produce every
  * stored result, and returns what it computed.
  */
+/**
+ * One person's own working-style profile and their history of takes.
+ *
+ * Founders get this inside loadUserData with everything else. Staff have no
+ * such load — the coach view holds the cohort, not a person — so the card
+ * fetches its own when it is the only thing on screen.
+ */
+export async function loadWorkingGenius(userEmail: string): Promise<{
+  workingGenius: WorkingGenius | null;
+  takes: WorkingGeniusTake[];
+}> {
+  const data = await get({ resource: "working-genius", user: userEmail });
+  const row = (data.workingGenius ?? null) as WorkingGeniusRow | null;
+  const rawTakes = Array.isArray(data.takes) ? (data.takes as Array<Record<string, unknown>>) : [];
+  return {
+    workingGenius: row ? normaliseWorkingGenius(row) ?? null : null,
+    takes: rawTakes.map(normaliseTake).filter((t): t is WorkingGeniusTake => t !== null),
+  };
+}
+
 export async function saveWorkingGenius(
   userEmail: string,
   /* Item id to a point on the five-point scale. The server re-validates every
