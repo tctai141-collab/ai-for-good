@@ -11,6 +11,7 @@ import { LibraryPage, useLibrary, type LibraryState } from "./Library";
 import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, setThreadShared, deleteThread, PersistenceError } from "../lib/persistence";
 import {
   INSTRUMENT_PREAMBLE,
+  INSTRUMENT_VERSION,
   WORKING_GENIUS_ITEMS,
   WORKING_GENIUS_SCALE,
   WORKING_GENIUS_TYPES,
@@ -2285,7 +2286,11 @@ function Reflections({
    */
   const today = helsinkiDay(new Date());
   const lastTakenOn = wgResult?.completedAt ?? initialWorkingGenius?.completedAt ?? null;
-  const canRetake = retakeOpen(lastTakenOn, today);
+  /* A profile from an earlier instrument is not a retake: those answers asked
+     different questions, so the window that spaces retakes apart has nothing to
+     protect. Enforced on the server too; this only decides what the card says. */
+  const lastVersion = wgResult?.version ?? initialWorkingGenius?.result?.version ?? null;
+  const canRetake = lastVersion !== INSTRUMENT_VERSION || retakeOpen(lastTakenOn, today);
   const nextWindow = nextRetakeDate(lastTakenOn);
 
   const [wgStarted, setWgStarted] = useState(false);
