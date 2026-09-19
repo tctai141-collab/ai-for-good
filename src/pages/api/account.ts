@@ -13,6 +13,9 @@ import {
   getWorkingGenius,
   listWorkingGeniusTakes,
   recordAdminAction,
+  bugReportsFrom,
+  chatUsageFor,
+  listWishesFrom,
 } from "../../db/index";
 import { endSession, getSessionUser } from "../../lib/auth";
 import { reportError } from "../../lib/errors";
@@ -81,6 +84,15 @@ export const GET: APIRoute = async ({ cookies }) => {
          data about you. Returned loans are included; the history is the point. */
       booksBorrowed: getBookLoans(session.email),
       timesOpened: getVisits(session.email),
+      /*
+       * Three tables that were missing, found by comparing every table that
+       * holds a person against this list. What you asked the programme for,
+       * what you reported as broken, and how much you used the advisor each
+       * day, which is counts, never text.
+       */
+      wishes: listWishesFrom(session.email),
+      bugReports: bugReportsFrom(session.email),
+      advisorUsage: chatUsageFor(session.email),
       note:
         "Conversations you deleted are not here. Encrypted backups may still " +
         "contain them for up to 30 days before rotating out.",
