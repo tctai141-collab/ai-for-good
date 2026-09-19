@@ -78,12 +78,16 @@ describe("payload shapes", () => {
      * history, and nothing says why. The takes mapping directly above already
      * guarded exactly this; this block did not.
      */
+    /* The mapping is shared now — the page load and the staff card that
+       fetches its own profile both go through it — so the guard is asserted
+       where it lives rather than at one of its call sites. */
     const block = persistence.slice(
-      persistence.indexOf("primary: row.primary_type"),
+      persistence.indexOf("function normaliseWorkingGenius"),
     ).slice(0, 700);
     expect(block).toContain("catch");
     // Both parses have to be inside the guard, not just one.
     expect(block.indexOf("JSON.parse(row.counts_json)")).toBeGreaterThan(-1);
+    expect(block.indexOf("JSON.parse(row.result_json)")).toBeGreaterThan(-1);
     expect(block.indexOf("try {")).toBeLessThan(block.indexOf("JSON.parse(row.counts_json)"));
   });
 
