@@ -713,6 +713,43 @@ import AaltoMark from "../components/AaltoMark.astro";
         padding: 4px 8px;
       }
       .expanded { padding: 0 0 12px 26px; }
+
+      /* ── Folds ──
+         One way to put away what is not needed on every visit: add forms, the
+         explanation of how a tab works, and finished items. A native <details>,
+         so it opens from the keyboard and works before any script has run; the
+         page only remembers which ones were left open. Tabs ran to three screens
+         with everything expanded, most of it read once. */
+      details.fold { border-top: 1px solid var(--border); margin-top: 14px; }
+      details.fold > summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+        padding: 6px 0;
+        font-size: 0.875rem;
+        font-weight: 600;
+      }
+      details.fold > summary::-webkit-details-marker { display: none; }
+      details.fold > summary::before {
+        content: "\25b8";
+        color: var(--muted);
+        width: 12px;
+        flex: none;
+        transition: transform 0.15s ease;
+      }
+      details.fold[open] > summary::before { transform: rotate(90deg); }
+      details.fold > summary:hover { color: var(--accent); }
+      details.fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+      details.fold .fold-meta { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 0.8125rem; }
+      details.fold > .fold-body { padding: 2px 0 14px; }
+      details.fold > .fold-body > .note:first-child { margin-top: 0; }
+      /* The explanation of how a tab works: present, quieter than an action. */
+      details.fold.fold-quiet { border-top: 0; margin-top: 0; margin-bottom: 10px; }
+      details.fold.fold-quiet > summary { min-height: 32px; font-weight: 500; font-size: 0.8125rem; color: var(--muted); }
+      details.fold.fold-quiet > summary:hover { color: var(--accent); }
       .expanded textarea, .expanded input { width: 100%; }
       .flagged { color: #f7768e; font-size: 0.75rem; margin: 4px 0 0 26px; }
 
@@ -1099,23 +1136,31 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-people" hidden>
         <section class="panel">
           <h2>Advisor usage today</h2>
-          <p class="note" style="margin-top:0">
-            Every message to Sprint Buddy is a paid API call. Founders get
-            40 conversation calls and 15 check-in calls a day, on separate
-            allowances so a busy day of chat cannot cost somebody their
-            check-in; staff get 200. Somebody at their limit is either getting
-            a lot out of it or using it for something it is not for — this
-            shows which people to ask. Counts only, never what was written.
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>Member</th><th>Conversation</th><th>Check-in</th><th>Tokens</th>
-              </tr>
-            </thead>
-            <tbody id="usage-rows"></tbody>
-          </table>
-          <p class="note" id="usage-empty" hidden>Nobody has used the advisor yet today.</p>
+          <!-- The one line worth reading every day. The table behind it is
+               nineteen rows that only matter when somebody is at a limit. -->
+          <p class="note" id="usage-summary" style="margin-top:0">Loading…</p>
+          <details class="fold" data-fold="people-usage">
+            <summary>Everyone's usage today</summary>
+            <div class="fold-body">
+              <p class="note">
+                Every message to Sprint Buddy is a paid API call. Founders get
+                40 conversation calls and 15 check-in calls a day, on separate
+                allowances so a busy day of chat cannot cost somebody their
+                check-in; staff get 200. Somebody at their limit is either getting
+                a lot out of it or using it for something it is not for — this
+                shows which people to ask. Counts only, never what was written.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Member</th><th>Conversation</th><th>Check-in</th><th>Tokens</th>
+                  </tr>
+                </thead>
+                <tbody id="usage-rows"></tbody>
+              </table>
+              <p class="note" id="usage-empty" hidden>Nobody has used the advisor yet today.</p>
+            </div>
+          </details>
         </section>
 
         <section class="panel">
@@ -1130,8 +1175,13 @@ import AaltoMark from "../components/AaltoMark.astro";
           </table>
         </section>
 
+        <!-- Adding people, once: the two ways in are folds under one heading
+             rather than two panels that stay open for the rest of the sprint. -->
         <section class="panel">
-          <h2>Add one person</h2>
+          <h2>Add people</h2>
+          <details class="fold" data-fold="people-add-one">
+          <summary>Add one person</summary>
+          <div class="fold-body">
           <form id="add-one" class="row">
             <label>
               <span class="label-text">Full name</span>
@@ -1155,13 +1205,15 @@ import AaltoMark from "../components/AaltoMark.astro";
             <button type="submit">Add and create link</button>
           </form>
           <p class="message" id="add-message" hidden></p>
-        </section>
+          </div>
+          </details>
 
-        <section class="panel">
-          <h2>Add the whole cohort</h2>
-          <p class="note" style="margin-top:0">
+          <details class="fold" data-fold="people-add-bulk">
+          <summary>Add the whole cohort <span class="fold-meta">one line each</span></summary>
+          <div class="fold-body">
+          <p class="note">
             One person per line, as <strong>Name, email</strong>. Everyone added here is a
-            founder. Add the operating team individually above.
+            founder. Add the operating team one at a time above.
           </p>
           <form id="add-bulk">
             <textarea
@@ -1171,17 +1223,24 @@ import AaltoMark from "../components/AaltoMark.astro";
             <div style="margin-top:12px"><button type="submit">Add everyone</button></div>
           </form>
           <p class="message" id="bulk-message" hidden></p>
+          </div>
+          </details>
         </section>
 
         <section class="panel" id="links-panel" hidden>
           <h2>Setup links sent</h2>
-          <p class="note" style="margin-top:0">
-            Each link is emailed straight to that person's own address. You never see it,
-            and neither does anyone else on the team. A setup link is as good as a
-            password, so whoever holds it can claim the account. Each works once and
-            expires after 14 days. If someone says it never arrived, use
-            <strong>Resend link</strong> on their row.
-          </p>
+          <details class="fold fold-quiet" data-fold="people-links-about">
+            <summary>About setup links</summary>
+            <div class="fold-body">
+              <p class="note">
+                Each link is emailed straight to that person's own address. You never see it,
+                and neither does anyone else on the team. A setup link is as good as a
+                password, so whoever holds it can claim the account. Each works once and
+                expires after 14 days. If someone says it never arrived, use
+                <strong>Resend link</strong> on their row.
+              </p>
+            </div>
+          </details>
           <div class="links" id="links"></div>
         </section>
         </div>
@@ -1189,20 +1248,29 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-deadlines" hidden>
         <section class="panel">
           <h2>Deadlines</h2>
-          <p class="note" style="margin-top:0">
-            Cohort-wide milestones. Everyone sees the same list, and each founder ticks
-            off their own. Archive something that happened and is over: it hides the
-            row from founders and keeps who finished it. Delete is for a deadline set
-            up wrong, and takes the completions with it
-            and keeps the completion history.
-          </p>
-          <p class="note" style="margin-top:0">
-            Founders who have not ticked it off are emailed three days before, two days
-            before, ten hours before, and once the morning after. Ticking it off stops
-            all of them. Leave the time empty for end of day; it only changes when the
-            ten-hour email lands.
-          </p>
+          <details class="fold fold-quiet" data-fold="deadlines-about">
+            <summary>How deadlines work</summary>
+            <div class="fold-body">
+              <!-- The old wording said delete "takes the completions with it and
+                   keeps the completion history", which is both. It takes them. -->
+              <p class="note">
+                Cohort-wide milestones. Everyone sees the same list, and each founder ticks
+                off their own. Archive something that happened and is over: it hides the
+                row from founders and keeps who finished it. Delete is for a deadline set
+                up wrong, and takes its completions with it.
+              </p>
+              <p class="note">
+                Founders who have not ticked it off are emailed three days before, two days
+                before, ten hours before, and once the morning after. Ticking it off stops
+                all of them. Leave the time empty for end of day; it only changes when the
+                ten-hour email lands.
+              </p>
+            </div>
+          </details>
 
+          <details class="fold" data-fold="deadlines-add">
+          <summary>Add a deadline</summary>
+          <div class="fold-body">
           <!-- Home for the form. It moves into a row while that deadline is
                being edited, the same way the dates and week-theme forms do. -->
           <div id="dl-form-home">
@@ -1253,6 +1321,8 @@ import AaltoMark from "../components/AaltoMark.astro";
             <button type="button" id="dl-cancel" class="secondary" hidden>Cancel</button>
           </form>
           </div>
+          </div>
+          </details>
           <p class="message" id="dl-message" hidden></p>
 
           <div id="deadline-list"></div>
@@ -1262,23 +1332,31 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-programme" hidden>
         <section class="panel">
           <h2>Dates and times</h2>
-          <p class="note" style="margin-top:0">
-            Everything with a date on it: sessions, milestones, checkpoints, socials,
-            the trip. This is what the cohort sees under <strong>Programme</strong> in
-            their sidebar, as a timeline and as a calendar. Mentors and organizers see
-            the same view.
-          </p>
-          <p class="note" style="margin-top:0">
-            Times are the clock time in the room: the cohort's own wall clock, not
-            converted per person. Leave the time blank for something that takes a whole
-            day. The sprint week is worked out from the date, so moving the sprint start
-            moves everything with it.
-          </p>
+          <details class="fold fold-quiet" data-fold="programme-about">
+            <summary>How dates and times work</summary>
+            <div class="fold-body">
+              <p class="note">
+                Everything with a date on it: sessions, milestones, checkpoints, socials,
+                the trip. This is what the cohort sees under <strong>Programme</strong> in
+                their sidebar, as a timeline and as a calendar. Mentors and organizers see
+                the same view.
+              </p>
+              <p class="note">
+                Times are the clock time in the room: the cohort's own wall clock, not
+                converted per person. Leave the time blank for something that takes a whole
+                day. The sprint week is worked out from the date, so moving the sprint start
+                moves everything with it.
+              </p>
+            </div>
+          </details>
 
           <!-- The form lives here when it is adding something, and is moved
                bodily into a row when that row is being edited. It is one node,
                so moving it carries every value and listener with it; the
                alternative was a second copy of these eight fields. -->
+          <details class="fold" data-fold="programme-add">
+          <summary>Add to the programme</summary>
+          <div class="fold-body">
           <div id="ev-form-home">
           <form id="event-form" class="row">
             <input type="hidden" id="ev-id" />
@@ -1320,6 +1398,8 @@ import AaltoMark from "../components/AaltoMark.astro";
             <button type="button" id="ev-cancel" class="secondary" hidden>Cancel</button>
           </form>
           </div>
+          </div>
+          </details>
           <p class="message" id="ev-message" hidden></p>
 
           <div id="event-list"></div>
@@ -1333,16 +1413,24 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-weeks" hidden>
         <section class="panel">
           <h2>Week themes</h2>
-          <p class="note" style="margin-top:0">
-            The shape of a week rather than its diary: what the cohort is working on,
-            in prose. This is what Sprint Buddy is told about the current week, and it
-            is told plainly that it describes the cohort's schedule and not any
-            individual founder's company. Leave a week blank and it says nothing about
-            it at all, which is better than saying something stale.
-          </p>
+          <details class="fold fold-quiet" data-fold="weeks-about">
+            <summary>What a week theme is for</summary>
+            <div class="fold-body">
+              <p class="note">
+                The shape of a week rather than its diary: what the cohort is working on,
+                in prose. This is what Sprint Buddy is told about the current week, and it
+                is told plainly that it describes the cohort's schedule and not any
+                individual founder's company. Leave a week blank and it says nothing about
+                it at all, which is better than saying something stale.
+              </p>
+            </div>
+          </details>
 
           <!-- Same trick as the events form: one node, moved into whichever
                week is being edited. -->
+          <details class="fold" data-fold="weeks-add">
+          <summary>Write a week <span class="fold-meta">or press Edit on a week below</span></summary>
+          <div class="fold-body">
           <div id="pr-form-home">
           <form id="programme-form" class="row">
             <label>
@@ -1369,6 +1457,8 @@ import AaltoMark from "../components/AaltoMark.astro";
             <button type="button" id="pr-cancel" class="secondary" hidden>Cancel</button>
           </form>
           </div>
+          </div>
+          </details>
           <p class="message" id="pr-message" hidden></p>
 
           <div id="programme-list"></div>
@@ -1378,16 +1468,21 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-wishes" hidden>
           <section class="panel">
             <h2>What the cohort has asked for</h2>
-            <p class="note" style="margin-top:0">
-              Founders can send a wish to the organisers or to the mentors: a session
-              on a topic, an introduction, something about how the programme runs.
-              Whoever it was addressed to gets an email at the time.
-            </p>
-            <p class="note" style="margin-top:0">
-              Replying here emails the founder and shows the answer beside their
-              original question in the app. Answering is what marks it answered, so
-              there is no separate box to remember to tick.
-            </p>
+            <details class="fold fold-quiet" data-fold="wishes-about">
+              <summary>How wishes work</summary>
+              <div class="fold-body">
+                <p class="note">
+                  Founders can send a wish to the organisers or to the mentors: a session
+                  on a topic, an introduction, something about how the programme runs.
+                  Whoever it was addressed to gets an email at the time.
+                </p>
+                <p class="note">
+                  Replying here emails the founder and shows the answer beside their
+                  original question in the app. Answering is what marks it answered, so
+                  there is no separate box to remember to tick.
+                </p>
+              </div>
+            </details>
             <p class="message" id="wish-message" hidden></p>
             <div id="wish-list"></div>
           </section>
@@ -1396,25 +1491,35 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-bugs" hidden>
           <section class="panel">
             <h2>Reported bugs</h2>
-            <p class="note" style="margin-top:0">
-              Anyone signed in can report one — founders from <strong>Report a bug</strong>
-              in their sidebar, and you from the box below. Every report arrives with the
-              screen they were on and the browser they were using, which is usually the
-              difference between reproducing it and guessing.
-            </p>
-            <p class="note" style="margin-top:0">
-              The status is yours to move and is not shown to whoever reported it.
-              <strong>Need more info</strong> is a note to yourself: nothing reaches them,
-              so somebody has to go and ask.
-            </p>
+            <details class="fold fold-quiet" data-fold="bugs-about">
+              <summary>How bug reports work</summary>
+              <div class="fold-body">
+                <p class="note">
+                  Anyone signed in can report one — founders from <strong>Report a bug</strong>
+                  in their sidebar, and you from the box below. Every report arrives with the
+                  screen they were on and the browser they were using, which is usually the
+                  difference between reproducing it and guessing.
+                </p>
+                <p class="note">
+                  The status is yours to move and is not shown to whoever reported it.
+                  <strong>Need more info</strong> is a note to yourself: nothing reaches them,
+                  so somebody has to go and ask.
+                </p>
+              </div>
+            </details>
 
-            <form id="bug-form" class="row">
-              <label style="flex:1 1 100%">
-                <span class="label-text">Report one yourself</span>
-                <textarea id="bug-body" rows="3" maxlength="2000" placeholder="The week themes tab shows week 14, which no longer exists."></textarea>
-              </label>
-              <button type="submit">Report it</button>
-            </form>
+            <details class="fold" data-fold="bugs-report">
+              <summary>Report one yourself</summary>
+              <div class="fold-body">
+                <form id="bug-form" class="row">
+                  <label style="flex:1 1 100%">
+                    <span class="label-text">What went wrong</span>
+                    <textarea id="bug-body" rows="3" maxlength="2000" placeholder="The week themes tab shows week 14, which no longer exists."></textarea>
+                  </label>
+                  <button type="submit">Report it</button>
+                </form>
+              </div>
+            </details>
             <p class="message" id="bug-message" hidden></p>
 
             <div id="bug-list"></div>
@@ -1424,19 +1529,27 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-library" hidden>
         <section class="panel">
           <h2>Library</h2>
-          <p class="note" style="margin-top:0">
-            The books on the office shelf. One row per physical copy, so two copies of
-            the same title are two rows. Founders borrow and return them themselves
-            from their own Library tab; you only need to be here to put a book on the
-            shelf or to sort something out.
-          </p>
-          <p class="note" style="margin-top:0">
-            A loan runs four weeks. Whoever has it is emailed three days before it is
-            due and once the morning after, and returning it stops both. Archive a book
-            that has left the shelf for good; delete is for one added by mistake, and
-            takes its borrowing history with it.
-          </p>
+          <details class="fold fold-quiet" data-fold="library-about">
+            <summary>How the library works</summary>
+            <div class="fold-body">
+              <p class="note">
+                The books on the office shelf. One row per physical copy, so two copies of
+                the same title are two rows. Founders borrow and return them themselves
+                from their own Library tab; you only need to be here to put a book on the
+                shelf or to sort something out.
+              </p>
+              <p class="note">
+                A loan runs four weeks. Whoever has it is emailed three days before it is
+                due and once the morning after, and returning it stops both. Archive a book
+                that has left the shelf for good; delete is for one added by mistake, and
+                takes its borrowing history with it.
+              </p>
+            </div>
+          </details>
 
+          <details class="fold" data-fold="library-add">
+          <summary>Add a book <span class="fold-meta">or press Edit on one below</span></summary>
+          <div class="fold-body">
           <form id="add-book" class="row">
             <label>
               <span class="label-text">Title</span>
@@ -1454,6 +1567,8 @@ import AaltoMark from "../components/AaltoMark.astro";
             <button type="submit" id="bk-submit">Add book</button>
             <button type="button" id="bk-cancel" class="ghost" hidden>Cancel</button>
           </form>
+          </div>
+          </details>
           <p class="message" id="bk-message" hidden></p>
 
           <div id="library-list"></div>
@@ -1463,23 +1578,28 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-shared" hidden>
           <section class="panel">
             <h2>Shared with you</h2>
-            <p class="note" style="margin-top:0">
-              Conversations a founder chose to hand over. Nothing else is
-              readable: everything a founder has not shared stays private to
-              them, and unsharing takes it out of this list immediately.
-            </p>
-            <p class="note" style="margin-top:0">
-              Opening one tells the founder it was read, once. They are not
-              shown how often, and re-reading changes nothing. Sharing
-              something difficult and hearing nothing back is worse than not
-              sharing at all.
-            </p>
-            <p class="note" style="margin-top:0">
-              <strong>Archive</strong> shortens this list and keeps the conversation;
-              <strong>Remove</strong> takes it off the list for good. Neither touches
-              the founder&rsquo;s copy: the conversation, and their own record that
-              they shared it, stay theirs. Organisers only.
-            </p>
+            <details class="fold fold-quiet" data-fold="shared-about">
+              <summary>How sharing works</summary>
+              <div class="fold-body">
+                <p class="note">
+                  Conversations a founder chose to hand over. Nothing else is
+                  readable: everything a founder has not shared stays private to
+                  them, and unsharing takes it out of this list immediately.
+                </p>
+                <p class="note">
+                  Opening one tells the founder it was read, once. They are not
+                  shown how often, and re-reading changes nothing. Sharing
+                  something difficult and hearing nothing back is worse than not
+                  sharing at all.
+                </p>
+                <p class="note">
+                  <strong>Archive</strong> shortens this list and keeps the conversation;
+                  <strong>Remove</strong> takes it off the list for good. Neither touches
+                  the founder&rsquo;s copy: the conversation, and their own record that
+                  they shared it, stay theirs. Organisers only.
+                </p>
+              </div>
+            </details>
             <p class="message" id="shared-message" hidden></p>
             <div id="shared-list"></div>
           </section>
@@ -1492,12 +1612,17 @@ import AaltoMark from "../components/AaltoMark.astro";
               Everyone selected gets their own email, addressed to them. Nobody
               sees anybody else's address.
             </p>
-            <p class="note" style="margin-top:0">
-              Type <code>{"{{first_name}}"}</code> where you want their name. The
-              buttons below insert it for you. Available:
-              <code>{"{{first_name}}"}</code>, <code>{"{{name}}"}</code>,
-              <code>{"{{email}}"}</code>.
-            </p>
+            <details class="fold fold-quiet" data-fold="broadcast-tags">
+              <summary>Putting their name in the message</summary>
+              <div class="fold-body">
+                <p class="note">
+                  Type <code>{"{{first_name}}"}</code> where you want their name. The
+                  buttons below insert it for you. Available:
+                  <code>{"{{first_name}}"}</code>, <code>{"{{name}}"}</code>,
+                  <code>{"{{email}}"}</code>.
+                </p>
+              </div>
+            </details>
 
             <form id="bc-form" class="row">
               <label style="flex:1 1 100%">
@@ -1564,25 +1689,36 @@ import AaltoMark from "../components/AaltoMark.astro";
 
           <section class="panel">
             <h2>Already sent</h2>
-            <div id="bc-history"></div>
+            <details class="fold" data-fold="broadcast-history">
+              <summary>Messages sent so far</summary>
+              <div class="fold-body"><div id="bc-history"></div></div>
+            </details>
           </section>
         </div>
 
         <div class="tabpanel" id="tab-knowledge" hidden>
         <section class="panel">
           <h2>What Sprint Buddy knows</h2>
-          <p class="note" style="margin-top:0">
-            What the programme's mentors have said, one entry per topic. All of
-            it is sent with every message, so there is no search step to miss the
-            right passage. Order matters: it is the order they are read in.
-            Fill in the source: it is for your records and lets you archive a
-            whole session in one click. It is never sent to Sprint Buddy and
-            never shown to the cohort. What a mentor said in a closed room
-            becomes the programme's position, not a quote with their name on it.
-            Archive rather than delete so you can put something back.
-          </p>
           <p class="note" id="kb-size" style="margin-top:0"></p>
+          <details class="fold fold-quiet" data-fold="knowledge-about">
+            <summary>How the knowledge base works</summary>
+            <div class="fold-body">
+              <p class="note">
+                What the programme's mentors have said, one entry per topic. All of
+                it is sent with every message, so there is no search step to miss the
+                right passage. Order matters: it is the order they are read in.
+                Fill in the source: it is for your records and lets you archive a
+                whole session in one click. It is never sent to Sprint Buddy and
+                never shown to the cohort. What a mentor said in a closed room
+                becomes the programme's position, not a quote with their name on it.
+                Archive rather than delete so you can put something back.
+              </p>
+            </div>
+          </details>
 
+          <details class="fold" data-fold="knowledge-add">
+          <summary>Add an entry <span class="fold-meta">or press Edit on one below</span></summary>
+          <div class="fold-body">
           <form id="knowledge-form" class="row">
             <input type="hidden" id="kb-id" />
             <label>
@@ -1604,6 +1740,8 @@ import AaltoMark from "../components/AaltoMark.astro";
             <button type="submit">Save entry</button>
             <button type="button" id="kb-new">New entry</button>
           </form>
+          </div>
+          </details>
           <p class="message" id="kb-message" hidden></p>
 
           <div id="knowledge-list"></div>
@@ -1613,18 +1751,23 @@ import AaltoMark from "../components/AaltoMark.astro";
         <div class="tabpanel" id="tab-transcript" hidden>
           <section class="panel">
             <h2>Add knowledge from a transcript</h2>
-            <p class="note" style="margin-top:0">
-              Paste a mentor session. It is read in pieces and comes back as
-              draft entries for you to approve. Nothing reaches Sprint Buddy
-              until you tick it and add it. The transcript itself is never
-              stored, only the entries you keep.
-            </p>
-            <p class="note" style="margin-top:0">
-              Entries come back with no names in them: not the speaker's, not
-              their company's. What the session teaches becomes the programme's
-              position. Anything about a founder or their company is left out
-              entirely. If a name slips through, the draft is flagged.
-            </p>
+            <details class="fold fold-quiet" data-fold="transcript-about">
+              <summary>What happens to a transcript</summary>
+              <div class="fold-body">
+                <p class="note">
+                  Paste a mentor session. It is read in pieces and comes back as
+                  draft entries for you to approve. Nothing reaches Sprint Buddy
+                  until you tick it and add it. The transcript itself is never
+                  stored, only the entries you keep.
+                </p>
+                <p class="note">
+                  Entries come back with no names in them: not the speaker's, not
+                  their company's. What the session teaches becomes the programme's
+                  position. Anything about a founder or their company is left out
+                  entirely. If a name slips through, the draft is flagged.
+                </p>
+              </div>
+            </details>
 
             <form id="ingest-form" class="row">
               <label>
@@ -1693,6 +1836,34 @@ import AaltoMark from "../components/AaltoMark.astro";
       // script keeps working without knowing tabs exist.
 
       const TAB_KEY = "sprintbuddy.admin.tab";
+
+      /*
+       * Folds remember whether you left them open, per fold, in this browser.
+       * Lists rebuilt from data (closed bugs, answered wishes) call watchFold
+       * again after each render so their state survives a refresh too.
+       */
+      const FOLD_KEY = "sprintbuddy.admin.folds";
+      let foldSaved = {};
+      try { foldSaved = JSON.parse(localStorage.getItem(FOLD_KEY) || "{}") || {}; } catch { foldSaved = {}; }
+      function watchFold(fold) {
+        const key = fold.dataset.fold;
+        if (!key) return;
+        if (typeof foldSaved[key] === "boolean") fold.open = foldSaved[key];
+        fold.addEventListener("toggle", () => {
+          foldSaved[key] = fold.open;
+          try { localStorage.setItem(FOLD_KEY, JSON.stringify(foldSaved)); } catch { /* private mode */ }
+        });
+      }
+      document.querySelectorAll("details.fold[data-fold]").forEach(watchFold);
+
+      /* Opens every fold around an element that is about to be filled in or
+         focused. A field inside a closed fold cannot be seen, so an Edit button
+         that loads it would otherwise look like it did nothing. */
+      function reveal(el) {
+        for (let node = el && el.parentElement; node; node = node.parentElement) {
+          if (node.tagName === "DETAILS") node.open = true;
+        }
+      }
       function showTab(slug) {
         const panels = document.querySelectorAll(".tabpanel");
         let matched = false;
@@ -1829,6 +2000,9 @@ import AaltoMark from "../components/AaltoMark.astro";
         if (tab) showTab(tab);
         const target = focus ? document.getElementById(focus) : null;
         if (!target) return;
+        /* Most of these fields now live in a closed fold. Open it first, or the
+           menu lands on the right tab and then focuses something invisible. */
+        reveal(target);
         target.scrollIntoView({ block: "center", behavior: "smooth" });
         /* After the scroll starts, or the caret goes in and the field is then
            scrolled back out from under it. */
@@ -1960,6 +2134,21 @@ import AaltoMark from "../components/AaltoMark.astro";
         if (!body) return;
         body.textContent = "";
         empty.hidden = usage.length > 0;
+
+        /* The line above the fold: how many, whether anyone is at a limit,
+           and who used it most. Rows arrive heaviest first. */
+        const usageSummary = document.getElementById("usage-summary");
+        if (usageSummary) {
+          const isStaff = (row) => row.role === "organizer" || row.role === "mentor";
+          const atLimit = usage.filter((row) =>
+            row.chat >= (isStaff(row) ? 200 : 40) || row.checkin >= (isStaff(row) ? 200 : 15)).length;
+          const top = usage[0];
+          usageSummary.textContent = usage.length
+            ? usage.length + (usage.length === 1 ? " person has" : " people have") + " used the advisor today · " +
+              (atLimit ? atLimit + " at a daily limit" : "nobody at a limit") +
+              " · most: " + (top.name || top.email) + ", " + (top.chat + top.checkin) + " calls"
+            : "Nobody has used the advisor yet today.";
+        }
 
         for (const row of usage) {
           const tr = document.createElement("tr");
@@ -2460,6 +2649,7 @@ import AaltoMark from "../components/AaltoMark.astro";
             document.getElementById("bk-notes").value = book.notes || "";
             document.getElementById("bk-submit").textContent = "Save changes";
             document.getElementById("bk-cancel").hidden = false;
+            reveal(document.getElementById("bk-title"));
             document.getElementById("bk-title").focus();
           });
           actions.append(edit);
@@ -3458,7 +3648,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           return;
         }
 
-        wishList.innerHTML = wishes.map(function (wish) {
+        const wishRow = function (wish) {
           const answered = wish.status === "answered";
           const replies = (wish.replies || []).map(function (reply) {
             return '<div class="wish-reply">' +
@@ -3476,12 +3666,27 @@ import AaltoMark from "../components/AaltoMark.astro";
             '</div>' +
             '<p class="wish-body">' + esc(wish.body) + '</p>' +
             replies +
+            /* Folded, like every form on this page: an open reply box on every
+               wish was most of this tab's height. Not remembered per wish. */
+            '<details class="fold wish-replyfold"><summary>Reply to ' + esc(wish.fromName) + '</summary><div class="fold-body">' +
             '<div class="wish-replybox">' +
               '<textarea rows="2" maxlength="2000" data-reply-for="' + esc(wish.id) + '" placeholder="Reply to ' + esc(wish.fromName) + '"></textarea>' +
               '<button type="button" data-send-reply="' + esc(wish.id) + '">Reply</button>' +
             '</div>' +
+            '</div></details>' +
           '</article>';
-        }).join("");
+        };
+
+        /* Answered wishes fold away with a count, like closed bugs. */
+        const openWishes = wishes.filter(function (w) { return w.status !== "answered"; });
+        const answeredWishes = wishes.filter(function (w) { return w.status === "answered"; });
+        wishList.innerHTML =
+          (openWishes.length ? openWishes.map(wishRow).join("") : '<p class="note">Nothing waiting for an answer.</p>') +
+          (answeredWishes.length
+            ? '<details class="fold" data-fold="wishes-answered"><summary>Answered <span class="fold-meta">' +
+              answeredWishes.length + "</span></summary><div class=\"fold-body\">" + answeredWishes.map(wishRow).join("") + "</div></details>"
+            : "");
+        wishList.querySelectorAll("details.fold[data-fold]").forEach(watchFold);
       }
 
       async function loadWishes() {
@@ -3561,7 +3766,7 @@ import AaltoMark from "../components/AaltoMark.astro";
           return;
         }
 
-        bugList.innerHTML = bugReports.map(function (bug) {
+        const bugRow = function (bug) {
           const closed = bug.status === "done" || bug.status === "wont_fix";
           /* Cleared by deleteUser when the account goes, which is the whole
              reason the report can outlive the reporter. */
@@ -3592,7 +3797,19 @@ import AaltoMark from "../components/AaltoMark.astro";
             '<p class="bug-text">' + esc(bug.body) + "</p>" +
             (context ? '<div class="bug-context">' + context + "</div>" : "") +
           "</article>";
-        }).join("");
+        };
+
+        /* Closed reports fold away with a count. They are history, and the
+           list is for what still needs somebody. */
+        const openBugs = bugReports.filter(function (b) { return b.status !== "done" && b.status !== "wont_fix"; });
+        const closedBugs = bugReports.filter(function (b) { return b.status === "done" || b.status === "wont_fix"; });
+        bugList.innerHTML =
+          (openBugs.length ? openBugs.map(bugRow).join("") : '<p class="note">Nothing open.</p>') +
+          (closedBugs.length
+            ? '<details class="fold" data-fold="bugs-closed"><summary>Closed <span class="fold-meta">' +
+              closedBugs.length + "</span></summary><div class=\"fold-body\">" + closedBugs.map(bugRow).join("") + "</div></details>"
+            : "");
+        bugList.querySelectorAll("details.fold[data-fold]").forEach(watchFold);
       }
 
       async function loadBugs() {
@@ -3761,7 +3978,15 @@ import AaltoMark from "../components/AaltoMark.astro";
           ? 0
           : pastMonths.reduce(function (sum, m) { return sum + m.rows.length; }, 0);
 
-        eventList.innerHTML = months.map(function (group) {
+        /* Months after next fold into "Later". The list was every future month
+           of a thirteen-week programme, and the next few weeks are what anybody
+           opens this tab to change. Keys are "YYYY-MM", so they compare as text. */
+        const [thisYear, thisMon] = thisMonth.split("-").map(Number);
+        const nextMonth = thisMon === 12
+          ? (thisYear + 1) + "-01"
+          : thisYear + "-" + String(thisMon + 1).padStart(2, "0");
+
+        const renderMonth = function (group) {
           if (!openPastMonths && group.key < thisMonth) return "";
           const label = new Date(group.key + "-01T00:00:00Z").toLocaleDateString("en-GB", {
             month: "long", year: "numeric", timeZone: "UTC",
@@ -3786,7 +4011,19 @@ import AaltoMark from "../components/AaltoMark.astro";
             (editing ? '<div class="ev-edit" id="ev-edit-slot"></div>' : "");
           }).join("");
           return '<h3 class="ev-month">' + esc(label) + '</h3>' + rows;
-        }).join("");
+        };
+
+        const soonMonths = months.filter(function (m) { return m.key <= nextMonth; });
+        const laterMonths = months.filter(function (m) { return m.key > nextMonth; });
+        const laterCount = laterMonths.reduce(function (sum, m) { return sum + m.rows.length; }, 0);
+        eventList.innerHTML =
+          soonMonths.map(renderMonth).join("") +
+          (laterMonths.length
+            ? '<details class="fold" data-fold="events-later"><summary>Later <span class="fold-meta">' +
+              laterCount + (laterCount === 1 ? " item" : " items") + "</span></summary>" +
+              '<div class="fold-body">' + laterMonths.map(renderMonth).join("") + "</div></details>"
+            : "");
+        eventList.querySelectorAll("details.fold[data-fold]").forEach(watchFold);
 
         if (hiddenCount) {
           eventList.insertAdjacentHTML("afterbegin",
@@ -3802,7 +4039,8 @@ import AaltoMark from "../components/AaltoMark.astro";
            only exists when something is being edited. */
         if (editingEventId) {
           const slot = document.getElementById("ev-edit-slot");
-          if (slot) slot.appendChild(eventForm);
+          /* The row being edited may sit inside the closed "Later" fold. */
+          if (slot) { slot.appendChild(eventForm); reveal(slot); }
         }
       }
 
@@ -4110,6 +4348,7 @@ import AaltoMark from "../components/AaltoMark.astro";
             kbBody.value = entry.body;
             kbPosition.value = String(entry.position);
             kbSource.value = entry.source || "";
+            reveal(kbTopic);
             kbTopic.focus();
           });
         });
