@@ -351,28 +351,28 @@ const bandName = (b: string) =>
           <p class="kicker">Confidence</p>
           <h2>How firm this result is</h2>
           <p class="lede">
-            Every pair of types was asked twice, in different words and far apart. That buys a
-            reliability check most reports do not have, so here it is rather than a clean number
-            that hides its own softness.
+            Each type was asked about seven separate times, in seven different situations. How
+            closely those seven answers agreed with one another is a reliability check most
+            reports do not have, so here it is rather than a clean number that hides its own
+            softness.
           </p>
 
-          <h3>Agreement between the two askings</h3>
+          <h3>Agreement within each type</h3>
           <p>
-            You answered the same way both times on {pct(result.consistency)} of the fifteen
-            pairs.{" "}
+            Your seven answers per type held together at {pct(result.consistency)}.{" "}
             {result.consistency >= 0.8
               ? "That is high. The ranking below is a real signal rather than a set of coin tosses."
               : result.consistency >= 0.6
               ? "That is moderate. The broad shape is trustworthy; individual positions in the middle are not."
-              : "That is low. Read the bands rather than the order inside them, and consider taking it again when you are less rushed."}
+              : "That is low — the same type drew answers from both ends of the scale. Read the bands rather than the order inside them, and consider taking it again when you are less rushed."}
           </p>
 
           {result.contested.length > 0 && (
             <>
               <h3>Ordered by a fallback</h3>
               <p>
-                These finished exactly level, on total and on their head-to-head, so the order
-                between them came from a rule rather than from your answers:{" "}
+                These finished exactly level, so the order between them came from a rule rather
+                than from your answers:{" "}
                 {result.contested.map(([a, b]) => `${typeById(a).label} and ${typeById(b).label}`).join("; ")}.
               </p>
             </>
@@ -391,13 +391,12 @@ const bandName = (b: string) =>
 
           {result.abstentions.length > 0 && (
             <>
-              <h3>Questions you answered in your own words</h3>
+              <h3>Statements you did not answer</h3>
               <p>
-                On {result.abstentions.length} of the thirty you said neither option matched.
-                Those were left out of the scoring rather than guessed at, which means the types
-                involved were compared fewer times than the others. The ranking accounts for that
-                by scoring on wins per comparison rather than on raw totals, but it is one more
-                reason to read the shape rather than the exact order.
+                {result.abstentions.length} went unanswered. Those were left out rather than
+                guessed at, so the types they belonged to rest on fewer answers than the others.
+                Scoring uses each type's average rather than its total, which accounts for it,
+                but it is one more reason to read the shape rather than the exact order.
               </p>
             </>
           )}
@@ -422,16 +421,13 @@ const bandName = (b: string) =>
             <p class="kicker">In your own words</p>
             <h2>What you wrote</h2>
             <p class="lede">
-              The forced choice is what produces a ranking. This is what did not fit inside it,
-              which is often the more useful half.
+              From the earlier forced-choice version of this assessment, where a third option let
+              you answer in your own words instead of picking one of two. Often the more useful
+              half. The statements it belonged to are not part of the current instrument, so the
+              answers are here without them.
             </p>
-            {WORKING_GENIUS_ITEMS.map((item) => {
-              /* Walked in presentation order rather than over the response
-                 object, so the quotes come back in the order they were
-                 answered and each one carries the question it answered. An
-                 item id on its own would mean nothing to a founder. */
-              const raw = result!.responses[item.id];
-              if (typeof raw === "string" || !raw) return null;
+            {Object.entries(result!.responses).map(([, raw]) => {
+              if (typeof raw !== "object" || !raw) return null;
               const text = (raw as { text?: string }).text;
               if (!text) return null;
               const answer = raw as { choice?: string; resolved?: string };
@@ -441,7 +437,6 @@ const bandName = (b: string) =>
                   : null;
               return (
                 <blockquote>
-                  <p class="quiet" style="margin-bottom:3pt">{item.prompt}</p>
                   <p class="q">{text}</p>
                   {read && (
                     <p class="quiet" style="margin:4pt 0 0">

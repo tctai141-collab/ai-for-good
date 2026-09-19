@@ -1,30 +1,51 @@
 /**
  * The Aalto Founder Sprint working-style assessment.
  *
- * Six types, thirty forced-choice items, a full ranking split into three bands
- * of two. The six-type model is Patrick Lencioni's (The 6 Types of Working
- * Genius, The Table Group). The model is his; every item and every word of
- * result copy in this file is ours, because the official instrument is a
- * licensed product we do not have a licence for. Nothing here is copied from
- * it. See workflows/working_genius.md.
+ * Six types, forty-two statements, each rated on a five-point frequency scale.
+ * The six-type model is Patrick Lencioni's (The 6 Types of Working Genius, The
+ * Table Group). The model is his; every statement and every word of result copy
+ * in this file is ours, because the official instrument is a licensed product
+ * we do not have a licence for. Nothing here is copied or paraphrased from it.
  *
- * What the first version of this got wrong, and why the shape below is what it
- * is:
+ * Why this is a rating scale and not a forced choice, as of afs-4:
  *
- *   Six items, each pitting two types against each other, produced one
- *   "primary" type. Only five of the fifteen possible pairs were ever asked and
- *   one of those was asked twice, so enablement and tenacity were compared to
- *   each other and to nothing else: their two scores always summed to exactly
- *   2 regardless of who was answering. Max score per type was 2, which made
- *   ties at the top the normal case rather than the edge case, and ties were
- *   resolved by object insertion order, which handed most of them to wonder.
+ * The cohort's word for the previous bank was "black and white", and they were
+ * describing it accurately. Thirty items, each pitting two types against each
+ * other, with one click per item. That design bought a complete comparison
+ * graph — every pair asked twice — and it cost the ability to say "both of
+ * these, often" or "neither of these, ever", which is the true answer for a lot
+ * of people on a lot of items.
  *
- * So: all fifteen pairs, each asked twice with different wording. Every type
- * meets every other type twice, which makes the comparison graph complete and
- * the scores meaningful (0..10, summing to 30 across the six). Asking each pair
- * twice also buys a reliability signal for free: if someone answers the same
- * pair two different ways we can say so instead of pretending the result is
- * crisp.
+ * The forced choice was also buying less than it looked. Its scores are purely
+ * ipsative: wins summed to exactly thirty for everybody by construction, so the
+ * numbers carried no information about how much of any of it a person actually
+ * does. The literature on this is unsentimental — forced choice and rating
+ * scales carry equivalent information once there are enough items, and forced
+ * choice's advantage over rating scales holds mainly for mixed-polarity blocks
+ * in quantities we will never reach with a cohort of nineteen.
+ *
+ * So: forty-two statements, seven per type, rated 1-5 from never to
+ * constantly.
+ *
+ * The scoring is the part that matters more than the format. A rating scale
+ * fails in a specific way — almost everybody rates themselves four or five on
+ * nearly everything, the six means bunch together, and the split into bands
+ * ends up resting on noise. So the ranking is not built on the raw means. Each
+ * type is scored against that person's own average across all forty-two, which
+ * measures relative pull rather than general enthusiasm, and absorbs the
+ * acquiescence that a rating scale otherwise carries. It is the reason single
+ * polarity is safe here: no statement is reverse-worded, because reverse items
+ * add noise this sample size cannot model out.
+ *
+ * Both numbers are kept and both are shown. The raw level says how much of this
+ * you do at all; the centred score is what decides the bands. A founder reading
+ * "frustration" next to a type they do fairly often deserves to see both rather
+ * than be told, flatly, that it drains them.
+ *
+ * One consequence, stated rather than hidden: centred scores are ipsative, and
+ * ipsative scores do not support comparing one person's level against another's.
+ * They rank types within a person. The team map is therefore a map of who
+ * leans where, and never a claim that one founder out-wonders another.
  */
 
 export type WorkingGeniusId =
@@ -165,515 +186,191 @@ export function bandCopy(type: WorkingGeniusType, band: WorkingGeniusBand): stri
 
 /* ------------------------------------------------------------------ items -- */
 
-export type WorkingGeniusOption = { id: WorkingGeniusId; label: string };
+/** One point on the frequency scale a founder answers with. */
+export type WorkingGeniusScalePoint = { value: 1 | 2 | 3 | 4 | 5; label: string };
+
+/**
+ * Never to constantly, five points, no numbers on screen.
+ *
+ * Frequency rather than agreement, because "how often is this you" is a
+ * question about behaviour and "do you agree that this is you" is a question
+ * about self-image, and the whole bank is written to ask the first one.
+ *
+ * The midpoint is named and meant. A founder who genuinely does something half
+ * the time should land in the middle rather than be pushed to a side, which is
+ * the complaint that produced this version.
+ */
+export const WORKING_GENIUS_SCALE: readonly WorkingGeniusScalePoint[] = [
+  { value: 1, label: "Never" },
+  { value: 2, label: "Rarely" },
+  { value: 3, label: "Sometimes" },
+  { value: 4, label: "Often" },
+  { value: 5, label: "Constantly" },
+] as const;
 
 export type WorkingGeniusItem = {
-  /** Stable id, `<letters>-<round>`, e.g. "wi-a". Persisted with the response. */
+  /** Stable id, `<type>-<n>`. Persisted with the response. */
   id: string;
-  round: "a" | "b";
-  prompt: string;
-  /** Exactly two, and the pair is unique per round. */
-  options: [WorkingGeniusOption, WorkingGeniusOption];
+  /** The type this statement measures. Never shown to the founder. */
+  type: WorkingGeniusId;
+  statement: string;
 };
 
 /**
- * Every item names a concrete situation and asks what actually happens.
+ * Seven statements per type, describing what somebody does rather than what
+ * they are good at.
  *
- * It used to ask what the founder "would rather" do. A cohort tester stalled on
- * exactly the ambiguity that creates: "I might rather be able to rally them,
- * but I'm not good at rallying people so in reality I do option 2." The phrase
- * reads two ways, as the thing you wish you did and as the thing you do, and
- * those give opposite answers from the same person.
+ * The rules the previous bank was written under are kept, because the reason
+ * for each one survived the change of format:
  *
- * The intent behind it was right and is kept: the model's claim is that a
- * genius is energising, not merely something you are competent at, and people
- * answer "what are you good at" with their job description. So the items still
- * never ask which one you do better. They ask which one you actually reach for,
- * lose track of time inside, or do without being asked, which gets at energy
- * without inviting the fantasy self.
+ * Every statement is a behaviour, in the present tense, that a person could
+ * notice themselves doing this week. None asks whether they are good at
+ * something: people answer that with their job description. The model's claim
+ * is that a genius is energising, not merely something you are competent at.
  *
- * Banned outright, because each one reopens the ambiguity: "would rather",
- * "prefer", "ideally", "wish", "want to", "would choose". There is a test.
+ * Banned outright, because each one invites the person somebody would like to
+ * be rather than the one they are: "would rather", "prefer", "ideally",
+ * "wish", "want to", "would choose", "good at". There is a test.
  *
- * Both options are written to be attractive. An item where one side is
- * obviously the virtuous answer measures self-image, not behaviour.
+ * Polarity never flips. Every statement is worded so that more of it means
+ * more of that type; none is reverse-scored. Reverse items would buy a little
+ * protection against straight-lining and cost more in noise than nineteen
+ * people can absorb. Centring each person on their own mean is what handles
+ * straight-lining instead.
  *
- * Polarity never flips: every item is "which of these two pulls you". Mixing in
- * reverse-scored items ("which do you dread") would add noise we have no sample
- * size to model out.
- *
- * Round A puts the earlier WIDGET type first, round B puts the later one first,
- * so each type appears in each screen position exactly five times and position
- * bias cancels out.
+ * Presentation order interleaves the six types in rotating blocks of six, so
+ * no two statements about the same type are ever adjacent and no type sits in
+ * the same position twice. A founder cannot see the pattern and answer to it.
  */
-const ITEMS_ROUND_A: WorkingGeniusItem[] = [
-  {
-    id: "wi-a",
-    round: "a",
-    prompt: "A free afternoon, nothing booked. What do you do with it?",
-    options: [
-      { id: "wonder", label: "Sit with a question that has been nagging me." },
-      { id: "invention", label: "Come up with something new." },
-    ],
-  },
-  {
-    id: "wd-a",
-    round: "a",
-    prompt: "Someone hands you a finished plan. What do you do first?",
-    options: [
-      { id: "wonder", label: "I ask what problem it is really for." },
-      { id: "discernment", label: "I look for the parts that will not work." },
-    ],
-  },
-  {
-    id: "wg-a",
-    round: "a",
-    prompt: "The room goes quiet on something hard. What do you do?",
-    options: [
-      { id: "wonder", label: "I say the question nobody has asked." },
-      { id: "galvanizing", label: "I get people moving again." },
-    ],
-  },
-  {
-    id: "we-a",
-    round: "a",
-    prompt: "A teammate says they are stuck. What do you do?",
-    options: [
-      { id: "wonder", label: "I help them work out what they are really solving." },
-      { id: "enablement", label: "I take part of it off their hands." },
-    ],
-  },
-  {
-    id: "wt-a",
-    round: "a",
-    prompt: "An open question, and a job to finish. Which do you pick up?",
-    options: [
-      { id: "wonder", label: "The question." },
-      { id: "tenacity", label: "The job." },
-    ],
-  },
-  {
-    id: "id-a",
-    round: "a",
-    prompt: "Three rough ideas are on the table. What do you add?",
-    options: [
-      { id: "invention", label: "I add a fourth, different from all of them." },
-      { id: "discernment", label: "I say which of the three is any good." },
-    ],
-  },
-  {
-    id: "ig-a",
-    round: "a",
-    prompt: "Everyone likes the idea. What do you do next?",
-    options: [
-      { id: "invention", label: "Make it better." },
-      { id: "galvanizing", label: "Get people behind it." },
-    ],
-  },
-  {
-    id: "ie-a",
-    round: "a",
-    prompt: "The build is going slowly. What do you do?",
-    options: [
-      { id: "invention", label: "I look for a better way to do it." },
-      { id: "enablement", label: "I get people what they need to keep going." },
-    ],
-  },
-  {
-    id: "it-a",
-    round: "a",
-    prompt: "Two jobs, and you can only take one. Which do you take?",
-    options: [
-      { id: "invention", label: "Working out what to build." },
-      { id: "tenacity", label: "Getting it shipped." },
-    ],
-  },
-  {
-    id: "dg-a",
-    round: "a",
-    prompt: "The team is split and the meeting is nearly over. What do you do?",
-    options: [
-      { id: "discernment", label: "I work out which option is right." },
-      { id: "galvanizing", label: "I get everyone behind one so it moves." },
-    ],
-  },
-  {
-    id: "de-a",
-    round: "a",
-    prompt: "A plan arrives from someone else. What is your first move?",
-    options: [
-      { id: "discernment", label: "I check whether it holds up." },
-      { id: "enablement", label: "I ask what they need to make it work." },
-    ],
-  },
-  {
-    id: "dt-a",
-    round: "a",
-    prompt: "Late in a project, things are ragged. Which job do you end up in?",
-    options: [
-      { id: "discernment", label: "I catch what is wrong before it ships." },
-      { id: "tenacity", label: "I push it over the line." },
-    ],
-  },
-  {
-    id: "ge-a",
-    round: "a",
-    prompt: "Momentum has died halfway through. What do you do?",
-    options: [
-      { id: "galvanizing", label: "I get everyone going again." },
-      { id: "enablement", label: "I clear whatever is blocking them." },
-    ],
-  },
-  {
-    id: "gt-a",
-    round: "a",
-    prompt: "Two weeks to the demo and it is not ready. What do you do?",
-    options: [
-      { id: "galvanizing", label: "I rally the team." },
-      { id: "tenacity", label: "I finish the missing pieces myself." },
-    ],
-  },
-  {
-    id: "et-a",
-    round: "a",
-    prompt: "The last ten percent, and everyone is tired. What happens?",
-    options: [
-      { id: "enablement", label: "I back whoever is carrying it." },
-      { id: "tenacity", label: "I carry it." },
-    ],
-  },
-];
+export const WORKING_GENIUS_ITEMS: readonly WorkingGeniusItem[] = [
+  { id: "wonder-1", type: "wonder", statement: "I catch myself turning over a question that has no obvious answer." },
+  { id: "invention-1", type: "invention", statement: "I start from a blank page rather than adapt something that exists." },
+  { id: "discernment-1", type: "discernment", statement: "I can tell an idea will not work before I can explain why." },
+  { id: "galvanizing-1", type: "galvanizing", statement: "I keep putting an idea in front of people until they engage with it." },
+  { id: "enablement-1", type: "enablement", statement: "I drop what I am doing to help someone who needs it." },
+  { id: "tenacity-1", type: "tenacity", statement: "I push a task through to done after the interesting part is over." },
+  { id: "invention-2", type: "invention", statement: "Ideas arrive faster than I can write them down." },
+  { id: "discernment-2", type: "discernment", statement: "I read a plan and the weak part stands out immediately." },
+  { id: "galvanizing-2", type: "galvanizing", statement: "I get other people excited about something I believe in." },
+  { id: "enablement-2", type: "enablement", statement: "I notice a teammate is stuck and step in." },
+  { id: "tenacity-2", type: "tenacity", statement: "I keep a list of what is unfinished and work it down." },
+  { id: "wonder-2", type: "wonder", statement: "I notice something is off about how we work before anyone else names it." },
+  { id: "discernment-3", type: "discernment", statement: "I am the one people bring their thinking to before they commit to it." },
+  { id: "galvanizing-3", type: "galvanizing", statement: "I ask people to do things, repeatedly, without feeling awkward about it." },
+  { id: "enablement-3", type: "enablement", statement: "I say yes to a request for help before I know what it involves." },
+  { id: "tenacity-3", type: "tenacity", statement: "I chase the last details standing between us and shipping." },
+  { id: "wonder-3", type: "wonder", statement: "I lose time asking why a thing is the way it is." },
+  { id: "invention-3", type: "invention", statement: "I have a possible answer before the person describing the problem has finished." },
+  { id: "galvanizing-4", type: "galvanizing", statement: "I am the one who turns a decision into a group actually moving." },
+  { id: "enablement-4", type: "enablement", statement: "I make myself useful to something somebody else has started." },
+  { id: "tenacity-4", type: "tenacity", statement: "I get something out of closing a thing out, beyond being rid of it." },
+  { id: "wonder-4", type: "wonder", statement: "In the middle of a plan, I ask out loud what problem we are really solving." },
+  { id: "invention-4", type: "invention", statement: "I enjoy starting the part of a thing that does not exist yet." },
+  { id: "discernment-4", type: "discernment", statement: "I change someone's idea slightly and it gets noticeably better." },
+  { id: "enablement-5", type: "enablement", statement: "I find it satisfying to be the person who makes someone else's work possible." },
+  { id: "tenacity-5", type: "tenacity", statement: "I hold to the standard when everyone else is ready to call it finished." },
+  { id: "wonder-5", type: "wonder", statement: "I sit with an unease about a decision instead of shaking it off." },
+  { id: "invention-5", type: "invention", statement: "I come up with several ways to do something, then pick between them." },
+  { id: "discernment-5", type: "discernment", statement: "I go with a gut reaction on a decision and it turns out to be right." },
+  { id: "galvanizing-5", type: "galvanizing", statement: "I talk a room into something it walked in indifferent about." },
+  { id: "tenacity-6", type: "tenacity", statement: "I stay on something past the point where it stopped being fun." },
+  { id: "wonder-6", type: "wonder", statement: "I come back to the same big question days later, unprompted." },
+  { id: "invention-6", type: "invention", statement: "I offer an idea nobody asked me for." },
+  { id: "discernment-6", type: "discernment", statement: "I spot the hole in an argument that everyone else has accepted." },
+  { id: "galvanizing-6", type: "galvanizing", statement: "I follow up with people to keep a thing moving." },
+  { id: "enablement-6", type: "enablement", statement: "I ask people what they need rather than what they have decided." },
+  { id: "wonder-7", type: "wonder", statement: "I ask whether there is a better way to do something that already works." },
+  { id: "invention-7", type: "invention", statement: "I redesign something in my head while I am using it." },
+  { id: "discernment-7", type: "discernment", statement: "I weigh two options and know which one is right without working it out on paper." },
+  { id: "galvanizing-7", type: "galvanizing", statement: "I enjoy the moment a group commits to something." },
+  { id: "enablement-7", type: "enablement", statement: "I pick up the part nobody has claimed so the thing can move." },
+  { id: "tenacity-7", type: "tenacity", statement: "I check that a thing actually got done, not just that it was agreed." },
+] as const;
 
-const ITEMS_ROUND_B: WorkingGeniusItem[] = [
-  {
-    id: "wi-b",
-    round: "b",
-    prompt: "A blank page and an hour. What do you do with it?",
-    options: [
-      { id: "invention", label: "I fill it with something new." },
-      { id: "wonder", label: "I think about what is worth putting on it." },
-    ],
-  },
-  {
-    id: "wd-b",
-    round: "b",
-    prompt: "You read the same page twice. What were you doing?",
-    options: [
-      { id: "discernment", label: "I was weighing whether it is any good." },
-      { id: "wonder", label: "It opened a question I am still chasing." },
-    ],
-  },
-  {
-    id: "wg-b",
-    round: "b",
-    prompt: "Monday morning, nothing in the calendar. What do you do?",
-    options: [
-      { id: "galvanizing", label: "I get the team pointed the same way." },
-      { id: "wonder", label: "I think about what we are missing." },
-    ],
-  },
-  {
-    id: "we-b",
-    round: "b",
-    prompt: "A week you finished feeling good about. What had you been doing?",
-    options: [
-      { id: "enablement", label: "Helping someone else get their thing done." },
-      { id: "wonder", label: "Noticing something nobody else had." },
-    ],
-  },
-  {
-    id: "wt-b",
-    round: "b",
-    prompt: "It is Friday. What has to have happened for the week to feel worth it?",
-    options: [
-      { id: "tenacity", label: "Something got finished." },
-      { id: "wonder", label: "Something interesting opened up." },
-    ],
-  },
-  {
-    id: "id-b",
-    round: "b",
-    prompt: "In a review, what do you end up contributing?",
-    options: [
-      { id: "discernment", label: "A call on what will work and what will not." },
-      { id: "invention", label: "An idea nobody had put forward." },
-    ],
-  },
-  {
-    id: "ig-b",
-    round: "b",
-    prompt: "You lose track of time. What were you doing?",
-    options: [
-      { id: "galvanizing", label: "Getting people excited about an idea." },
-      { id: "invention", label: "Having the idea." },
-    ],
-  },
-  {
-    id: "ie-b",
-    round: "b",
-    prompt: "People come to you. What for?",
-    options: [
-      { id: "enablement", label: "Help getting past something." },
-      { id: "invention", label: "A different way to do it." },
-    ],
-  },
-  {
-    id: "it-b",
-    round: "b",
-    prompt: "Three hours gone without noticing. What were you doing?",
-    options: [
-      { id: "tenacity", label: "Finishing the last details." },
-      { id: "invention", label: "Making something that was not there this morning." },
-    ],
-  },
-  {
-    id: "dg-b",
-    round: "b",
-    prompt: "A decision got made in a meeting. What had you contributed?",
-    options: [
-      { id: "galvanizing", label: "I got it moving." },
-      { id: "discernment", label: "I said what was true." },
-    ],
-  },
-  {
-    id: "de-b",
-    round: "b",
-    prompt: "Something worked. What do you feel best about?",
-    options: [
-      { id: "enablement", label: "That I helped make it happen." },
-      { id: "discernment", label: "That I called it right." },
-    ],
-  },
-  {
-    id: "dt-b",
-    round: "b",
-    prompt: "A hard project. Which do you take on?",
-    options: [
-      { id: "tenacity", label: "Making sure it gets finished." },
-      { id: "discernment", label: "Making sure the calls are right." },
-    ],
-  },
-  {
-    id: "ge-b",
-    round: "b",
-    prompt: "A team you helped. What had you done?",
-    options: [
-      { id: "enablement", label: "Cleared things out of their way." },
-      { id: "galvanizing", label: "Brought the energy." },
-    ],
-  },
-  {
-    id: "gt-b",
-    round: "b",
-    prompt: "Week six of eight on a long push. What do you do?",
-    options: [
-      { id: "tenacity", label: "I am still at it." },
-      { id: "galvanizing", label: "I am getting the energy back up." },
-    ],
-  },
-  {
-    id: "et-b",
-    round: "b",
-    prompt: "It is finished. What do you check first?",
-    options: [
-      { id: "tenacity", label: "That it got done." },
-      { id: "enablement", label: "That everyone had what they needed." },
-    ],
-  },
-];
+export const ITEMS_PER_TYPE = 7;
 
 /**
- * Presentation order. Round A entirely, then round B, each internally
- * scrambled so no two items about the same pair sit near each other and the
- * six types do not appear in a marching WIDGET pattern.
+ * Shown above the first statement.
  *
- * Round B is round A rotated by ten rather than reordered freely. Free
- * scrambling kept putting some pair's two askings eight or nine items apart,
- * close enough for the founder to recognise the repeat and answer from memory
- * instead of from instinct, which is exactly the signal the second asking is
- * there to collect. A rotation of k guarantees a minimum gap of k for every
- * pair, so the spacing is a property of the construction rather than something
- * that has to be re-checked by hand each time an item is reworded.
- *
- * Fixed rather than shuffled per respondent: with 20 founders a fixed order
- * keeps results comparable and support questions answerable.
- */
-const PRESENTATION_ORDER = [
-  "ig-a", "we-a", "dt-a", "wi-a", "ge-a", "it-a", "wd-a", "et-a",
-  "dg-a", "ie-a", "wt-a", "gt-a", "id-a", "wg-a", "de-a",
-  "it-b", "wd-b", "et-b", "dg-b", "ie-b", "wt-b", "gt-b", "id-b",
-  "wg-b", "de-b", "ig-b", "we-b", "dt-b", "wi-b", "ge-b",
-];
-
-function buildItems(): WorkingGeniusItem[] {
-  const byId = new Map<string, WorkingGeniusItem>();
-  for (const item of [...ITEMS_ROUND_A, ...ITEMS_ROUND_B]) byId.set(item.id, item);
-  return PRESENTATION_ORDER.map((id) => {
-    const item = byId.get(id);
-    if (!item) throw new Error(`presentation order names a missing item: ${id}`);
-    return item;
-  });
-}
-
-export const WORKING_GENIUS_ITEMS: readonly WorkingGeniusItem[] = buildItems();
-
-/**
- * Shown above the first item.
- *
- * The ambiguity the rewrite removes from the wording is worth saying out loud
- * once as well: someone who has met an instrument like this before arrives
- * expecting to be asked what they are good at.
+ * Someone who has met an instrument like this before arrives expecting to be
+ * asked what they are good at, so it is worth saying once what is actually
+ * being asked.
  */
 export const INSTRUMENT_PREAMBLE =
-  "Answer for how you actually behave, not how you would like to. There are no better or worse answers here.";
+  "Answer for how often this is actually you, not how you would like to be. There are no better or worse answers here.";
 
 /**
  * Bumped whenever the item bank or the scoring changes, so old rows stay
  * readable.
  *
- * afs-1: the first thirty-item bank.
+ * afs-1: the first thirty-item forced-choice bank.
  * afs-2: every item rewritten from "you would rather" to a concrete situation
- *        and what actually happens. The pairings, the ids and the presentation
- *        order are untouched, so afs-1 rows still score identically and remain
- *        comparable; what changed is what the founder was asked, which is
- *        enough to make the two banks different instruments.
- * afs-3: the same items in plainer words. afs-2 read as written rather than
- *        spoken — "circling a question you have not had time to sit with",
- *        "something sharper and stranger" — and twenty of its thirty prompts
- *        opened with some version of "what do you actually do", which is a tic
- *        rather than a question. The behavioural framing afs-2 exists for is
- *        kept, because a tester read the bank before it as aspirational and
- *        answered for the person they would like to be; it is carried by
- *        "what do you do" and "what were you doing" now instead of by the word
- *        actually. Pairings, ids and order untouched again, so afs-1 and afs-2
- *        rows still score identically.
+ *        and what actually happens. Pairings, ids and order untouched, so
+ *        afs-1 rows still scored identically.
+ * afs-3: the same items in plainer words. Pairings, ids and order untouched
+ *        again.
+ * afs-4: forty-two statements on a five-point frequency scale, scored against
+ *        each person's own mean. A different instrument, not a rewording of
+ *        the last one: nothing an afs-3 row contains can be scored by it, and
+ *        nothing it produces is comparable point-to-point with one. Rows
+ *        written by afs-1 to afs-3 keep the result they were given on the day
+ *        — scoring has always been a pure function over stored answers, and
+ *        their stored profiles are read, never recomputed.
  */
-export const INSTRUMENT_VERSION = "afs-3";
+export const INSTRUMENT_VERSION = "afs-4";
 
 /* ---------------------------------------------------------------- scoring -- */
 
-/**
- * One founder's answer to one item.
- *
- * The instrument is a forced choice and stays one, because that is what makes
- * the comparison graph complete. But a cohort tester was right that some people
- * do neither, do both, or do something conditional, and forcing them to click
- * one of two wrong answers puts noise in the score and tells us nothing.
- *
- * So there is an escape hatch, and it is deliberately the third option rather
- * than a required box on every item: if every question demands typing,
- * completion craters and what comes back is the word "both", which is less
- * informative than a forced choice.
- */
-export type WorkingGeniusAnswer = {
-  /** What they clicked. "neither" is the escape hatch. */
-  choice: WorkingGeniusId | "neither";
-  /** What they typed, either instead of choosing or as context alongside one. */
-  text?: string;
-  /**
-   * What the free text was read as, resolved once at submission and stored.
-   *
-   * Not recomputed at scoring time. Scoring is a pure function over stored
-   * data, so re-scoring a row a year from now gives the same answer it gave on
-   * the day; if this were an LLM call inside the scorer, a founder's profile
-   * could move between two reads of the same row. Storing the classification
-   * beside the raw text also makes it auditable and correctable, which a live
-   * call is not.
-   */
-  resolved?: WorkingGeniusId | "neither";
-};
-
-/**
- * Item id to answer.
- *
- * A bare type id is the afs-1 shape and is still read: those rows are on disk
- * and must keep scoring identically. Everything below normalises through
- * `readAnswer` rather than branching at each use.
- */
-export type WorkingGeniusResponses = Record<string, WorkingGeniusId | WorkingGeniusAnswer>;
-
-const TYPE_IDS = new Set<string>(WIDGET_ORDER);
-
-const isTypeId = (v: unknown): v is WorkingGeniusId =>
-  typeof v === "string" && TYPE_IDS.has(v);
-
-export type ReadAnswer = {
-  /** The type this answer counts a win for, or null if it abstains. */
-  effective: WorkingGeniusId | null;
-  choice: WorkingGeniusId | "neither" | null;
-  text: string;
-  /** True when the text was read as a different type than the one clicked. */
-  overrode: boolean;
-};
-
-/**
- * Normalises either stored shape into one thing.
- *
- * Where the two disagree, the text wins. A click is a nearest-fit against two
- * options someone else wrote; the text is unprompted and specific, and it is
- * the only place a founder can say what actually happens. The disagreement is
- * kept rather than smoothed over: `overrode` is surfaced in the result and in
- * the report, because a founder who clicked one thing and described another has
- * told us something worth naming.
- */
-export function readAnswer(raw: WorkingGeniusId | WorkingGeniusAnswer | undefined): ReadAnswer {
-  if (raw === undefined) return { effective: null, choice: null, text: "", overrode: false };
-  if (isTypeId(raw)) return { effective: raw, choice: raw, text: "", overrode: false };
-  if (typeof raw !== "object" || raw === null) {
-    return { effective: null, choice: null, text: "", overrode: false };
-  }
-
-  const text = typeof raw.text === "string" ? raw.text.trim() : "";
-  const choice = raw.choice === "neither" || isTypeId(raw.choice) ? raw.choice : null;
-  const resolved =
-    raw.resolved === "neither" || isTypeId(raw.resolved) ? raw.resolved : undefined;
-
-  // Text present and read as a type: that is the answer, whatever was clicked.
-  if (text && isTypeId(resolved)) {
-    return {
-      effective: resolved,
-      choice,
-      text,
-      overrode: isTypeId(choice) && choice !== resolved,
-    };
-  }
-  // Read as genuinely neither, or not read at all: abstain.
-  if (choice === "neither") return { effective: null, choice, text, overrode: false };
-  return { effective: isTypeId(choice) ? choice : null, choice, text, overrode: false };
-}
+/** Item id to the point on the scale the founder chose. */
+export type WorkingGeniusResponses = Record<string, number>;
 
 export type WorkingGeniusResult = {
   version: string;
-  /** Wins per type, 0..10. Always sums to 30 for a complete response set. */
+  /** Points per type, 7..35 for a complete set. */
   counts: Record<WorkingGeniusId, number>;
   /** All six, strongest first. */
   ranking: WorkingGeniusId[];
   bands: Record<WorkingGeniusBand, WorkingGeniusId[]>;
-  /** Share of the 15 pairs answered the same way both times, 0..1. */
-  consistency: number;
   /**
-   * How many items each type actually contested.
+   * How steadily the seven statements for each type agreed with one another,
+   * 0..1, averaged across the six.
    *
-   * Ten each for a complete set. An abstention removes an item from both of its
-   * types, so without this a type that was asked eight times and won six looks
-   * weaker than one asked ten times and won seven, which is backwards.
+   * Seven answers that scatter from never to constantly describe somebody the
+   * instrument has not understood, and the report says so rather than
+   * presenting the profile as crisp.
    */
+  consistency: number;
+  /** How many of each type's statements were answered. Seven for a full set. */
   contests: Record<WorkingGeniusId, number>;
-  /** Wins over contests entered, 0..1. This is what the ranking sorts on. */
+  /**
+   * The raw level, 0..1, from the mean answer for that type.
+   *
+   * How much of this you do at all, independent of everybody else and of your
+   * other five types. Shown alongside the bands; not what they are decided on.
+   */
   rates: Record<WorkingGeniusId, number>;
-  /** Item ids where the founder answered "neither" and the text agreed. */
+  /**
+   * The mean for that type minus this person's mean across all forty-two,
+   * in scale points, roughly -2..+2.
+   *
+   * This is what the ranking sorts on. Somebody who answers "often" to
+   * everything and "constantly" to invention is telling us about invention;
+   * the raw means would say they are strong at all six, which is not a finding.
+   */
+  relative: Record<WorkingGeniusId, number>;
+  /** Ids of statements left unanswered. Empty for a complete submission. */
   abstentions: string[];
-  /** Items where the free text was read as a different type than was clicked. */
+  /** Kept so readers written for afs-1..3 rows keep working. Always empty here. */
   overrides: Array<{ itemId: string; clicked: WorkingGeniusId; resolved: WorkingGeniusId }>;
   /**
-   * Pairs that finished level on both total wins and their head-to-head, so
-   * the order between them came from a fallback rather than from the answers.
+   * Types that finished level on the centred score, so the order between them
+   * came from a fallback rather than from the answers.
    */
   contested: Array<[WorkingGeniusId, WorkingGeniusId]>;
   /**
-   * Win gap across each band boundary. Zero means the split between, say,
-   * genius and competency was decided by a tie-break, which the UI says out
-   * loud rather than presenting a coin toss as a finding.
+   * The gap in centred score across each band boundary, in scale points. A gap
+   * near zero means the split was all but a coin toss, which the UI says out
+   * loud.
    */
   boundaryMargins: { geniusCompetency: number; competencyFrustration: number };
   responses: WorkingGeniusResponses;
@@ -686,17 +383,26 @@ function emptyCounts(): Record<WorkingGeniusId, number> {
   return { wonder: 0, invention: 0, discernment: 0, galvanizing: 0, enablement: 0, tenacity: 0 };
 }
 
+/** A point on the scale, or null for anything that is not one. */
+export function readAnswer(raw: unknown): number | null {
+  const value = typeof raw === "number" ? raw : Number.NaN;
+  if (!Number.isInteger(value)) return null;
+  return value >= 1 && value <= 5 ? value : null;
+}
+
+/** Population standard deviation. Zero for a single answer, by definition. */
+function spread(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
 /**
  * Scores a complete or partial response set.
  *
- * Ranking runs in two passes. Total wins first; then, inside any group of
- * types on the same total, a mini round-robin using only the head-to-head
- * results between the tied types. A single sort comparator cannot do this
- * safely because head-to-head is not transitive. A beats B, B beats C, C
- * beats A is a real outcome, and feeding a non-transitive comparator to
- * Array.sort gives an order that depends on the engine's sort internals.
- * Anything still level after the round-robin falls back to WIDGET order for
- * determinism and is reported in `contested` rather than hidden.
+ * Pure, and deliberately so: re-scoring a stored row a year from now returns
+ * the profile it returned on the day.
  */
 export function scoreWorkingGenius(
   responses: WorkingGeniusResponses,
@@ -705,137 +411,94 @@ export function scoreWorkingGenius(
 ): WorkingGeniusResult {
   const counts = emptyCounts();
   const contests = emptyCounts();
+  const rates = emptyCounts();
+  const relative = emptyCounts();
+  const answersByType: Record<WorkingGeniusId, number[]> = {
+    wonder: [], invention: [], discernment: [], galvanizing: [], enablement: [], tenacity: [],
+  };
   const abstentions: string[] = [];
-  const overrides: Array<{ itemId: string; clicked: WorkingGeniusId; resolved: WorkingGeniusId }> = [];
-  const h2h = new Map<string, number>();
-  const key = (a: WorkingGeniusId, b: WorkingGeniusId) => `${a}>${b}`;
 
   for (const item of items) {
     const answer = readAnswer(responses[item.id]);
-    const [left, right] = item.options;
-
-    if (answer.choice === "neither" && answer.effective === null) {
+    if (answer === null) {
       abstentions.push(item.id);
       continue;
     }
-    const chosen = answer.effective;
-    if (!chosen) continue;
+    counts[item.type] += answer;
+    contests[item.type] += 1;
+    answersByType[item.type].push(answer);
+  }
 
-    const other = item.options.find((o) => o.id !== chosen);
-    if (!item.options.some((o) => o.id === chosen) || !other) continue;
+  const answered = WIDGET_ORDER.flatMap((t) => answersByType[t]);
+  /* The person's own centre. With nothing answered there is nothing to centre
+     on, and 3 — the midpoint of the scale — is the only defensible stand-in. */
+  const personMean = answered.length ? answered.reduce((sum, v) => sum + v, 0) / answered.length : 3;
 
-    if (answer.overrode && answer.choice && answer.choice !== "neither") {
-      overrides.push({ itemId: item.id, clicked: answer.choice, resolved: chosen });
-    }
-
-    counts[chosen] += 1;
-    /* Both sides of the item entered this contest. An abstention above skips
-       the increment for both, which is what keeps the rate honest. */
-    contests[left.id] += 1;
-    contests[right.id] += 1;
-    h2h.set(key(chosen, other.id), (h2h.get(key(chosen, other.id)) ?? 0) + 1);
+  for (const t of WIDGET_ORDER) {
+    const own = answersByType[t];
+    const mean = own.length ? own.reduce((sum, v) => sum + v, 0) / own.length : 1;
+    /* 0..1, so a bar can be drawn from it without the UI knowing the scale. */
+    rates[t] = (mean - 1) / 4;
+    relative[t] = own.length ? mean - personMean : -Infinity;
   }
 
   /*
-   * Rate, not raw wins, is what the ranking sorts on.
+   * Ranking sorts on the centred score.
    *
-   * With no abstentions every type contests exactly ten items and rate is
-   * count/10, so the order is identical to sorting on counts and the
-   * validation anchor is unaffected. The two only diverge once somebody
-   * abstains, which is precisely when raw counts stop being comparable.
+   * Ties are real and common on a five-point scale with seven items, so the
+   * fallback is chosen rather than incidental: the steadier answer set wins,
+   * because seven answers that agree with each other describe the type better
+   * than seven that scatter around the same average. WIDGET order breaks what
+   * is still level, for determinism, and every tie at that point is reported
+   * in `contested` rather than hidden.
    */
-  const rates = emptyCounts();
-  for (const t of WIDGET_ORDER) {
-    rates[t] = contests[t] === 0 ? 0 : counts[t] / contests[t];
-  }
-
-  const beats = (a: WorkingGeniusId, b: WorkingGeniusId) => h2h.get(key(a, b)) ?? 0;
+  const steadiness = (t: WorkingGeniusId) => spread(answersByType[t]);
   const widgetIndex = (t: WorkingGeniusId) => WIDGET_ORDER.indexOf(t);
+  const scoreKey = (t: WorkingGeniusId) => Math.round(relative[t] * 1e6);
+
+  const ranking = [...WIDGET_ORDER].sort((a, b) => {
+    const byScore = scoreKey(b) - scoreKey(a);
+    if (byScore !== 0) return byScore;
+    const bySteadiness = steadiness(a) - steadiness(b);
+    if (bySteadiness !== 0) return bySteadiness;
+    return widgetIndex(a) - widgetIndex(b);
+  });
 
   const contested: Array<[WorkingGeniusId, WorkingGeniusId]> = [];
-  const ranking: WorkingGeniusId[] = [];
-
-  /* Keyed on the rate, rounded, because floating point division produces
-     values that are equal in every sense that matters here and unequal as map
-     keys: 6/8 and 3/4 must land in the same group. */
-  const rateKey = (t: WorkingGeniusId) => Math.round(rates[t] * 1e6);
-  const byCount = new Map<number, WorkingGeniusId[]>();
-  for (const t of WIDGET_ORDER) {
-    const group = byCount.get(rateKey(t)) ?? [];
-    group.push(t);
-    byCount.set(rateKey(t), group);
-  }
-
-  for (const count of [...byCount.keys()].sort((a, b) => b - a)) {
-    const group = byCount.get(count)!;
-    const [only] = group;
-    if (group.length === 1 && only) {
-      ranking.push(only);
-      continue;
+  for (let i = 0; i < ranking.length - 1; i++) {
+    const here = ranking[i];
+    const next = ranking[i + 1];
+    if (!here || !next) continue;
+    if (scoreKey(here) === scoreKey(next) && steadiness(here) === steadiness(next)) {
+      contested.push([here, next]);
     }
-    // Round-robin restricted to the tied types.
-    const miniWins = new Map<WorkingGeniusId, number>();
-    for (const a of group) {
-      let wins = 0;
-      for (const b of group) if (a !== b) wins += beats(a, b);
-      miniWins.set(a, wins);
-    }
-    const ordered = [...group].sort((a, b) => {
-      const diff = (miniWins.get(b) ?? 0) - (miniWins.get(a) ?? 0);
-      return diff !== 0 ? diff : widgetIndex(a) - widgetIndex(b);
-    });
-    for (let i = 0; i < ordered.length - 1; i++) {
-      const here = ordered[i];
-      const next = ordered[i + 1];
-      if (!here || !next) continue;
-      if ((miniWins.get(here) ?? 0) === (miniWins.get(next) ?? 0)) {
-        contested.push([here, next]);
-      }
-    }
-    ranking.push(...ordered);
-  }
-
-  // Reliability: for each pair asked twice, did both askings agree?
-  let pairsAnswered = 0;
-  let pairsAgreed = 0;
-  for (const a of ITEMS_ROUND_A) {
-    const b = ITEMS_ROUND_B.find((x) => x.id.slice(0, 2) === a.id.slice(0, 2));
-    if (!b) continue;
-    /*
-     * Compared on the effective answer, so a click on one asking and a
-     * free-text answer on the other still count as agreeing when they land on
-     * the same type. A pair where either side abstained is not counted at all:
-     * it neither agrees nor disagrees, and scoring it as disagreement would
-     * punish the founder for using the escape hatch honestly.
-     */
-    const ra = readAnswer(responses[a.id]).effective;
-    const rb = readAnswer(responses[b.id]).effective;
-    if (!ra || !rb) continue;
-    pairsAnswered += 1;
-    if (ra === rb) pairsAgreed += 1;
   }
 
   /*
-   * Every type in WIDGET_ORDER lands in exactly one count group and every
-   * group is pushed, so this is always six. Checked rather than assumed: the
-   * bands and both boundary margins below are read positionally, and a ranking
-   * that came up short would produce a profile that looks entirely plausible
-   * and is wrong. Throwing is the right failure here because there is no
-   * partial result worth showing a founder.
+   * Seven answers per type that agree with one another describe somebody the
+   * instrument has understood. Spread is mapped against 2.0, the widest a set
+   * of answers on a five-point scale can be, so 1 is perfect agreement and 0
+   * is somebody answering never and constantly to the same type.
    */
+  const spreads = WIDGET_ORDER.map((t) => (answersByType[t].length >= 2 ? spread(answersByType[t]) : null))
+    .filter((v): v is number => v !== null);
+  const consistency = spreads.length
+    ? Math.max(0, Math.min(1, 1 - spreads.reduce((sum, v) => sum + v, 0) / spreads.length / 2))
+    : 0;
+
   if (ranking.length !== WIDGET_ORDER.length) {
-    throw new Error(
-      `ranking produced ${ranking.length} types, expected ${WIDGET_ORDER.length}`,
-    );
+    throw new Error(`ranking produced ${ranking.length} types, expected ${WIDGET_ORDER.length}`);
   }
   const placed = ranking as [
-    WorkingGeniusId,
-    WorkingGeniusId,
-    WorkingGeniusId,
-    WorkingGeniusId,
-    WorkingGeniusId,
-    WorkingGeniusId,
+    WorkingGeniusId, WorkingGeniusId, WorkingGeniusId,
+    WorkingGeniusId, WorkingGeniusId, WorkingGeniusId,
   ];
+
+  /** Never reports a gap of Infinity for a type nobody answered. */
+  const gap = (higher: WorkingGeniusId, lower: WorkingGeniusId) => {
+    const diff = relative[higher] - relative[lower];
+    return Number.isFinite(diff) ? diff : 0;
+  };
 
   return {
     version: INSTRUMENT_VERSION,
@@ -846,15 +509,16 @@ export function scoreWorkingGenius(
       competency: ranking.slice(2, 4),
       frustration: ranking.slice(4, 6),
     },
-    consistency: pairsAnswered === 0 ? 0 : pairsAgreed / pairsAnswered,
+    consistency,
     contests,
     rates,
+    relative,
     abstentions,
-    overrides,
+    overrides: [],
     contested,
     boundaryMargins: {
-      geniusCompetency: counts[placed[1]] - counts[placed[2]],
-      competencyFrustration: counts[placed[3]] - counts[placed[4]],
+      geniusCompetency: gap(placed[1], placed[2]),
+      competencyFrustration: gap(placed[3], placed[4]),
     },
     responses,
     primary: placed[0],

@@ -49,11 +49,10 @@ let alice: Session;
 let bob: Session;
 
 /** A complete, valid set of answers: always pick whichever option comes first. */
-function completeAnswers(): Record<string, string> {
-  const answers: Record<string, string> = {};
+function completeAnswers(): Record<string, number> {
+  const answers: Record<string, number> = {};
   for (const item of WORKING_GENIUS_ITEMS) {
-    const first = item.options[0];
-    if (first) answers[item.id] = first.id;
+    answers[item.id] = 4;
   }
   return answers;
 }

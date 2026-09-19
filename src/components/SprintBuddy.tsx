@@ -12,6 +12,7 @@ import { saveThread, saveDecision, saveCheckin, bumpVisits, saveWorkingGenius, s
 import {
   INSTRUMENT_PREAMBLE,
   WORKING_GENIUS_ITEMS,
+  WORKING_GENIUS_SCALE,
   WORKING_GENIUS_TYPES,
   bandCopy,
   daysUntil,
@@ -19,12 +20,10 @@ import {
   retakeOpen,
   typeById,
   WIDGET_ORDER,
-  type WorkingGeniusAnswer,
   type WorkingGeniusBand,
   type WorkingGeniusId,
   type WorkingGeniusResult,
 } from "../lib/workingGenius";
-import { MAX_WG_TEXT_CHARS } from "../lib/limits";
 import type { Checkin, UserData } from "../lib/persistence";
 import { advisorErrorMessage } from "../lib/advisor-errors";
 import { sendChat } from "../lib/chat-transport";
@@ -2019,7 +2018,7 @@ function Chat({ active, threads, setThreads, bumpTheme, addDecision, setVisits, 
 type TimeCtx = { clock: string; line: string; dotColor: string };
 
 /*
- * The six types, the thirty items and the scoring live in lib/workingGenius.ts
+ * The six types, the forty-two statements and the scoring live in lib/workingGenius.ts
  * so that the browser and the API score against one implementation. Only the
  * palette stays here, because it is presentation and the rest is not.
  */
@@ -2199,6 +2198,10 @@ function EmptyState({ firstRun }: { firstRun: boolean }) {
   );
 }
 
+/** Six statements to a page across the forty-two. */
+const WG_PAGE_SIZE = 6;
+const WG_PAGES = Math.ceil(WORKING_GENIUS_ITEMS.length / WG_PAGE_SIZE);
+
 /* ---------------- Reflections page ---------------- */
 function Reflections({
   threads,
@@ -2288,20 +2291,28 @@ function Reflections({
   const [wgStarted, setWgStarted] = useState(false);
   /** The consent card is open. Nothing is answered or saved until it is not. */
   const [wgConsenting, setWgConsenting] = useState(false);
-  const [wgIndex, setWgIndex] = useState(0);
-  const [wgAnswers, setWgAnswers] = useState<Record<string, WorkingGeniusAnswer>>({});
-  /* The open box for the current item, kept out of `wgAnswers` until it is
-     committed so that typing does not re-render every option on every key. */
-  const [wgText, setWgText] = useState("");
-  const [wgHatch, setWgHatch] = useState(false);
+  const [wgPage, setWgPage] = useState(0);
+  const [wgAnswers, setWgAnswers] = useState<Record<string, number>>({});
   const [wgSaving, setWgSaving] = useState(false);
   const [wgError, setWgError] = useState<string | null>(null);
   /** Set when the server refuses because the window is shut. Not retryable. */
   const [wgClosed, setWgClosed] = useState<string | null>(null);
 
-  const wgItem = WORKING_GENIUS_ITEMS[wgIndex];
+  /*
+   * Six statements to a page, seven pages.
+   *
+   * One statement per screen would be forty-two screens, which is a different
+   * kind of tedious from the one this version set out to fix. Six is what fits
+   * a phone without scrolling past the page's own Next button, and it lets
+   * somebody see their last few answers while giving the next one, which is
+   * how people calibrate a scale.
+   */
+  const wgPageItems = WORKING_GENIUS_ITEMS.slice(wgPage * WG_PAGE_SIZE, (wgPage + 1) * WG_PAGE_SIZE);
+  const wgPageDone = wgPageItems.every((item) => wgAnswers[item.id] !== undefined);
+  const wgAnswered = WORKING_GENIUS_ITEMS.filter((item) => wgAnswers[item.id] !== undefined).length;
+  const wgLastPage = wgPage + 1 >= WG_PAGES;
 
-  const submitWorkingGenius = async (answers: Record<string, WorkingGeniusAnswer>) => {
+  const submitWorkingGenius = async (answers: Record<string, number>) => {
     if (!userEmail) return;
     setWgSaving(true);
     setWgError(null);
@@ -2314,8 +2325,8 @@ function Reflections({
       /*
        * A 409 is the retake window, and it is permanent until a date. Saying
        * "Could not save that" next to a Try again that can never work is the
-       * worst possible answer to somebody who has just spent six minutes on
-       * thirty questions, so the server's own sentence is shown and the retry
+       * worst possible answer to somebody who has just spent nine minutes on
+       * forty-two statements, so the server's own sentence is shown and the retry
        * is withdrawn.
        */
       if (error instanceof PersistenceError && error.status === 409) {
@@ -2323,7 +2334,7 @@ function Reflections({
         setWgStarted(false);
       } else {
         // The answers stay in state, so Try again resubmits rather than
-        // restarting thirty items.
+        // restarting forty-two statements.
         setWgError("Could not save that. Your answers are still here.");
       }
     } finally {
@@ -2331,42 +2342,27 @@ function Reflections({
     }
   };
 
-  /**
-   * Commits an answer and moves on.
-   *
-   * Whatever is in the open box goes with it, whether they picked an option or
-   * took the "neither" hatch. Text alongside a real choice is context; text
-   * with "neither" is the answer. The server decides which type either one
-   * describes, once, at submission.
-   */
-  const answerWorkingGenius = (choice: WorkingGeniusId | "neither") => {
-    if (!wgItem || wgSaving) return;
-    const typed = wgText.trim();
-    /* "Neither" with nothing written is not an answer, it is a skipped
-       question. The box is the whole point of that option. */
-    if (choice === "neither" && !typed) return;
-
-    const answer: WorkingGeniusAnswer = { choice, ...(typed ? { text: typed } : {}) };
-    const next = { ...wgAnswers, [wgItem.id]: answer };
-    setWgAnswers(next);
-    setWgText("");
-    setWgHatch(false);
-
-    if (wgIndex + 1 >= WORKING_GENIUS_ITEMS.length) {
-      void submitWorkingGenius(next);
-    } else {
-      setWgIndex(wgIndex + 1);
-    }
+  /** Records one answer. Changing an earlier one is just answering it again. */
+  const rateWorkingGenius = (itemId: string, value: number) => {
+    if (wgSaving) return;
+    setWgAnswers((prev) => ({ ...prev, [itemId]: value }));
   };
 
-  /* Going back restores what they wrote, so Back is a revision rather than a
-     way to lose a sentence you spent a minute on. */
-  const backWorkingGenius = () => {
-    const previous = WORKING_GENIUS_ITEMS[wgIndex - 1];
-    const saved = previous ? wgAnswers[previous.id] : undefined;
-    setWgText(saved?.text ?? "");
-    setWgHatch(saved?.choice === "neither");
-    setWgIndex(wgIndex - 1);
+  /* Forward only once every statement on the page has an answer, so nobody
+     reaches the end and is told, forty-two statements later, that they missed
+     one somewhere in the middle. */
+  const nextWorkingGeniusPage = () => {
+    if (!wgPageDone || wgSaving) return;
+    if (wgLastPage) {
+      void submitWorkingGenius(wgAnswers);
+      return;
+    }
+    setWgPage(wgPage + 1);
+  };
+
+  const backWorkingGeniusPage = () => {
+    if (wgPage === 0 || wgSaving) return;
+    setWgPage(wgPage - 1);
   };
 
   /*
@@ -2377,16 +2373,14 @@ function Reflections({
    * the arrangement is the same every time it is asked.
    */
   /* Held closed until the cohort has been shown what it is. The server
-     refuses the save as well — this only spares them thirty questions and an
-     error at the end of them. */
+     refuses the save as well — this only spares them forty-two statements and
+     an error at the end of them. */
   const askWorkingGenius = () => { if (!workingGeniusLocked()) setWgConsenting(true); };
 
   const startWorkingGenius = () => {
     setWgConsenting(false);
     setWgAnswers({});
-    setWgText("");
-    setWgHatch(false);
-    setWgIndex(0);
+    setWgPage(0);
     setWgError(null);
     setWgStarted(true);
   };
@@ -2544,7 +2538,7 @@ function Reflections({
                same date twice about eight lines apart reads as a mistake. This
                slot describes the thing itself, which is true either way. */
             <span style={{ fontSize: 12.5, color: C.sub, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-              Thirty either-or questions. About six minutes.
+              Forty-two statements, never to constantly. About nine minutes.
             </span>
           )}
         </div>
@@ -2570,16 +2564,16 @@ function Reflections({
             <WgDownload />
             <WgHistory takes={takes ?? []} />
           </div>
-        ) : wgStarted && wgItem ? (
+        ) : wgStarted ? (
           <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: C.faint }}>
-                {wgIndex + 1} of {WORKING_GENIUS_ITEMS.length}
+                {wgAnswered} of {WORKING_GENIUS_ITEMS.length}
               </span>
-              {wgIndex > 0 && (
+              {wgPage > 0 && (
                 <button
                   type="button"
-                  onClick={backWorkingGenius}
+                  onClick={backWorkingGeniusPage}
                   style={{ background: "none", border: "none", color: C.faint, fontSize: 12.5, cursor: "pointer", padding: 0 }}
                 >
                   ← Back
@@ -2587,129 +2581,88 @@ function Reflections({
               )}
             </div>
             <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-              <div style={{ width: `${(wgIndex / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.accent, transition: "width 200ms ease" }} />
+              <div style={{ width: `${(wgAnswered / WORKING_GENIUS_ITEMS.length) * 100}%`, height: "100%", background: C.accent, transition: "width 200ms ease" }} />
             </div>
 
-            {wgIndex === 0 && (
-              <p className="wg-preamble">{INSTRUMENT_PREAMBLE}</p>
-            )}
+            {wgPage === 0 && <p className="wg-preamble">{INSTRUMENT_PREAMBLE}</p>}
 
             {/*
-              * The question is not a card.
-              *
-              * It used to be: same padding, same radius, same border and the
-              * same weight as the options, two pixels apart in size. Nothing
-              * told the eye which one was being asked and which were the things
-              * to click, thirty times in a row. It is display type on the
-              * ground now, and the answers are the only surfaces on screen.
+              * The scale is named at the top of every page, not once at the
+              * start. Somebody on page five should not have to remember which
+              * end was never.
               */}
-            <div className="wg-ask">
-              <span className="wg-kicker">Which one pulls you?</span>
-              <p className="wg-prompt">{wgItem.prompt}</p>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, letterSpacing: 1.2, textTransform: "uppercase", color: C.faint }}>
+              <span>{WORKING_GENIUS_SCALE[0]?.label}</span>
+              <span>{WORKING_GENIUS_SCALE[WORKING_GENIUS_SCALE.length - 1]?.label}</span>
             </div>
 
-            <div className="wg-options">
-              {/*
-                * The option's type is deliberately not labelled here. The old
-                * quiz printed "WONDER" above each choice, which told the
-                * founder exactly what each answer scored and turned the
-                * instrument into a self-portrait. The types appear in the
-                * result, where knowing them costs nothing.
-                */}
-              {wgItem.options.map((option, i) => {
-                const picked = wgAnswers[wgItem.id]?.choice === option.id;
-                const key = i === 0 ? "A" : "B";
+            <div style={{ display: "grid", gap: 18 }}>
+              {wgPageItems.map((item) => {
+                /*
+                 * The type each statement measures is deliberately not shown.
+                 * The earlier quiz printed "WONDER" above each option, which
+                 * told the founder exactly what their answer scored and turned
+                 * the instrument into a self-portrait.
+                 */
+                const chosen = wgAnswers[item.id];
                 return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={wgSaving}
-                    onClick={() => answerWorkingGenius(option.id)}
-                    className={`wg-option${picked ? " is-picked" : ""}`}
-                    aria-keyshortcuts={key}
-                  >
-                    <span className="wg-option-pane" aria-hidden="true" />
-                    <span className="wg-option-bevel" aria-hidden="true" />
-                    <span className="wg-option-body">
-                      <span className="wg-option-key" aria-hidden="true">{key}</span>
-                      <span className="wg-option-label">{option.label}</span>
-                    </span>
-                  </button>
+                  <div key={item.id} style={{ display: "grid", gap: 9, paddingBottom: 16, borderBottom: `1px solid ${C.line}` }}>
+                    <p id={`wg-${item.id}`} style={{ margin: 0, fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>
+                      {item.statement}
+                    </p>
+                    <div role="radiogroup" aria-labelledby={`wg-${item.id}`} style={{ display: "flex", gap: 8 }}>
+                      {WORKING_GENIUS_SCALE.map((point) => {
+                        const picked = chosen === point.value;
+                        return (
+                          <button
+                            key={point.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={picked}
+                            aria-label={point.label}
+                            title={point.label}
+                            disabled={wgSaving}
+                            onClick={() => rateWorkingGenius(item.id, point.value)}
+                            style={{
+                              flex: 1,
+                              minHeight: 44,
+                              borderRadius: 10,
+                              cursor: wgSaving ? "default" : "pointer",
+                              border: picked ? `1px solid ${C.accent}` : `1px solid ${C.line}`,
+                              background: picked ? C.accent : "rgba(255,255,255,0.03)",
+                              color: picked ? C.black : C.sub,
+                              fontSize: 11.5,
+                              fontWeight: picked ? 700 : 500,
+                              letterSpacing: 0.2,
+                              transition: "background 120ms ease, border-color 120ms ease",
+                            }}
+                          >
+                            {point.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               })}
+            </div>
 
-              {/*
-                * The escape hatch, and deliberately the third option rather
-                * than a box on every item. If every question demands typing,
-                * completion craters and what comes back is the word "both",
-                * which is less informative than a forced choice.
-                */}
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <button
                 type="button"
-                disabled={wgSaving}
-                onClick={() => setWgHatch(true)}
-                className={`wg-option wg-option--hatch${wgHatch ? " is-open" : ""}`}
-                aria-expanded={wgHatch}
+                className="btn-metal"
+                disabled={!wgPageDone || wgSaving}
+                onClick={nextWorkingGeniusPage}
+                style={{ padding: "11px 20px", fontSize: 14, fontWeight: 700, opacity: wgPageDone ? 1 : 0.45 }}
               >
-                <span className="wg-option-pane" aria-hidden="true" />
-                <span className="wg-option-bevel" aria-hidden="true" />
-                <span className="wg-option-body">
-                  <span className="wg-option-key" aria-hidden="true">C</span>
-                  <span className="wg-option-label">Neither, or it depends. Here is what I actually do:</span>
-                </span>
+                {wgLastPage ? "Finish" : "Next"}
               </button>
-            </div>
-
-            {/*
-              * Recessed rather than raised: an inset reads as somewhere to type,
-              * a pane reads as something to click. Same material, opposite
-              * affordance.
-              *
-              * One line that grows. A large empty textarea reads as homework
-              * and gets skipped.
-              */}
-            <div className={`wg-write${wgHatch ? " is-open" : ""}`}>
-              <label className="wg-write-label" htmlFor="wg-text">
-                {wgHatch ? "What actually happens?" : "Want to add context? (optional)"}
-              </label>
-              <textarea
-                id="wg-text"
-                className="wg-write-box"
-                rows={1}
-                value={wgText}
-                maxLength={MAX_WG_TEXT_CHARS}
-                onChange={(e) => {
-                  setWgText(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
-                }}
-                placeholder="e.g. I usually wait to see if someone else steps up, then take over if nobody does."
-              />
-              {wgHatch && (
-                <div className="wg-write-actions">
-                  <button
-                    type="button"
-                    className="wg-write-cancel btn-glass"
-                    onClick={() => { setWgHatch(false); setWgText(""); }}
-                  >
-                    Back to the two options
-                  </button>
-                  <button
-                    type="button"
-                    className="wg-write-send btn-metal"
-                    disabled={wgSaving || !wgText.trim()}
-                    onClick={() => answerWorkingGenius("neither")}
-                  >
-                    {wgIndex + 1 >= WORKING_GENIUS_ITEMS.length ? "Finish" : "Next"}
-                  </button>
-                </div>
+              {!wgPageDone && (
+                <span style={{ fontSize: 12.5, color: C.faint }}>
+                  {wgPageItems.filter((item) => wgAnswers[item.id] === undefined).length} left on this page
+                </span>
               )}
             </div>
-
-            {/* One instance for the quiz, with its own id. Filter ids are
-                global to the document; two families sharing one is how a pane
-                silently loses its refraction when the other unmounts. */}
-            <GlassFilter id="wg-glass" />
 
             {wgSaving && (
               <p style={{ margin: 0, fontSize: 13, color: C.faint }}>Scoring…</p>
@@ -2950,16 +2903,26 @@ function WgBandCard({ band, ids }: { band: WorkingGeniusBand; ids: WorkingGenius
   );
 }
 
+/**
+ * All six, strongest first.
+ *
+ * Reads rows from either instrument. afs-4 stores an average on a five-point
+ * scale; afs-1 to afs-3 stored wins out of ten from the forced choice. The bar
+ * is drawn from `rates`, which both versions express as 0..1, so only the
+ * number beside it has to know which instrument it came from.
+ */
 function WgRanking({ result }: { result: WorkingGeniusResult }) {
-  const max = WORKING_GENIUS_ITEMS.length / WORKING_GENIUS_TYPES.length * 2; // 10
+  const onScale = result.version === "afs-4";
   return (
     <section style={{ padding: "18px", borderRadius: 14, border: `1px solid ${C.line}`, background: "rgba(0,0,0,0.2)", display: "grid", gap: 11 }}>
       <p style={{ margin: "0 0 3px", fontSize: 11.5, letterSpacing: 2, textTransform: "uppercase", color: C.faint }}>
-        All six, by how often you chose them
+        {onScale ? "All six, by how often you said you do them" : "All six, by how often you chose them"}
       </p>
       {result.ranking.map((id, i) => {
         const type = typeById(id);
-        const score = result.counts[id];
+        const answered = result.contests[id] || 0;
+        const mean = answered ? result.counts[id] / answered : 0;
+        const level = result.rates[id] ?? 0;
         return (
           <div key={id} style={{ display: "grid", gap: 4 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, color: C.sub }}>
@@ -2967,12 +2930,14 @@ function WgRanking({ result }: { result: WorkingGeniusResult }) {
                 <span style={{ color: C.faint, marginRight: 7 }}>{i + 1}</span>
                 {type.label}
               </span>
-              <span style={{ color: C.faint }}>{score}/{max}</span>
+              <span style={{ color: C.faint }}>
+                {onScale ? `${mean.toFixed(1)} / 5` : `${result.counts[id]} / 10`}
+              </span>
             </div>
             <div style={{ height: 6, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
               <div
                 style={{
-                  width: `${Math.max(2, (score / max) * 100)}%`, height: "100%", borderRadius: 999,
+                  width: `${Math.max(2, level * 100)}%`, height: "100%", borderRadius: 999,
                   background: WG_COLOR[id].accent, boxShadow: `0 0 10px ${WG_COLOR[id].accent}`,
                 }}
               />
@@ -3096,8 +3061,8 @@ function WgPrivateNote() {
       }}
     >
       The operating team can see your profile: the six ranked, and which two
-      you are gifted at. They cannot see your individual answers or anything you
-      wrote in your own words, and neither can anyone else in the cohort.
+      you are gifted at. They cannot see how you rated any single statement,
+      and neither can anyone else in the cohort.
     </p>
   );
 }
@@ -3113,9 +3078,8 @@ function WgPrivateNote() {
  *
  * The copy says exactly what is shared and exactly what is not, because the
  * distinction is the whole point. A ranking of six work types is a reasonable
- * thing to hand a coach. The free text beside "neither, or it depends" is where
- * people write about a cofounder they have not spoken to yet, and that is not
- * shared, so it should not be left ambiguous.
+ * thing to hand a coach. How somebody rated one statement about, say, pushing
+ * people, is not, and it should not be left ambiguous.
  */
 function WgConsent({ onAgree, onCancel }: { onAgree: () => void; onCancel: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -3142,9 +3106,8 @@ function WgConsent({ onAgree, onCancel }: { onAgree: () => void; onCancel: () =>
         other two sit. The same picture you will see.
       </p>
       <p>
-        <strong>Not shared:</strong> your thirty individual answers, and anything
-        you type in the box when you answer &ldquo;neither, or it depends&rdquo;.
-        Nobody but you reads those.
+        <strong>Not shared:</strong> how you rated any one of the forty-two
+        statements. Nobody but you sees those.
       </p>
       <p className="wg-consent-why">
         It is shared so the team can put people on the work that suits them and
@@ -3162,23 +3125,52 @@ function WgConsent({ onAgree, onCancel }: { onAgree: () => void; onCancel: () =>
   );
 }
 
+/**
+ * What this result cannot support, said next to it.
+ *
+ * On afs-4, consistency is how steadily the seven statements for each type
+ * agreed with one another; on the forced-choice versions it was how often the
+ * two askings of a pair matched. Different arithmetic, same job, so the
+ * sentence changes with the instrument rather than pretending one reading
+ * covers both.
+ *
+ * Band lines use a margin rather than an exact zero. On a five-point scale two
+ * types can finish a fifth of a point apart, which is one founder answering
+ * "often" instead of "sometimes" on one statement out of seven, and is not a
+ * difference worth drawing a line through.
+ */
+const WG_BAND_LINE_NOISE = 0.15;
+
 function WgCaveats({ result }: { result: WorkingGeniusResult }) {
-  const pairs = WORKING_GENIUS_ITEMS.length / 2;
-  const changed = Math.round((1 - result.consistency) * pairs);
   const notes: string[] = [];
 
-  if (changed >= 5) {
-    notes.push(
-      `You answered ${changed} of the ${pairs} pairs one way the first time and the other way the second. That is enough that the middle of this ranking should be read as unsettled rather than as a result.`,
-    );
-  } else if (changed > 0) {
-    notes.push(`You switched on ${changed} of the ${pairs} pairs between the two askings, which is normal.`);
+  if (result.version === "afs-4") {
+    if (result.consistency < 0.6) {
+      notes.push(
+        "Your seven answers about some of these types were spread wide — near never in one place and near constantly in another. Read the bands rather than the order inside them, and take it again when you have more time.",
+      );
+    } else if (result.consistency < 0.8) {
+      notes.push(
+        "Your answers within each type held together reasonably well. The broad shape is trustworthy; the exact order in the middle is not.",
+      );
+    }
+  } else {
+    const pairs = 15;
+    const changed = Math.round((1 - result.consistency) * pairs);
+    if (changed >= 5) {
+      notes.push(
+        `You answered ${changed} of the ${pairs} pairs one way the first time and the other way the second. That is enough that the middle of this ranking should be read as unsettled rather than as a result.`,
+      );
+    } else if (changed > 0) {
+      notes.push(`You switched on ${changed} of the ${pairs} pairs between the two askings, which is normal.`);
+    }
   }
-  if (result.boundaryMargins.geniusCompetency === 0) {
-    notes.push("Your second and third types finished level, so the line between genius and competency was a tie-break, not a finding. Read those two as interchangeable.");
+
+  if (Math.abs(result.boundaryMargins.geniusCompetency) < WG_BAND_LINE_NOISE) {
+    notes.push("Your second and third types came out too close to separate, so the line between genius and competency is not a finding. Read those two as interchangeable.");
   }
-  if (result.boundaryMargins.competencyFrustration === 0) {
-    notes.push("Your fourth and fifth types finished level, so the line between competency and frustration was a tie-break, not a finding.");
+  if (Math.abs(result.boundaryMargins.competencyFrustration) < WG_BAND_LINE_NOISE) {
+    notes.push("Your fourth and fifth types came out too close to separate, so the line between competency and frustration is not a finding. Read them as sitting together.");
   }
   for (const [a, b] of result.contested) {
     notes.push(`${typeById(a).label} and ${typeById(b).label} came out exactly level, including against each other. Nothing in your answers separates them.`);

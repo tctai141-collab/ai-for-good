@@ -306,13 +306,13 @@ export async function bumpVisits(userEmail: string): Promise<number> {
  */
 export async function saveWorkingGenius(
   userEmail: string,
-  /* Either shape: a bare type id is what afs-1 sent and is still accepted, an
-     object carries the click plus whatever the founder typed. */
-  workingGeniusResponses: Record<string, string | { choice: string; text?: string }>,
+  /* Item id to a point on the five-point scale. The server re-validates every
+     one of them; this type only stops the wrong shape leaving the browser. */
+  workingGeniusResponses: Record<string, number>,
 ): Promise<WorkingGeniusResult> {
   /*
    * The consent travels with the answers rather than being sent when the card
-   * is accepted. One request, so there is no state where thirty answers exist
+   * is accepted. One request, so there is no state where forty-two answers exist
    * without a record of what the founder agreed to — the server refuses the
    * save outright if it is missing.
    */

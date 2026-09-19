@@ -26,7 +26,7 @@ let founder: Session;
 let other: Session;
 
 const answers = () =>
-  Object.fromEntries(WORKING_GENIUS_ITEMS.map((i) => [i.id, i.options[0]!.id]));
+  Object.fromEntries(WORKING_GENIUS_ITEMS.map((i) => [i.id, 4]));
 
 beforeAll(async () => {
   h = await startServer();
@@ -136,12 +136,15 @@ describe("the interface cannot skip the card", () => {
     const card = sprint.slice(sprint.indexOf("function WgConsent"), sprint.indexOf("function WgConsent") + 2600);
     expect(card).toContain("shared with the Sprint operating team");
     expect(card).toContain("Not shared:");
-    expect(card).toContain("thirty individual answers");
+    /* The instrument changed from thirty forced choices to forty-two rated
+       statements; what the card has to promise did not. */
+    expect(card).toContain("forty-two");
+    expect(card).toContain("Nobody but you sees those");
   });
 
   test("the standing note no longer promises what is no longer true", () => {
     expect(sprint).not.toContain("This one is yours alone");
     const note = sprint.slice(sprint.indexOf("function WgPrivateNote"), sprint.indexOf("function WgPrivateNote") + 900);
-    expect(note).toContain("cannot see your individual answers");
+    expect(note).toContain("cannot see how you rated any single statement");
   });
 });
