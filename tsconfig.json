@@ -7,11 +7,6 @@
     "module": "Preserve",
     "moduleDetection": "force",
     "allowJs": true,
-    // The @/ alias shadcn components are written against. Astro and Vite
-    // resolve tsconfig paths, so this is the whole setup. No baseUrl: it is
-    // deprecated in TypeScript 6, and paths resolve relative to this file
-    // without it.
-    "paths": { "@/*": ["./src/*"] },
     "types": ["bun"],
 
     // Bundler mode

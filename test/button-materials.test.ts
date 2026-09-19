@@ -46,31 +46,30 @@ describe("no new dependencies", () => {
 
   test("the checkbox did not bring radix", () => {
     /*
-     * Narrowed on 14 September 2026, deliberately rather than deleted.
-     *
-     * Radix is now a dependency on purpose: Tai chose the shadcn rating scale
-     * for the research survey, which is a Radix radio group. What this test
-     * was always guarding against is the other thing — a component arriving
-     * with a stack of UI packages when only the component was wanted. So it
-     * allows exactly that one Radix package, only under src/components/ui
-     * where shadcn primitives live, and still refuses the rest of the kit.
+     * Radix arrived in September 2026 for the survey's rating scale and left
+     * with it. The survey was removed on 16 September, and the shadcn
+     * primitives, Tailwind and the two class helpers went with the feature
+     * that was the only reason for them. So this is back to the rule it
+     * started as: a component may not bring a stack of UI packages with it.
      */
     const deps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
-    expect(deps.filter((d) => d.startsWith("@radix-ui/"))).toEqual(["@radix-ui/react-radio-group"]);
-    expect(deps).not.toContain("class-variance-authority");
-    expect(deps).not.toContain("lucide-react");
+    expect(deps.filter((d) => d.startsWith("@radix-ui/"))).toEqual([]);
+    for (const unwanted of [
+      "class-variance-authority", "lucide-react", "clsx", "tailwind-merge",
+      "tailwindcss", "@tailwindcss/vite",
+    ]) {
+      expect(deps).not.toContain(unwanted);
+    }
 
-    /* The checkbox the original component asked radix for is still ours. */
-    expect(sprint).not.toContain("@radix-ui/");
-
-    /* And radix is imported only by shadcn primitives, not by app components.
-       Imports, not mentions: Onboarding, Wishes and LiquidGlassButton each name
-       a radix package in a comment explaining why they did without it. */
-    const importsRadix = /^\s*import[^;]*?from\s+["']@radix-ui\//m;
+    /* Nothing imports radix, and nothing is written against the shadcn @/
+       alias, which no longer resolves. Imports, not mentions: Onboarding,
+       Wishes and LiquidGlassButton each name a radix package in a comment
+       explaining why they did without it. */
+    const aliasOrRadix = /^\s*import[^;]*?from\s+["'](?:@radix-ui\/|@\/)/m;
     const importers = [...new Bun.Glob("src/**/*.{ts,tsx,astro}").scanSync(".")]
-      .filter((path) => importsRadix.test(readFileSync(path, "utf-8")));
-    expect(importers.every((path) => path.startsWith("src/components/ui/"))).toBe(true);
-    expect(importers.length).toBeGreaterThan(0);
+      .filter((path) => aliasOrRadix.test(readFileSync(path, "utf-8")));
+    expect(importers).toEqual([]);
+    expect(sprint).not.toContain("@radix-ui/");
   });
 });
 

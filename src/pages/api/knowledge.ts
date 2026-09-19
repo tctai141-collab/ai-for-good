@@ -6,7 +6,7 @@ import { reportError } from "../../lib/errors";
 import { assembleKnowledge, KNOWLEDGE_BUDGET_CHARS, PERSONA } from "../../lib/knowledge";
 import { AdvisorNotConfiguredError } from "../../lib/ai";
 import { extractKnowledge, MAX_TRANSCRIPT_CHARS, nameLeaks } from "../../lib/extract";
-import { cap } from "../../lib/limits";
+import { cap, extractLimiter, tooMany } from "../../lib/limits";
 
 /**
  * What Sprint Buddy knows, editable by organizers.
@@ -136,6 +136,13 @@ export const POST: APIRoute = async ({ cookies, request }) => {
       const transcript = cap((body as { transcript?: unknown }).transcript, MAX_TRANSCRIPT_CHARS);
       const speaker = cap(body.source, MAX_TOPIC).trim();
       if (!transcript.trim()) return json({ error: "Paste some transcript first." }, 400);
+
+      // Checked here rather than at the top of the route: the cheap refusals
+      // above cost nothing, and a rejected empty paste should not eat into the
+      // allowance for the session somebody is actually reading.
+      const limited = extractLimiter.check(session!.email);
+      if (limited) return tooMany(limited.retryAfterSeconds);
+
       try {
         const candidates = await extractKnowledge(transcript, speaker);
         // Flagged, not filtered. The prompt forbids naming the speaker and
